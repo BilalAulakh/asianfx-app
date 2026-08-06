@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:candlesticks/candlesticks.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../domain/entities/trading_entities.dart';
 import '../../providers/market_provider.dart';
 import '../../data/datasources/mock_market_datasource.dart';
 
@@ -676,13 +677,35 @@ class _BinanceCandlestickWidget extends StatefulWidget {
 
 class _BinanceCandlestickWidgetState extends State<_BinanceCandlestickWidget> {
   Offset? _touchPos;
+  double _scrollOffset = 0.0;
+  double _visibleCount = 45.0;
+  double _baseScaleCount = 45.0;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onPanStart: (d) => setState(() => _touchPos = d.localPosition),
-      onPanUpdate: (d) => setState(() => _touchPos = d.localPosition),
-      onPanEnd: (_) => setState(() => _touchPos = null),
+      behavior: HitTestBehavior.opaque,
+      onScaleStart: (details) {
+        _baseScaleCount = _visibleCount;
+      },
+      onScaleUpdate: (details) {
+        setState(() {
+          // 1. Pinch Scale (Zoom In / Zoom Out with 2 fingers or mouse wheel)
+          if (details.scale != 1.0) {
+            _visibleCount = (_baseScaleCount / details.scale).clamp(15.0, 120.0);
+          }
+
+          // 2. Drag / Pan (Slide candles left & right with 1 or 2 fingers)
+          if (details.focalPointDelta.dx != 0) {
+            _scrollOffset += details.focalPointDelta.dx * 0.2;
+            final maxScroll = (widget.candles.length - _visibleCount).clamp(0.0, 500.0);
+            _scrollOffset = _scrollOffset.clamp(0.0, maxScroll);
+          }
+
+          _touchPos = details.localFocalPoint;
+        });
+      },
+      onScaleEnd: (_) => setState(() => _touchPos = null),
       onTapDown: (d) => setState(() => _touchPos = d.localPosition),
       onTapUp: (_) => setState(() => _touchPos = null),
       child: CustomPaint(
@@ -691,6 +714,8 @@ class _BinanceCandlestickWidgetState extends State<_BinanceCandlestickWidget> {
           decimals: widget.decimals,
           livePrice: widget.livePrice,
           touchPos: _touchPos,
+          scrollOffset: _scrollOffset.toInt(),
+          visibleCount: _visibleCount.toInt(),
         ),
         size: Size.infinite,
       ),
@@ -703,12 +728,16 @@ class _BinanceCandlestickPainter extends CustomPainter {
   final int decimals;
   final double livePrice;
   final Offset? touchPos;
+  final int scrollOffset;
+  final int visibleCount;
 
   _BinanceCandlestickPainter({
     required this.candles,
     required this.decimals,
     required this.livePrice,
     this.touchPos,
+    this.scrollOffset = 0,
+    this.visibleCount = 45,
   });
 
   static const Color binanceGreen = Color(0xFF0ECB81);
@@ -718,9 +747,10 @@ class _BinanceCandlestickPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (candles.isEmpty) return;
-
-    final visibleCandles = candles.takeLast(50).toList();
+    final count = visibleCount.clamp(10, candles.length);
+    final endIdx = (candles.length - scrollOffset).clamp(count, candles.length);
+    final startIdx = (endIdx - count).clamp(0, candles.length);
+    final visibleCandles = candles.sublist(startIdx, endIdx);
     final rightMargin = 65.0;
     final chartWidth = size.width - rightMargin;
     final chartHeight = size.height;
