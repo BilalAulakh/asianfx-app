@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/datasources/mock_market_datasource.dart';
+import '../data/datasources/binance_market_datasource.dart';
 import '../domain/entities/trading_entities.dart';
 
 // ── Instruments List Provider ─────────────────────────────────────────────────
@@ -13,18 +14,28 @@ class InstrumentsNotifier extends StateNotifier<List<InstrumentEntity>> {
   }
 
   final _dataSource = MockMarketDataSource.instance;
+  final _binanceSource = BinanceMarketDataSource.instance;
 
   void _init() {
     state = _dataSource.getInitialInstruments();
-    // Subscribe to live updates for all instruments
+
+    // Subscribe to simulated market data
     for (final inst in state) {
       _dataSource.streamPrice(inst.symbol).listen((updated) {
         state = [
           for (final i in state)
-            if (i.symbol == updated.symbol) updated else i,
+            if (i.symbol == updated.symbol && i.category != 'crypto') updated else i,
         ];
       });
     }
+
+    // Subscribe to REAL Live Binance Crypto WebSocket API (BTC, ETH, SOL, XRP, BNB, ADA)
+    _binanceSource.cryptoStream.listen((cryptoTick) {
+      state = [
+        for (final i in state)
+          if (i.symbol == cryptoTick.symbol) cryptoTick else i,
+      ];
+    });
   }
 
   void toggleFavorite(String symbol) {
