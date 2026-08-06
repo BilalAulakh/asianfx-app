@@ -220,7 +220,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen>
                       maxScale: 6.0,
                       boundaryMargin: const EdgeInsets.all(200),
                       clipBehavior: Clip.hardEdge,
-                      child: _buildChart(candles),
+                      child: _buildChart(candles, instrument, live.bid),
                     ),
                     // Floating Zoom Controls
                     Positioned(
@@ -543,11 +543,11 @@ class _ChartScreenState extends ConsumerState<ChartScreen>
     );
   }
 
-  Widget _buildChart(List<OhlcCandle> candles) {
+  Widget _buildChart(List<OhlcCandle> candles, InstrumentEntity instrument, double livePrice) {
     if (_selectedChartType == 'line' || _selectedChartType == 'area') {
       return _buildLineChart(candles);
     }
-    return _buildCandlestickChart(candles);
+    return _buildCandlestickChart(candles, instrument.decimals, livePrice);
   }
 
   Widget _buildLineChart(List<OhlcCandle> candles) {
@@ -643,87 +643,215 @@ class _ChartScreenState extends ConsumerState<ChartScreen>
     );
   }
 
-  Widget _buildCandlestickChart(List<OhlcCandle> candles) {
+  Widget _buildCandlestickChart(List<OhlcCandle> candles, int decimals, double livePrice) {
     if (candles.isEmpty) {
       return const Center(
-        child: CircularProgressIndicator(color: AppColors.brandPrimary),
+        child: CircularProgressIndicator(color: Color(0xFF0ECB81)),
       );
     }
 
-    final candleList = candles.map((c) => Candle(
-      date: c.time,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-      volume: c.volume,
-    )).toList();
-
-    return Candlesticks(
-      candles: candleList,
+    return _BinanceCandlestickWidget(
+      candles: candles,
+      decimals: decimals,
+      livePrice: livePrice,
     );
   }
 }
 
-// Custom candlestick painter
-class _CandlestickPainter extends CustomPainter {
+/// Binance Pro Style Candlestick & Volume Chart Widget
+class _BinanceCandlestickWidget extends StatefulWidget {
   final List<OhlcCandle> candles;
-  _CandlestickPainter({required this.candles});
+  final int decimals;
+  final double livePrice;
+
+  const _BinanceCandlestickWidget({
+    required this.candles,
+    required this.decimals,
+    required this.livePrice,
+  });
+
+  @override
+  State<_BinanceCandlestickWidget> createState() => _BinanceCandlestickWidgetState();
+}
+
+class _BinanceCandlestickWidgetState extends State<_BinanceCandlestickWidget> {
+  Offset? _touchPos;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onPanStart: (d) => setState(() => _touchPos = d.localPosition),
+      onPanUpdate: (d) => setState(() => _touchPos = d.localPosition),
+      onPanEnd: (_) => setState(() => _touchPos = null),
+      onTapDown: (d) => setState(() => _touchPos = d.localPosition),
+      onTapUp: (_) => setState(() => _touchPos = null),
+      child: CustomPaint(
+        painter: _BinanceCandlestickPainter(
+          candles: widget.candles,
+          decimals: widget.decimals,
+          livePrice: widget.livePrice,
+          touchPos: _touchPos,
+        ),
+        size: Size.infinite,
+      ),
+    );
+  }
+}
+
+class _BinanceCandlestickPainter extends CustomPainter {
+  final List<OhlcCandle> candles;
+  final int decimals;
+  final double livePrice;
+  final Offset? touchPos;
+
+  _BinanceCandlestickPainter({
+    required this.candles,
+    required this.decimals,
+    required this.livePrice,
+    this.touchPos,
+  });
+
+  static const Color binanceGreen = Color(0xFF0ECB81);
+  static const Color binanceRed = Color(0xFFF6465D);
+  static const Color binanceBg = Color(0xFF0B0E14);
+  static const Color gridColor = Color(0xFF1E2329);
 
   @override
   void paint(Canvas canvas, Size size) {
     if (candles.isEmpty) return;
 
-    final minPrice = candles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
-    final maxPrice = candles.map((c) => c.high).reduce((a, b) => a > b ? a : b);
-    final priceRange = maxPrice - minPrice;
-    if (priceRange == 0) return;
+    final visibleCandles = candles.takeLast(50).toList();
+    final rightMargin = 65.0;
+    final chartWidth = size.width - rightMargin;
+    final chartHeight = size.height;
+    final mainHeight = chartHeight * 0.78;
 
-    final candleWidth = size.width / candles.length;
-    final bodyWidth = candleWidth * 0.6;
+    final minPrice = visibleCandles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
+    final maxPrice = visibleCandles.map((c) => c.high).reduce((a, b) => a > b ? a : b);
+    final priceRange = (maxPrice - minPrice).abs() == 0 ? 1.0 : (maxPrice - minPrice);
+    final maxVol = visibleCandles.map((c) => c.volume).reduce((a, b) => a > b ? a : b);
 
-    for (int i = 0; i < candles.length; i++) {
-      final c = candles[i];
-      final isBull = c.isBullish;
-      final color = isBull ? AppColors.bullCandle : AppColors.bearCandle;
-      final paint = Paint()..color = color;
+    // Draw Background
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), Paint()..color = binanceBg);
 
+    // 1. Draw Price Grid Lines (5 Levels)
+    final gridPaint = Paint()
+      ..color = gridColor
+      ..strokeWidth = 0.8;
+
+    for (int i = 0; i <= 4; i++) {
+      final y = mainHeight * (i / 4);
+      canvas.drawLine(Offset(0, y), Offset(chartWidth, y), gridPaint);
+
+      final priceLabel = maxPrice - (priceRange * (i / 4));
+      final textSpan = TextSpan(
+        text: priceLabel.toStringAsFixed(decimals),
+        style: const TextStyle(color: Color(0xFF848E9C), fontSize: 10, fontFamily: 'Inter'),
+      );
+      final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
+      tp.layout();
+      tp.paint(canvas, Offset(chartWidth + 6, y - 6));
+    }
+
+    // 2. Draw Candlesticks & Volume Bars
+    final candleWidth = chartWidth / visibleCandles.length;
+    final bodyWidth = candleWidth * 0.7;
+
+    double toY(double p) => mainHeight - ((p - minPrice) / priceRange) * mainHeight;
+
+    for (int i = 0; i < visibleCandles.length; i++) {
+      final c = visibleCandles[i];
+      final isBull = c.close >= c.open;
+      final color = isBull ? binanceGreen : binanceRed;
       final x = i * candleWidth + candleWidth / 2;
-
-      // Normalize to canvas
-      double toY(double price) =>
-          size.height * (1 - (price - minPrice) / priceRange);
 
       final highY = toY(c.high);
       final lowY = toY(c.low);
       final openY = toY(c.open);
       final closeY = toY(c.close);
 
-      // Wick
+      // Draw Wick
       canvas.drawLine(
         Offset(x, highY),
         Offset(x, lowY),
-        paint..strokeWidth = 1,
+        Paint()..color = color..strokeWidth = 1.2,
       );
 
-      // Body
+      // Draw Body
       final bodyTop = isBull ? closeY : openY;
       final bodyBottom = isBull ? openY : closeY;
+      final bodyH = (bodyBottom - bodyTop).abs().clamp(1.5, mainHeight);
+
       canvas.drawRect(
-        Rect.fromLTWH(
-          x - bodyWidth / 2,
-          bodyTop,
-          bodyWidth,
-          (bodyBottom - bodyTop).abs().clamp(1.0, double.infinity),
-        ),
-        paint,
+        Rect.fromLTWH(x - bodyWidth / 2, bodyTop, bodyWidth, bodyH),
+        Paint()..color = color,
       );
+
+      // Draw Volume Bar (Bottom 20%)
+      final volH = maxVol > 0 ? (c.volume / maxVol) * (chartHeight * 0.18) : 2.0;
+      final volY = chartHeight - volH;
+      canvas.drawRect(
+        Rect.fromLTWH(x - bodyWidth / 2, volY, bodyWidth, volH),
+        Paint()..color = color.withOpacity(0.3),
+      );
+    }
+
+    // 3. Draw Live Current Price Line & Tag Badge
+    final liveY = toY(livePrice).clamp(0.0, mainHeight);
+    final isLiveUp = visibleCandles.last.close >= visibleCandles.last.open;
+    final liveColor = isLiveUp ? binanceGreen : binanceRed;
+
+    final dashPaint = Paint()
+      ..color = liveColor
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    double startX = 0;
+    while (startX < chartWidth) {
+      canvas.drawLine(Offset(startX, liveY), Offset(startX + 4, liveY), dashPaint);
+      startX += 8;
+    }
+
+    final badgeRect = Rect.fromLTWH(chartWidth + 2, liveY - 10, rightMargin - 4, 20);
+    canvas.drawRRect(RRect.fromRectAndRadius(badgeRect, const Radius.circular(4)), Paint()..color = liveColor);
+
+    final badgeText = TextSpan(
+      text: livePrice.toStringAsFixed(decimals),
+      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10, fontFamily: 'Inter'),
+    );
+    final badgeTp = TextPainter(text: badgeText, textDirection: TextDirection.ltr);
+    badgeTp.layout();
+    badgeTp.paint(canvas, Offset(chartWidth + 6, liveY - 6));
+
+    // 4. Draw Crosshair on Tap/Touch
+    if (touchPos != null && touchPos!.dx <= chartWidth) {
+      final chx = touchPos!.dx;
+      final chy = touchPos!.dy.clamp(0.0, mainHeight);
+
+      final chPaint = Paint()
+        ..color = const Color(0xFF848E9C)
+        ..strokeWidth = 0.8
+        ..style = PaintingStyle.stroke;
+
+      canvas.drawLine(Offset(chx, 0), Offset(chx, chartHeight), chPaint);
+      canvas.drawLine(Offset(0, chy), Offset(chartWidth, chy), chPaint);
+
+      final chPrice = maxPrice - (priceRange * (chy / mainHeight));
+      final chBadgeRect = Rect.fromLTWH(chartWidth + 2, chy - 9, rightMargin - 4, 18);
+      canvas.drawRRect(RRect.fromRectAndRadius(chBadgeRect, const Radius.circular(3)), Paint()..color = const Color(0xFF2B313A));
+
+      final chText = TextSpan(
+        text: chPrice.toStringAsFixed(decimals),
+        style: const TextStyle(color: Colors.white, fontSize: 9, fontFamily: 'Inter'),
+      );
+      final chTp = TextPainter(text: chText, textDirection: TextDirection.ltr);
+      chTp.layout();
+      chTp.paint(canvas, Offset(chartWidth + 6, chy - 5));
     }
   }
 
   @override
-  bool shouldRepaint(_CandlestickPainter oldDelegate) =>
-      oldDelegate.candles != candles;
+  bool shouldRepaint(_BinanceCandlestickPainter oldDelegate) => true;
 }
 
 Widget _rightTitleWidget(double value, TitleMeta meta) {
