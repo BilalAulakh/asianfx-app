@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:candlesticks/candlesticks.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/market_provider.dart';
@@ -19,6 +20,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen>
   String _selectedTimeframe = '1h';
   String _selectedChartType = 'candlestick';
   late AnimationController _priceAnimController;
+  late final TransformationController _transformationController;
   double? _lastPrice;
   Color _priceFlashColor = AppColors.profit;
 
@@ -29,6 +31,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen>
   @override
   void initState() {
     super.initState();
+    _transformationController = TransformationController();
     _priceAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -37,8 +40,34 @@ class _ChartScreenState extends ConsumerState<ChartScreen>
 
   @override
   void dispose() {
+    _transformationController.dispose();
     _priceAnimController.dispose();
     super.dispose();
+  }
+
+  double _currentScale = 1.0;
+
+  void _zoomIn() {
+    setState(() {
+      _currentScale = (_currentScale * 1.35).clamp(0.4, 6.0);
+      _transformationController.value =
+          Matrix4.diagonal3Values(_currentScale, _currentScale, 1.0);
+    });
+  }
+
+  void _zoomOut() {
+    setState(() {
+      _currentScale = (_currentScale / 1.35).clamp(0.4, 6.0);
+      _transformationController.value =
+          Matrix4.diagonal3Values(_currentScale, _currentScale, 1.0);
+    });
+  }
+
+  void _resetZoom() {
+    setState(() {
+      _currentScale = 1.0;
+      _transformationController.value = Matrix4.identity();
+    });
   }
 
   @override
@@ -177,11 +206,64 @@ class _ChartScreenState extends ConsumerState<ChartScreen>
 
             const SizedBox(height: 8),
 
-            // ── Chart ─────────────────────────────────────────────────────────
+            // ── Interactive Zoomable Chart ──────────────────────────────────────
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: _buildChart(candles),
+                child: Stack(
+                  children: [
+                    InteractiveViewer(
+                      transformationController: _transformationController,
+                      panEnabled: true,
+                      scaleEnabled: true,
+                      minScale: 0.4,
+                      maxScale: 6.0,
+                      boundaryMargin: const EdgeInsets.all(200),
+                      clipBehavior: Clip.hardEdge,
+                      child: _buildChart(candles),
+                    ),
+                    // Floating Zoom Controls
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.darkCard.withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.darkBorder),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.add, color: AppColors.textPrimary, size: 18),
+                              onPressed: _zoomIn,
+                              tooltip: 'Zoom In',
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                              padding: EdgeInsets.zero,
+                            ),
+                            const Divider(height: 1, color: AppColors.darkDivider),
+                            IconButton(
+                              icon: const Icon(Icons.remove, color: AppColors.textPrimary, size: 18),
+                              onPressed: _zoomOut,
+                              tooltip: 'Zoom Out',
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                              padding: EdgeInsets.zero,
+                            ),
+                            const Divider(height: 1, color: AppColors.darkDivider),
+                            IconButton(
+                              icon: const Icon(Icons.center_focus_strong, color: AppColors.brandPrimary, size: 16),
+                              onPressed: _resetZoom,
+                              tooltip: 'Reset Zoom',
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -568,11 +650,17 @@ class _ChartScreenState extends ConsumerState<ChartScreen>
       );
     }
 
-    // Build custom candlestick chart using fl_chart bar chart
-    final bars = candles.takeLast(60).toList();
-    return CustomPaint(
-      painter: _CandlestickPainter(candles: bars),
-      size: Size.infinite,
+    final candleList = candles.map((c) => Candle(
+      date: c.time,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+      volume: c.volume,
+    )).toList();
+
+    return Candlesticks(
+      candles: candleList,
     );
   }
 }
