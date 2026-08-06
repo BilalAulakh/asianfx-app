@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase Backend
+  await Supabase.initialize(
+    url: 'https://sazzizxjvelfwyaltmwf.supabase.co',
+    anonKey: 'sb_publishable_-gYP1R7sKiqY5Yv-bAkqaw_QaG6fPYw',
+  );
 
   // Lock to portrait mode
   await SystemChrome.setPreferredOrientations([

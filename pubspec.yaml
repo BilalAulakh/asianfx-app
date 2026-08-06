@@ -23,6 +23,7 @@ dependencies:
   connectivity_plus: ^6.0.5
 
   # ── Security / Auth ───────────────────────────────────────────────────────────
+  supabase_flutter: ^2.8.0
   flutter_secure_storage: ^9.2.2
   local_auth: ^2.3.0
   google_sign_in: ^6.2.1
