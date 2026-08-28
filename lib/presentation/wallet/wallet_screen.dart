@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/formatters.dart';
+import '../../providers/admin_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/market_provider.dart';
+import '../../providers/wallet_provider.dart';
 import '../../domain/entities/trading_entities.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
@@ -87,7 +90,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                   // ── Balance Card ─────────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _WalletBalanceCard(wallet: wallet),
+                    child: _WalletBalanceCard(wallet: wallet.wallet),
                   ),
                   const SizedBox(height: 20),
 
@@ -588,26 +591,32 @@ class _TransactionRow extends StatelessWidget {
 }
 
 // ── Payment Bottom Sheet ──────────────────────────────────────────────────────
-class _PaymentBottomSheet extends StatefulWidget {
+class _PaymentBottomSheet extends ConsumerStatefulWidget {
   final String type;
-  const _PaymentBottomSheet({required this.type});
+  const _PaymentBottomSheet({super.key, required this.type});
 
   @override
-  State<_PaymentBottomSheet> createState() => _PaymentBottomSheetState();
+  ConsumerState<_PaymentBottomSheet> createState() => _PaymentBottomSheetState();
 }
 
-class _PaymentBottomSheetState extends State<_PaymentBottomSheet> {
+class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
   final _amountController = TextEditingController();
   String _selectedMethod = 'Bank Transfer';
   bool _isLoading = false;
 
   final List<Map<String, dynamic>> _methods = [
-    {'name': 'Bank Transfer', 'icon': Icons.account_balance_outlined, 'color': Color(0xFF3D91FF)},
-    {'name': 'Credit Card', 'icon': Icons.credit_card_rounded, 'color': Color(0xFF5C6BC0)},
-    {'name': 'Easypaisa', 'icon': Icons.phone_android_rounded, 'color': Color(0xFF4CAF50)},
-    {'name': 'JazzCash', 'icon': Icons.phone_iphone_rounded, 'color': Color(0xFFFF5722)},
-    {'name': 'USDT (TRC20)', 'icon': Icons.currency_bitcoin_rounded, 'color': Color(0xFFFFB300)},
+    {'name': 'Bank Transfer', 'icon': Icons.account_balance_outlined, 'color': const Color(0xFF3D91FF)},
+    {'name': 'Credit Card', 'icon': Icons.credit_card_rounded, 'color': const Color(0xFF5C6BC0)},
+    {'name': 'Easypaisa', 'icon': Icons.phone_android_rounded, 'color': const Color(0xFF4CAF50)},
+    {'name': 'JazzCash', 'icon': Icons.phone_iphone_rounded, 'color': const Color(0xFFFF5722)},
+    {'name': 'USDT (TRC20)', 'icon': Icons.currency_bitcoin_rounded, 'color': const Color(0xFFFFB300)},
   ];
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -650,11 +659,12 @@ class _PaymentBottomSheetState extends State<_PaymentBottomSheet> {
                 color: AppColors.textPrimary,
               ),
               decoration: InputDecoration(
-                prefixText: '\$  ',
+                prefixText: '\$ ',
                 prefixStyle: const TextStyle(
                   fontFamily: 'Inter',
                   fontSize: 24,
-                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.brandPrimary,
                 ),
                 hintText: '0.00',
                 hintStyle: const TextStyle(
@@ -662,20 +672,23 @@ class _PaymentBottomSheetState extends State<_PaymentBottomSheet> {
                   fontSize: 24,
                   color: AppColors.textMuted,
                 ),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                filled: true,
+                fillColor: AppColors.darkBackground,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppColors.darkBorder),
+                ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   borderSide: const BorderSide(color: AppColors.darkBorder),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppColors.brandPrimary, width: 2),
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppColors.brandPrimary),
                 ),
-                filled: true,
-                fillColor: AppColors.darkBackground,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             // Quick amounts
             Row(
               children: [100, 500, 1000, 5000].map((amt) => Expanded(
@@ -756,9 +769,64 @@ class _PaymentBottomSheetState extends State<_PaymentBottomSheet> {
               height: 52,
               child: FilledButton(
                 onPressed: _isLoading ? null : () async {
+                  final amountText = _amountController.text.trim();
+                  final amount = double.tryParse(amountText);
+                  if (amount == null || amount <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter a valid amount'), backgroundColor: AppColors.loss),
+                    );
+                    return;
+                  }
+
                   setState(() => _isLoading = true);
-                  await Future.delayed(const Duration(milliseconds: 1000));
-                  if (mounted) Navigator.pop(context);
+                  await Future.delayed(const Duration(milliseconds: 400));
+
+                  final user = ref.read(authProvider).user;
+                  final isDeposit = widget.type.toLowerCase().contains('deposit');
+                  final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
+                  // 1. Add to Admin Pending Transactions
+                  ref.read(adminProvider.notifier).addTransactionRequest(
+                    AdminTransaction(
+                      id: txId,
+                      userId: user?.id ?? 'usr_001',
+                      userName: user?.fullName ?? 'Trader',
+                      userEmail: user?.email ?? 'trader@asianfx.com',
+                      type: isDeposit ? 'DEPOSIT' : 'WITHDRAWAL',
+                      amount: amount,
+                      method: _selectedMethod,
+                      accountOrAddress: 'REF-${DateTime.now().millisecondsSinceEpoch}',
+                      status: AdminTxStatus.pending,
+                      createdAt: DateTime.now(),
+                    ),
+                  );
+
+                  // 2. Add to user's wallet transactions
+                  ref.read(walletProvider.notifier).addPendingTransaction(
+                    TransactionEntity(
+                      id: txId,
+                      type: isDeposit ? 'deposit' : 'withdrawal',
+                      amount: amount,
+                      currency: 'USD',
+                      status: 'pending',
+                      method: _selectedMethod,
+                      description: '${isDeposit ? 'Deposit' : 'Withdrawal'} via $_selectedMethod',
+                      createdAt: DateTime.now(),
+                    ),
+                  );
+
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: const Color(0xFF0ECB81),
+                        content: Text(
+                          '✓ ${widget.type} request of \$$amount submitted! Awaiting Admin approval.',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+                        ),
+                      ),
+                    );
+                  }
                   setState(() => _isLoading = false);
                 },
                 style: FilledButton.styleFrom(

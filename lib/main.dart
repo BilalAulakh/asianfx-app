@@ -11,8 +11,8 @@ void main() async {
 
   // Initialize Supabase Backend
   await Supabase.initialize(
-    url: 'https://sazzizxjvelfwyaltmwf.supabase.co',
-    anonKey: 'sb_publishable_-gYP1R7sKiqY5Yv-bAkqaw_QaG6fPYw',
+    url: 'https://ehzhzcdqqtnyrohyejqz.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoemh6Y2RxcXRueXJvaHllanF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NzI5MTcsImV4cCI6MjEwMzE0ODkxN30.so30ogQEzh0Nvnh7JgT6KMp_DgRd1OSYn1x2ZzXMuvY',
   );
 
   // Lock to portrait mode

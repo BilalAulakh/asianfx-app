@@ -1,4 +1,7 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/constants/app_constants.dart';
+import '../core/math/money_math.dart';
 import '../domain/entities/trading_entities.dart';
 
 class TradingState {
@@ -42,49 +45,63 @@ class TradingNotifier extends StateNotifier<TradingState> {
     state = TradingState(
       openTrades: [
         TradeEntity(
-          id: 'trd_101',
-          symbol: 'EURUSD',
+          id: 'trd_100',
+          orderId: 'ord_100',
+          symbol: 'BTC/USD',
           side: OrderSide.buy,
           type: OrderType.market,
           status: OrderStatus.open,
-          lotSize: 1.0,
-          openPrice: 1.0850,
-          currentPrice: 1.0875,
-          floatingPl: 250.0,
-          leverage: 100,
-          openTime: DateTime.now().subtract(const Duration(hours: 2)),
-        ),
-        TradeEntity(
-          id: 'trd_102',
-          symbol: 'XAUUSD',
-          side: OrderSide.sell,
-          type: OrderType.market,
-          status: OrderStatus.open,
-          lotSize: 0.5,
-          openPrice: 2045.50,
-          currentPrice: 2041.20,
-          floatingPl: 215.0,
-          leverage: 100,
-          openTime: DateTime.now().subtract(const Duration(hours: 5)),
+          lots: MoneyMath.toDec(0.10),
+          contractSize: AppConstants.contractSizeCrypto,
+          openPrice: MoneyMath.toDec(96250.0),
+          currentPrice: MoneyMath.toDec(96480.0),
+          unrealizedPnl: MoneyMath.toDec(23.00),
+          requiredMargin: MoneyMath.toDec(96.25),
+          leverage: Decimal.fromInt(100),
+          openTime: DateTime.now().subtract(const Duration(minutes: 18)),
         ),
       ],
       tradeHistory: [
         TradeEntity(
           id: 'trd_099',
-          symbol: 'BTCUSD',
+          orderId: 'ord_099',
+          symbol: 'BTC/USD',
           side: OrderSide.buy,
           type: OrderType.market,
           status: OrderStatus.closed,
-          lotSize: 0.1,
-          openPrice: 42100.0,
-          closePrice: 43500.0,
-          floatingPl: 140.0,
-          leverage: 50,
+          lots: MoneyMath.toDec(0.1),
+          contractSize: AppConstants.contractSizeCrypto,
+          openPrice: MoneyMath.toDec(95100.0),
+          closePrice: MoneyMath.toDec(96300.0),
+          currentPrice: MoneyMath.toDec(96300.0),
+          unrealizedPnl: Decimal.zero,
+          realizedPnl: MoneyMath.toDec(120.0),
+          requiredMargin: Decimal.zero,
+          leverage: Decimal.fromInt(50),
           openTime: DateTime.now().subtract(const Duration(days: 1)),
           closeTime: DateTime.now().subtract(const Duration(hours: 12)),
         ),
       ],
     );
+  }
+
+  void updatePriceTick(String symbol, double currentBid, double currentAsk) {
+    if (state.openTrades.isEmpty) return;
+    final updated = state.openTrades.map((trade) {
+      if (trade.symbol == symbol) {
+        final currentPrice = trade.side == OrderSide.buy ? currentBid : currentAsk;
+        final delta = trade.side == OrderSide.buy
+            ? (currentBid - trade.openPrice.toDouble())
+            : (trade.openPrice.toDouble() - currentAsk);
+        final pl = delta * trade.lots.toDouble() * trade.contractSize.toDouble();
+        return trade.copyWith(
+          currentPrice: MoneyMath.toDec(currentPrice),
+          unrealizedPnl: MoneyMath.toDec(pl),
+        );
+      }
+      return trade;
+    }).toList();
+    state = state.copyWith(openTrades: updated);
   }
 
   Future<bool> executeOrder({
@@ -98,22 +115,27 @@ class TradingNotifier extends StateNotifier<TradingState> {
     double leverage = 100.0,
   }) async {
     state = state.copyWith(isLoading: true);
-    await Future.delayed(const Duration(milliseconds: 600));
+    await Future.delayed(const Duration(milliseconds: 300));
 
     final newTrade = TradeEntity(
       id: 'trd_${DateTime.now().millisecondsSinceEpoch}',
+      orderId: 'ord_${DateTime.now().millisecondsSinceEpoch}',
       symbol: symbol,
       side: side,
       type: type,
       status: OrderStatus.open,
-      lotSize: lotSize,
-      openPrice: price,
-      currentPrice: price,
-      stopLoss: stopLoss,
-      takeProfit: takeProfit,
-      leverage: leverage,
+      lots: MoneyMath.toDec(lotSize),
+      contractSize: symbol.contains('XAU')
+          ? AppConstants.contractSizeGold
+          : (symbol.contains('BTC') ? AppConstants.contractSizeCrypto : AppConstants.contractSizeForex),
+      openPrice: MoneyMath.toDec(price),
+      currentPrice: MoneyMath.toDec(price),
+      requiredMargin: MoneyMath.toDec((price * lotSize) / leverage),
+      stopLoss: stopLoss != null ? MoneyMath.toDec(stopLoss) : null,
+      takeProfit: takeProfit != null ? MoneyMath.toDec(takeProfit) : null,
+      leverage: MoneyMath.toDec(leverage),
       openTime: DateTime.now(),
-      floatingPl: 0.0,
+      unrealizedPnl: Decimal.zero,
     );
 
     state = state.copyWith(
@@ -128,18 +150,11 @@ class TradingNotifier extends StateNotifier<TradingState> {
     if (tradeIndex == -1) return;
 
     final trade = state.openTrades[tradeIndex];
-    final closedTrade = TradeEntity(
-      id: trade.id,
-      symbol: trade.symbol,
-      side: trade.side,
-      type: trade.type,
+    final closedTrade = trade.copyWith(
       status: OrderStatus.closed,
-      lotSize: trade.lotSize,
-      openPrice: trade.openPrice,
-      closePrice: trade.currentPrice ?? trade.openPrice,
-      floatingPl: trade.floatingPl,
-      leverage: trade.leverage,
-      openTime: trade.openTime,
+      closePrice: trade.currentPrice,
+      realizedPnl: trade.unrealizedPnl,
+      unrealizedPnl: Decimal.zero,
       closeTime: DateTime.now(),
     );
 

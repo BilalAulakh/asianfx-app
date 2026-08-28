@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../presentation/splash/splash_screen.dart';
 import '../../presentation/onboarding/onboarding_screen.dart';
@@ -9,15 +10,13 @@ import '../../presentation/auth/register_screen.dart';
 import '../../presentation/auth/otp_screen.dart';
 import '../../presentation/auth/forgot_password_screen.dart';
 import '../../presentation/shell/app_shell.dart';
-import '../../presentation/dashboard/dashboard_screen.dart';
-import '../../presentation/markets/markets_screen.dart';
-import '../../presentation/trading/trading_screen.dart';
-import '../../presentation/charts/chart_screen.dart';
-import '../../presentation/wallet/wallet_screen.dart';
+import '../../presentation/trading/terminal_screen.dart';
+import '../../presentation/trading/positions_screen.dart';
+import '../../presentation/wallet/vault_screen.dart';
+import '../../presentation/wallet/double_entry_statement_screen.dart';
 import '../../presentation/profile/profile_screen.dart';
-import '../../presentation/kyc/kyc_screen.dart';
-import '../../presentation/notifications/notifications_screen.dart';
-import '../../presentation/support/support_screen.dart';
+import '../../presentation/kyc/kyc_flow_screen.dart';
+import '../../presentation/admin/admin_portal_screen.dart';
 
 // Route names
 abstract class AppRoutes {
@@ -28,15 +27,14 @@ abstract class AppRoutes {
   static const otp = '/otp';
   static const forgotPassword = '/forgot-password';
   static const shell = '/app';
-  static const dashboard = '/app/dashboard';
-  static const markets = '/app/markets';
-  static const trade = '/app/trade';
-  static const chart = '/app/chart/:symbol';
-  static const wallet = '/app/wallet';
+  static const terminal = '/app/terminal';
+  static const dashboard = '/app/terminal';
+  static const positions = '/app/positions';
+  static const vault = '/app/vault';
+  static const statement = '/app/statement';
   static const profile = '/app/profile';
   static const kyc = '/app/kyc';
-  static const notifications = '/app/notifications';
-  static const support = '/app/support';
+  static const admin = '/app/admin';
 }
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -56,7 +54,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (authState.status == AuthStatus.loading) return null;
 
       if (!isAuthenticated && !isAuthRoute) return AppRoutes.login;
-      if (isAuthenticated && isAuthRoute) return AppRoutes.dashboard;
+      if (isAuthenticated && isAuthRoute) return AppRoutes.terminal;
 
       return null;
     },
@@ -95,69 +93,63 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.forgotPassword,
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
-      // Main Shell with bottom navigation
+
+      // Admin & KYC Full Routes
+      GoRoute(
+        path: AppRoutes.admin,
+        builder: (context, state) => const AdminPortalScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.kyc,
+        builder: (context, state) => const KycFlowScreen(),
+      ),
+
+      // Institutional 5 Branch Navigation Shell
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(navigationShell: shell),
         branches: [
+          // 1. Trading Terminal
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: AppRoutes.dashboard,
-                builder: (context, state) => const DashboardScreen(),
+                path: AppRoutes.terminal,
+                builder: (context, state) => const TerminalScreen(),
               ),
             ],
           ),
+          // 2. Positions & Portfolio
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: AppRoutes.markets,
-                builder: (context, state) => const MarketsScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'chart/:symbol',
-                    builder: (context, state) => ChartScreen(
-                      symbol: state.pathParameters['symbol'] ?? 'EURUSD',
-                    ),
-                  ),
-                ],
+                path: AppRoutes.positions,
+                builder: (context, state) => const PositionsScreen(),
               ),
             ],
           ),
+          // 3. Client Vault & Wallet
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: AppRoutes.trade,
-                builder: (context, state) => const TradingScreen(),
+                path: AppRoutes.vault,
+                builder: (context, state) => const VaultScreen(),
               ),
             ],
           ),
+          // 4. Double-Entry Statement
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: AppRoutes.wallet,
-                builder: (context, state) => const WalletScreen(),
+                path: AppRoutes.statement,
+                builder: (context, state) => const DoubleEntryStatementScreen(),
               ),
             ],
           ),
+          // 5. Profile & KYC
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: AppRoutes.profile,
                 builder: (context, state) => const ProfileScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'kyc',
-                    builder: (context, state) => const KycScreen(),
-                  ),
-                  GoRoute(
-                    path: 'notifications',
-                    builder: (context, state) => const NotificationsScreen(),
-                  ),
-                  GoRoute(
-                    path: 'support',
-                    builder: (context, state) => const SupportScreen(),
-                  ),
-                ],
               ),
             ],
           ),
@@ -165,8 +157,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
+      backgroundColor: const Color(0xFF0A0E17),
       body: Center(
-        child: Text('Page not found: ${state.error}'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: Color(0xFFFFD600)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => context.go(AppRoutes.terminal),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFD600),
+                foregroundColor: Colors.black,
+              ),
+              child: const Text('Go to Terminal'),
+            ),
+          ],
+        ),
       ),
     ),
   );

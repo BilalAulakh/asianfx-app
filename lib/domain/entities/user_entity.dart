@@ -1,8 +1,30 @@
 import 'package:equatable/equatable.dart';
 
-enum UserRole { user, vip, admin }
-enum KycStatus { notSubmitted, pending, approved, rejected }
-enum AccountStatus { active, suspended, restricted }
+/// Institutional RBAC Roles
+enum UserRole {
+  client,      // Multi-Asset & Gold Trader
+  admin,       // Super Administrator
+  compliance,  // AML & KYC Verification Officer
+  operations,  // Operational hold & client lifecycle manager
+  finance,     // Treasury & Double-Entry Ledger Auditor
+  dealer,      // Chief Dealer & Risk Manager (Spread markup & B-Book)
+}
+
+/// KYC Verification Lifecycle
+enum KycStatus {
+  notSubmitted,
+  pending,
+  approved,
+  rejected,
+  restricted,
+}
+
+enum AccountStatus {
+  active,
+  frozen,
+  restricted,
+  suspended,
+}
 
 class UserEntity extends Equatable {
   final String id;
@@ -21,6 +43,10 @@ class UserEntity extends Equatable {
   final bool isTwoFactorEnabled;
   final bool isEmailVerified;
   final bool isPhoneVerified;
+  final String? kycDocumentType;
+  final String? kycDocumentNumber;
+  final String? kycRejectionReason;
+  final DateTime? kycSubmittedAt;
   final DateTime createdAt;
 
   const UserEntity({
@@ -34,17 +60,55 @@ class UserEntity extends Equatable {
     this.dateOfBirth,
     this.preferredCurrency = 'USD',
     this.preferredLanguage = 'en',
-    this.kycStatus = KycStatus.notSubmitted,
+    this.kycStatus = KycStatus.approved,
     this.status = AccountStatus.active,
-    this.role = UserRole.user,
+    this.role = UserRole.client,
     this.isTwoFactorEnabled = false,
-    this.isEmailVerified = false,
-    this.isPhoneVerified = false,
+    this.isEmailVerified = true,
+    this.isPhoneVerified = true,
+    this.kycDocumentType,
+    this.kycDocumentNumber,
+    this.kycRejectionReason,
+    this.kycSubmittedAt,
     required this.createdAt,
   });
 
   bool get isKycVerified => kycStatus == KycStatus.approved;
   bool get isActive => status == AccountStatus.active;
+  bool get canTrade => isKycVerified && status == AccountStatus.active;
+  bool get canWithdraw => isKycVerified && status == AccountStatus.active;
+
+  String get roleDisplay {
+    switch (role) {
+      case UserRole.client:
+        return 'Institutional Trader';
+      case UserRole.admin:
+        return 'Super Administrator';
+      case UserRole.compliance:
+        return 'Compliance & AML Officer';
+      case UserRole.operations:
+        return 'Operations Manager';
+      case UserRole.finance:
+        return 'Treasury & Finance Auditor';
+      case UserRole.dealer:
+        return 'Chief Dealer & Risk Manager';
+    }
+  }
+
+  String get kycStatusDisplay {
+    switch (kycStatus) {
+      case KycStatus.notSubmitted:
+        return 'Not Submitted';
+      case KycStatus.pending:
+        return 'Under Review';
+      case KycStatus.approved:
+        return 'Verified (Approved)';
+      case KycStatus.rejected:
+        return 'Verification Rejected';
+      case KycStatus.restricted:
+        return 'Account Restricted';
+    }
+  }
 
   UserEntity copyWith({
     String? id,
@@ -63,6 +127,10 @@ class UserEntity extends Equatable {
     bool? isTwoFactorEnabled,
     bool? isEmailVerified,
     bool? isPhoneVerified,
+    String? kycDocumentType,
+    String? kycDocumentNumber,
+    String? kycRejectionReason,
+    DateTime? kycSubmittedAt,
     DateTime? createdAt,
   }) {
     return UserEntity(
@@ -82,6 +150,10 @@ class UserEntity extends Equatable {
       isTwoFactorEnabled: isTwoFactorEnabled ?? this.isTwoFactorEnabled,
       isEmailVerified: isEmailVerified ?? this.isEmailVerified,
       isPhoneVerified: isPhoneVerified ?? this.isPhoneVerified,
+      kycDocumentType: kycDocumentType ?? this.kycDocumentType,
+      kycDocumentNumber: kycDocumentNumber ?? this.kycDocumentNumber,
+      kycRejectionReason: kycRejectionReason ?? this.kycRejectionReason,
+      kycSubmittedAt: kycSubmittedAt ?? this.kycSubmittedAt,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -91,6 +163,7 @@ class UserEntity extends Equatable {
         id, email, phone, fullName, avatarUrl, country, nationality,
         dateOfBirth, preferredCurrency, preferredLanguage, kycStatus,
         status, role, isTwoFactorEnabled, isEmailVerified, isPhoneVerified,
+        kycDocumentType, kycDocumentNumber, kycRejectionReason, kycSubmittedAt,
         createdAt,
       ];
 }

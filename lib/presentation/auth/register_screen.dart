@@ -84,7 +84,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                 children: [
                   const SizedBox(height: 24),
                   GestureDetector(
-                    onTap: () => context.pop(),
+                    onTap: () {
+                      if (_step == 1) {
+                        setState(() => _step = 0);
+                      } else {
+                        context.pop();
+                      }
+                    },
                     child: Container(
                       width: 40, height: 40,
                       decoration: BoxDecoration(color: AppColors.darkCard, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.darkBorder)),
@@ -152,9 +158,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                     isLoading: _isLoading,
                     onPressed: () {
                       if (_step == 0) {
-                        if (_nameController.text.isNotEmpty && _emailController.text.contains('@')) {
-                          setState(() { _step = 1; });
+                        if (_nameController.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter your full name.'), backgroundColor: AppColors.loss),
+                          );
+                          return;
                         }
+                        if (!_emailController.text.trim().contains('@')) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter a valid email address.'), backgroundColor: AppColors.loss),
+                          );
+                          return;
+                        }
+                        setState(() { _step = 1; });
                       } else {
                         _handleRegister();
                       }

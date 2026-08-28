@@ -105,121 +105,132 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ],
         ),
       ),
-      child: Column(
-        children: [
-          SizedBox(height: size.height * 0.12),
+      child: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 40),
 
-          // Illustration
-          Expanded(
-            flex: 5,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Icon container
-                  TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0.8, end: 1.0),
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.elasticOut,
-                    builder: (context, value, child) {
-                      return Transform.scale(
-                        scale: value,
-                        child: Container(
-                          width: 160,
-                          height: 160,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(40),
-                            gradient: LinearGradient(
-                              colors: page.gradient,
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: page.gradient[0].withAlpha(70),
-                                blurRadius: 50,
-                                spreadRadius: 10,
+                        // Icon container
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.8, end: 1.0),
+                          duration: const Duration(milliseconds: 600),
+                          curve: Curves.elasticOut,
+                          builder: (context, value, child) {
+                            return Transform.scale(
+                              scale: value,
+                              child: Container(
+                                width: 140,
+                                height: 140,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(36),
+                                  gradient: LinearGradient(
+                                    colors: page.gradient,
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: page.gradient[0].withAlpha(70),
+                                      blurRadius: 40,
+                                      spreadRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  page.icon,
+                                  size: 64,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ],
-                          ),
-                          child: Icon(
-                            page.icon,
-                            size: 72,
-                            color: Colors.white,
+                            );
+                          },
+                        ),
+
+                        const SizedBox(height: 36),
+
+                        // Title
+                        Text(
+                          page.title,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                            height: 1.2,
+                            letterSpacing: -0.5,
                           ),
                         ),
-                      );
-                    },
-                  ),
+                        const SizedBox(height: 14),
 
-                  const SizedBox(height: 48),
+                        // Subtitle
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(
+                            page.subtitle,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                              color: AppColors.textSecondary,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
 
-                  // Title
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      page.title,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        height: 1.2,
-                        letterSpacing: -0.5,
-                      ),
+                        // Feature Tags
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          children: page.tags
+                              .map(
+                                (tag) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(20),
+                                    color: page.gradient[0].withAlpha(20),
+                                    border: Border.all(
+                                      color: page.gradient[0].withAlpha(50),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    tag,
+                                    style: TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: page.gradient[0],
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+
+                        const SizedBox(height: 100),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Subtitle
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Text(
-                      page.subtitle,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 15,
-                        color: AppColors.textSecondary,
-                        height: 1.6,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Feature Tags
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: page.tags.map((tag) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        color: page.gradient[0].withAlpha(20),
-                        border: Border.all(
-                          color: page.gradient[0].withAlpha(50),
-                        ),
-                      ),
-                      child: Text(
-                        tag,
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: page.gradient[0],
-                        ),
-                      ),
-                    )).toList(),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-
-          const SizedBox(height: 120),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

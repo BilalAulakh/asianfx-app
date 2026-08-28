@@ -81,6 +81,8 @@ dependencies:
   package_info_plus: ^8.0.2
   device_info_plus: ^10.1.2
   cupertino_icons: ^1.0.8
+  decimal: ^3.2.6
+  flutter_animate: ^4.5.2
 
 dev_dependencies:
   flutter_test:

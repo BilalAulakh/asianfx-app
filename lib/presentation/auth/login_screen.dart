@@ -196,7 +196,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             ),
                           ),
                         ),
-                        const SizedBox(height: 28),
+                        // Quick Test Chips
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text('Quick Test: ', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                            GestureDetector(
+                              onTap: () {
+                                _emailController.text = 'trader@asianfx.com';
+                                _passwordController.text = 'Trader@123';
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.darkCard,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.brandPrimary.withAlpha(80)),
+                                ),
+                                child: const Text(
+                                  'Trader Demo',
+                                  style: TextStyle(color: AppColors.brandPrimary, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                _emailController.text = 'admin@asianfx.com';
+                                _passwordController.text = 'Admin@123';
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.darkCard,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFFFD600).withAlpha(80)),
+                                ),
+                                child: const Text(
+                                  'Admin Portal',
+                                  style: TextStyle(color: Color(0xFFFFD600), fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
 
                         // Login Button
                         FxButton(

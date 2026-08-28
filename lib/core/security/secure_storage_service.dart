@@ -1,7 +1,8 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Secure Storage Service — wraps FlutterSecureStorage
-/// All sensitive data (tokens, user credentials) stored here
+/// Secure Storage Service — wraps FlutterSecureStorage with SharedPreferences fallback
+/// All sensitive data (tokens, user credentials) stored with rock-solid persistence
 class SecureStorageService {
   SecureStorageService._();
   static final SecureStorageService instance = SecureStorageService._();
@@ -25,46 +26,86 @@ class SecureStorageService {
   static const String _keyPinHash = 'pin_hash';
 
   // ── Tokens ───────────────────────────────────────────────────────────────────
-  Future<void> saveAccessToken(String token) =>
-      _storage.write(key: _keyAccessToken, value: token);
+  Future<void> saveAccessToken(String token) async {
+    await _storage.write(key: _keyAccessToken, value: token);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAccessToken, token);
+  }
 
-  Future<String?> getAccessToken() =>
-      _storage.read(key: _keyAccessToken);
+  Future<String?> getAccessToken() async {
+    final val = await _storage.read(key: _keyAccessToken);
+    if (val != null && val.isNotEmpty) return val;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyAccessToken);
+  }
 
-  Future<void> saveRefreshToken(String token) =>
-      _storage.write(key: _keyRefreshToken, value: token);
+  Future<void> saveRefreshToken(String token) async {
+    await _storage.write(key: _keyRefreshToken, value: token);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyRefreshToken, token);
+  }
 
-  Future<String?> getRefreshToken() =>
-      _storage.read(key: _keyRefreshToken);
+  Future<String?> getRefreshToken() async {
+    final val = await _storage.read(key: _keyRefreshToken);
+    if (val != null && val.isNotEmpty) return val;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyRefreshToken);
+  }
 
   // ── User ─────────────────────────────────────────────────────────────────────
-  Future<void> saveUserId(String id) =>
-      _storage.write(key: _keyUserId, value: id);
+  Future<void> saveUserId(String id) async {
+    await _storage.write(key: _keyUserId, value: id);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyUserId, id);
+  }
 
-  Future<String?> getUserId() =>
-      _storage.read(key: _keyUserId);
+  Future<String?> getUserId() async {
+    final val = await _storage.read(key: _keyUserId);
+    if (val != null && val.isNotEmpty) return val;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyUserId);
+  }
 
-  Future<void> saveUserEmail(String email) =>
-      _storage.write(key: _keyUserEmail, value: email);
+  Future<void> saveUserEmail(String email) async {
+    await _storage.write(key: _keyUserEmail, value: email);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyUserEmail, email);
+  }
 
-  Future<String?> getUserEmail() =>
-      _storage.read(key: _keyUserEmail);
+  Future<String?> getUserEmail() async {
+    final val = await _storage.read(key: _keyUserEmail);
+    if (val != null && val.isNotEmpty) return val;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyUserEmail);
+  }
 
   // ── Biometric ─────────────────────────────────────────────────────────────────
-  Future<void> setBiometricEnabled(bool enabled) =>
-      _storage.write(key: _keyBiometricEnabled, value: enabled.toString());
+  Future<void> setBiometricEnabled(bool enabled) async {
+    await _storage.write(key: _keyBiometricEnabled, value: enabled.toString());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyBiometricEnabled, enabled);
+  }
 
   Future<bool> getBiometricEnabled() async {
     final val = await _storage.read(key: _keyBiometricEnabled);
-    return val == 'true';
+    if (val != null) return val == 'true';
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyBiometricEnabled) ?? false;
   }
 
   // ── Device ───────────────────────────────────────────────────────────────────
-  Future<void> saveDeviceId(String id) =>
-      _storage.write(key: _keyDeviceId, value: id);
+  Future<void> saveDeviceId(String id) async {
+    await _storage.write(key: _keyDeviceId, value: id);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyDeviceId, id);
+  }
 
-  Future<String?> getDeviceId() =>
-      _storage.read(key: _keyDeviceId);
+  Future<String?> getDeviceId() async {
+    final val = await _storage.read(key: _keyDeviceId);
+    if (val != null && val.isNotEmpty) return val;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyDeviceId);
+  }
 
   // ── Session ──────────────────────────────────────────────────────────────────
   Future<bool> hasValidSession() async {
@@ -77,14 +118,93 @@ class SecureStorageService {
     await _storage.delete(key: _keyRefreshToken);
     await _storage.delete(key: _keyUserId);
     await _storage.delete(key: _keyUserEmail);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyAccessToken);
+    await prefs.remove(_keyRefreshToken);
+    await prefs.remove(_keyUserId);
+    await prefs.remove(_keyUserEmail);
   }
 
-  Future<void> clearAll() async => _storage.deleteAll();
+  // ── User Profile & Credentials Persistence ───────────────────────────────────
+  Future<void> saveUserProfile({
+    required String id,
+    required String email,
+    required String fullName,
+    required String role,
+    String? phone,
+  }) async {
+    final normalized = email.toLowerCase().trim();
+    await saveUserId(id);
+    await saveUserEmail(normalized);
+    await _storage.write(key: 'user_fullname_$normalized', value: fullName);
+    await _storage.write(key: 'user_role_$normalized', value: role);
+    if (phone != null) {
+      await _storage.write(key: 'user_phone_$normalized', value: phone);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_fullname_$normalized', fullName);
+    await prefs.setString('user_role_$normalized', role);
+    if (phone != null) {
+      await prefs.setString('user_phone_$normalized', phone);
+    }
+  }
 
-  // ── PIN ──────────────────────────────────────────────────────────────────────
-  Future<void> savePinHash(String hash) =>
-      _storage.write(key: _keyPinHash, value: hash);
+  Future<void> saveUserCredentials(String email, String password) async {
+    final normalized = email.toLowerCase().trim();
+    await _storage.write(key: 'user_pwd_$normalized', value: password);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_pwd_$normalized', password);
+  }
 
-  Future<String?> getPinHash() =>
-      _storage.read(key: _keyPinHash);
+  Future<String?> getUserPassword(String email) async {
+    final normalized = email.toLowerCase().trim();
+    final val = await _storage.read(key: 'user_pwd_$normalized');
+    if (val != null && val.isNotEmpty) return val;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('user_pwd_$normalized');
+  }
+
+  Future<Map<String, String?>> getUserData(String email) async {
+    final normalized = email.toLowerCase().trim();
+    final prefs = await SharedPreferences.getInstance();
+    String? name = await _storage.read(key: 'user_fullname_$normalized') ?? prefs.getString('user_fullname_$normalized');
+    String? role = await _storage.read(key: 'user_role_$normalized') ?? prefs.getString('user_role_$normalized');
+    String? phone = await _storage.read(key: 'user_phone_$normalized') ?? prefs.getString('user_phone_$normalized');
+    return {
+      'fullName': name,
+      'role': role,
+      'phone': phone,
+    };
+  }
+
+  // ── User Trades Persistence ──────────────────────────────────────────────────
+  Future<void> saveUserTradesData(String userId, String tradesJson) async {
+    await _storage.write(key: 'trades_$userId', value: tradesJson);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('trades_$userId', tradesJson);
+  }
+
+  Future<String?> getUserTradesData(String userId) async {
+    final val = await _storage.read(key: 'trades_$userId');
+    if (val != null && val.isNotEmpty) return val;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('trades_$userId');
+  }
+
+  // ── User Balance Persistence ─────────────────────────────────────────────────
+  Future<void> saveUserBalance(String userId, double balance) async {
+    await _storage.write(key: 'balance_$userId', value: balance.toString());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('balance_$userId', balance);
+  }
+
+  Future<double?> getUserBalance(String userId) async {
+    final val = await _storage.read(key: 'balance_$userId');
+    if (val != null) {
+      return double.tryParse(val);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble('balance_$userId');
+  }
 }
+

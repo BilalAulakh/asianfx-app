@@ -53,7 +53,7 @@ class PriceTickerBanner extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    AppFormatters.price(item.ask, decimals: item.decimals),
+                    AppFormatters.price(item.ask.toDouble(), decimals: item.decimals),
                     style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 12,

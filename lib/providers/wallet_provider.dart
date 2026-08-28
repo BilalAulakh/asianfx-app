@@ -14,6 +14,13 @@ class WalletState {
     this.error,
   });
 
+  double get balance => wallet.balance;
+  double get equity => wallet.equity;
+  double get margin => wallet.margin;
+  double get freeMargin => wallet.freeMargin;
+  double get marginLevel => wallet.marginLevel;
+  double get floatingPl => wallet.floatingPl;
+
   WalletState copyWith({
     WalletEntity? wallet,
     List<TransactionEntity>? transactions,
@@ -38,102 +45,92 @@ class WalletNotifier extends StateNotifier<WalletState> {
               userId: 'usr_001',
               currency: 'USD',
               type: 'live',
-              balance: 10450.00,
-              equity: 10915.00,
-              margin: 450.00,
-              freeMargin: 10465.00,
-              marginLevel: 2425.5,
-              floatingPl: 465.00,
+              balance: 10000.00,
+              equity: 10000.00,
+              margin: 0.0,
+              freeMargin: 10000.00,
+              marginLevel: 1000.0,
+              floatingPl: 0.0,
             ),
             transactions: [
               TransactionEntity(
                 id: 'tx_001',
                 type: 'deposit',
-                amount: 5000.0,
+                amount: 10000.0,
                 currency: 'USD',
                 status: 'completed',
-                method: 'Credit Card (Visa)',
-                description: 'Initial Deposit',
-                createdAt: DateTime.now().subtract(const Duration(days: 7)),
-              ),
-              TransactionEntity(
-                id: 'tx_002',
-                type: 'deposit',
-                amount: 5000.0,
-                currency: 'USD',
-                status: 'completed',
-                method: 'Bank Wire',
-                description: 'Top-up Deposit',
-                createdAt: DateTime.now().subtract(const Duration(days: 3)),
+                method: 'USDT (TRC-20)',
+                description: 'Initial Account Deposit',
+                createdAt: DateTime.now().subtract(const Duration(days: 2)),
               ),
             ],
           ),
         );
 
-  Future<bool> deposit({required double amount, required String method}) async {
-    state = state.copyWith(isLoading: true);
-    await Future.delayed(const Duration(seconds: 1));
+  void addPendingTransaction(TransactionEntity tx) {
+    state = state.copyWith(
+      transactions: [tx, ...state.transactions],
+    );
+  }
 
-    final newTx = TransactionEntity(
+  void creditDeposit(double amount, String method) {
+    final newBal = state.balance + amount;
+    final newEquity = state.equity + amount;
+    final newFree = state.freeMargin + amount;
+
+    final tx = TransactionEntity(
       id: 'tx_${DateTime.now().millisecondsSinceEpoch}',
       type: 'deposit',
       amount: amount,
       currency: 'USD',
       status: 'completed',
       method: method,
-      description: 'Account Deposit',
+      description: 'Deposit via $method',
       createdAt: DateTime.now(),
     );
 
-    final updatedWallet = WalletEntity(
-      id: state.wallet.id,
-      userId: state.wallet.userId,
-      currency: state.wallet.currency,
-      type: state.wallet.type,
-      balance: state.wallet.balance + amount,
-      equity: state.wallet.equity + amount,
-      margin: state.wallet.margin,
-      freeMargin: state.wallet.freeMargin + amount,
-      marginLevel: state.wallet.marginLevel,
-      floatingPl: state.wallet.floatingPl,
-    );
-
     state = state.copyWith(
-      wallet: updatedWallet,
-      transactions: [newTx, ...state.transactions],
-      isLoading: false,
+      wallet: state.wallet.copyWith(
+        balance: newBal,
+        equity: newEquity,
+        freeMargin: newFree,
+      ),
+      transactions: [tx, ...state.transactions],
     );
-    return true;
   }
 
-  Future<bool> withdraw({required double amount, required String method}) async {
-    if (amount > state.wallet.freeMargin) {
-      state = state.copyWith(error: 'Insufficient free margin for withdrawal');
-      return false;
-    }
+  void debitWithdrawal(double amount, String method) {
+    final newBal = (state.balance - amount).clamp(0.0, 1000000000.0);
+    final newEquity = (state.equity - amount).clamp(0.0, 1000000000.0);
+    final newFree = (state.freeMargin - amount).clamp(0.0, 1000000000.0);
 
-    state = state.copyWith(isLoading: true);
-    await Future.delayed(const Duration(seconds: 1));
-
-    final newTx = TransactionEntity(
+    final tx = TransactionEntity(
       id: 'tx_${DateTime.now().millisecondsSinceEpoch}',
       type: 'withdrawal',
       amount: amount,
       currency: 'USD',
-      status: 'pending',
+      status: 'completed',
       method: method,
-      description: 'Withdrawal request',
+      description: 'Withdrawal to $method',
       createdAt: DateTime.now(),
     );
 
     state = state.copyWith(
-      transactions: [newTx, ...state.transactions],
-      isLoading: false,
+      wallet: state.wallet.copyWith(
+        balance: newBal,
+        equity: newEquity,
+        freeMargin: newFree,
+      ),
+      transactions: [tx, ...state.transactions],
     );
-    return true;
   }
 }
 
 final walletProvider = StateNotifierProvider<WalletNotifier, WalletState>((ref) {
   return WalletNotifier();
 });
+
+final transactionsProvider = Provider<List<TransactionEntity>>((ref) {
+  return ref.watch(walletProvider).transactions;
+});
+
