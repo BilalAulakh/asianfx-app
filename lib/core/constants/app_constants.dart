@@ -16,6 +16,7 @@ class AppConstants {
 
   // Dynamic leverage choices
   static const List<int> availableLeverages = [50, 100, 200, 500];
+  
   static const int defaultLeverage = 100;
 
   // Margin Risk Thresholds (Exness Institutional Model)
