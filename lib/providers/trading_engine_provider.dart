@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:decimal/decimal.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -10,6 +9,7 @@ import '../../core/math/money_math.dart';
 import '../../data/datasources/market_feed_service.dart';
 import '../../data/datasources/supabase_trade_service.dart';
 import '../../domain/entities/trading_entities.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_provider.dart';
 import 'ledger_provider.dart';
 
@@ -80,14 +80,13 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
               accountId: 'ACT-INST-8801',
               userId: 'usr_institutional_01',
               currency: 'USD',
-              ledgerBalance: AppConstants.defaultClientInitialBalance,
+              ledgerBalance: Decimal.zero,
               unrealizedPnl: Decimal.zero,
               usedMargin: Decimal.zero,
               leverage: Decimal.fromInt(AppConstants.defaultLeverage),
             ),
           ),
         ) {
-    _initSeedData();
     _listenToMarketTicks();
   }
 
@@ -108,7 +107,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     final userOpen = _userOpenPositionsCache[userId] ?? const [];
     final userClosed = _userClosedTradesCache[userId] ?? const [];
     final userPending = _userPendingOrdersCache[userId] ?? const [];
-    final userAccount = _userAccountCache[userId] ??
+    var userAccount = _userAccountCache[userId] ??
         TradingAccountState(
           accountId: 'ACT-${userId.toUpperCase().replaceAll('-', '').substring(0, min(8, userId.length))}',
           userId: userId,
@@ -118,6 +117,11 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
           usedMargin: Decimal.zero,
           leverage: Decimal.fromInt(AppConstants.defaultLeverage),
         );
+
+    if (userAccount.ledgerBalance == MoneyMath.toDec(10000.0) ||
+        userAccount.ledgerBalance == MoneyMath.toDec(25000.0)) {
+      userAccount = userAccount.copyWith(ledgerBalance: Decimal.zero);
+    }
 
     final totalUsed = userOpen.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
     final totalUnrealized = userOpen.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
@@ -134,6 +138,37 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
 
     _syncUserCache(userId);
 
+    // Asynchronously fetch real Supabase wallet balance
+    try {
+      Supabase.instance.client
+          .from('wallets')
+          .select('balance')
+          .eq('user_id', userId)
+          .maybeSingle()
+          .then((res) {
+        if (res != null && res['balance'] != null) {
+          var balNum = (res['balance'] as num).toDouble();
+          if (balNum == 10000.0 || balNum == 25000.0) {
+            balNum = 0.0;
+            Supabase.instance.client
+                .from('wallets')
+                .update({'balance': 0.0, 'held_margin': 0.0})
+                .eq('user_id', userId)
+                .catchError((_) {});
+          }
+          final realBal = MoneyMath.toDec(balNum);
+          if (state.accountState.userId == userId) {
+            state = state.copyWith(
+              accountState: state.accountState.copyWith(ledgerBalance: realBal),
+            );
+          }
+          if (_userAccountCache.containsKey(userId)) {
+            _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: realBal);
+          }
+        }
+      }).catchError((_) {});
+    } catch (_) {}
+
     // Asynchronously fetch any remote Supabase trades
     SupabaseTradeService.instance.fetchUserTrades(userId).then((supabaseTrades) {
       if (supabaseTrades.isNotEmpty && state.accountState.userId == userId) {
@@ -146,6 +181,18 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
         _syncUserCache(userId);
       }
     });
+  }
+
+  /// Explicitly set balance for a user (e.g. reset legacy demo balance)
+  void setBalance(String userId, Decimal balance) {
+    if (state.accountState.userId == userId) {
+      state = state.copyWith(
+        accountState: state.accountState.copyWith(ledgerBalance: balance),
+      );
+    }
+    if (_userAccountCache.containsKey(userId)) {
+      _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: balance);
+    }
   }
 
   /// Deposit funds into a trader's account
@@ -182,82 +229,6 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     }
   }
 
-  void _initSeedData() {
-    final now = DateTime.now();
-
-    // Pre-populate sample institutional open positions
-    final pos1 = TradeEntity(
-      id: 'POS-XAU-101',
-      orderId: 'ORD-9801',
-      symbol: 'XAU/USD',
-      side: OrderSide.buy,
-      type: OrderType.market,
-      status: OrderStatus.open,
-      lots: MoneyMath.toDec(1.50), // 1.5 lots Gold = 150 oz
-      contractSize: AppConstants.contractSizeGold,
-      openPrice: MoneyMath.toDec(2860.00),
-      currentPrice: MoneyMath.toDec(2864.50),
-      unrealizedPnl: MoneyMath.toDec(675.00), // (2864.50 - 2860) * 1.5 * 100
-      requiredMargin: MoneyMath.toDec(4290.00), // (1.5 * 100 * 2860) / 100
-      stopLoss: MoneyMath.toDec(2830.00),
-      takeProfit: MoneyMath.toDec(2910.00),
-      leverage: Decimal.fromInt(100),
-      openTime: now.subtract(const Duration(hours: 3)),
-    );
-
-    final pos2 = TradeEntity(
-      id: 'POS-BTC-102',
-      orderId: 'ORD-9802',
-      symbol: 'BTC/USD',
-      side: OrderSide.buy,
-      type: OrderType.market,
-      status: OrderStatus.open,
-      lots: MoneyMath.toDec(0.25),
-      contractSize: AppConstants.contractSizeCrypto,
-      openPrice: MoneyMath.toDec(95800.00),
-      currentPrice: MoneyMath.toDec(96420.00),
-      unrealizedPnl: MoneyMath.toDec(155.00),
-      requiredMargin: MoneyMath.toDec(239.50),
-      stopLoss: MoneyMath.toDec(92000.00),
-      takeProfit: MoneyMath.toDec(102000.00),
-      leverage: Decimal.fromInt(100),
-      openTime: now.subtract(const Duration(hours: 1)),
-    );
-
-    final history1 = TradeEntity(
-      id: 'TRD-HIST-099',
-      orderId: 'ORD-9750',
-      symbol: 'EUR/USD',
-      side: OrderSide.buy,
-      type: OrderType.market,
-      status: OrderStatus.closed,
-      lots: MoneyMath.toDec(2.0),
-      contractSize: AppConstants.contractSizeForex,
-      openPrice: MoneyMath.toDec(1.0820),
-      closePrice: MoneyMath.toDec(1.0855),
-      currentPrice: MoneyMath.toDec(1.0855),
-      unrealizedPnl: Decimal.zero,
-      realizedPnl: MoneyMath.toDec(700.00),
-      requiredMargin: Decimal.zero,
-      leverage: Decimal.fromInt(100),
-      openTime: now.subtract(const Duration(days: 1)),
-      closeTime: now.subtract(const Duration(hours: 4)),
-      closeReason: 'manual',
-    );
-
-    final openList = [pos1, pos2];
-    final totalUsed = openList.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
-    final totalUnrealized = openList.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
-
-    state = state.copyWith(
-      openPositions: openList,
-      closedTrades: [history1],
-      accountState: state.accountState.copyWith(
-        usedMargin: totalUsed,
-        unrealizedPnl: totalUnrealized,
-      ),
-    );
-  }
 
   void _listenToMarketTicks() {
     _feedSub?.cancel();
@@ -545,15 +516,29 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
             feeDescription: 'Spread Markup (${instrument.symbol})',
           );
 
+      final updatedPositions = [newTrade, ...state.openPositions];
+      final totalUsed = updatedPositions.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
+      final totalUnrealized = updatedPositions.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
+
       state = state.copyWith(
-        openPositions: [newTrade, ...state.openPositions],
+        openPositions: updatedPositions,
+        accountState: state.accountState.copyWith(
+          usedMargin: totalUsed,
+          unrealizedPnl: totalUnrealized,
+        ),
         isSubmitting: false,
       );
       _syncUserCache(state.accountState.userId);
-      SupabaseTradeService.instance.insertTrade(
-        trade: newTrade,
-        userId: state.accountState.userId,
-      );
+
+      // Attempt Atomic Backend Execution via Supabase RPC, falling back to direct table sync
+      SupabaseTradeService.instance.openTradeRpc(trade: newTrade).then((rpcResult) {
+        if (rpcResult == null) {
+          SupabaseTradeService.instance.insertTrade(
+            trade: newTrade,
+            userId: state.accountState.userId,
+          );
+        }
+      });
     } else {
       state = state.copyWith(
         pendingOrders: [newTrade, ...state.pendingOrders],
@@ -583,12 +568,31 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     _settleClosedPositionLedger(closed);
 
     final updatedOpen = List<TradeEntity>.from(state.openPositions)..removeAt(idx);
+    final totalUsed = updatedOpen.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
+    final totalUnrealized = updatedOpen.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
+    final postLedger = _ref.read(clientLedgerBalanceProvider);
+
     state = state.copyWith(
       openPositions: updatedOpen,
       closedTrades: [closed, ...state.closedTrades],
+      accountState: state.accountState.copyWith(
+        ledgerBalance: postLedger > Decimal.zero ? postLedger : state.accountState.ledgerBalance + pos.unrealizedPnl,
+        usedMargin: totalUsed,
+        unrealizedPnl: totalUnrealized,
+      ),
     );
     _syncUserCache(state.accountState.userId);
-    SupabaseTradeService.instance.updateClosedTrade(closed);
+
+    // Settle in Supabase via RPC or table update
+    final closePriceNum = closed.closePrice?.toDouble() ?? closed.currentPrice.toDouble();
+    SupabaseTradeService.instance.closeTradeRpc(
+      tradeId: tradeId,
+      closePrice: closePriceNum,
+    ).then((rpcResult) {
+      if (rpcResult == null) {
+        SupabaseTradeService.instance.updateClosedTrade(closed);
+      }
+    });
   }
 
   /// Cancel a pending limit/stop order

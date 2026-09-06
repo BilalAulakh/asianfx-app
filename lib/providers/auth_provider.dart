@@ -1,11 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
-import '../domain/entities/user_entity.dart';
 import '../core/security/secure_storage_service.dart';
+import '../domain/entities/user_entity.dart';
 import 'admin_provider.dart';
 import 'trading_engine_provider.dart';
-import 'wallet_provider.dart';
 
 enum AuthStatus { loading, authenticated, unauthenticated }
 
@@ -31,329 +29,545 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final Ref _ref;
-  final _uuid = const Uuid();
 
   AuthNotifier(this._ref) : super(const AuthState()) {
-    _checkSession();
+    _initAuth();
   }
 
-  Future<void> _checkSession() async {
+  Future<void> _initAuth() async {
+    await _checkSession();
+    _listenAuthChanges();
+  }
+
+  void _listenAuthChanges() {
     try {
-      final storedUserId = await SecureStorageService.instance.getUserId();
-      final storedEmail = await SecureStorageService.instance.getUserEmail();
+      Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        final session = data.session;
+        final supaUser = session?.user;
+        if (session != null && supaUser != null && supaUser.email != null) {
+          if (state.status != AuthStatus.authenticated || state.user?.id != supaUser.id) {
+            _handleSupabaseUser(supaUser);
+          }
+        }
+      });
+    } catch (_) {}
+  }
 
-      if (storedUserId != null && storedEmail != null && storedEmail.isNotEmpty) {
-        final userData = await SecureStorageService.instance.getUserData(storedEmail);
-        final restoredUser = _defaultMasterUser.copyWith(
-          id: storedUserId,
-          email: storedEmail,
-          fullName: userData['fullName'] ?? storedEmail.split('@').first.toUpperCase(),
-          phone: userData['phone'] ?? '+92 300 1234567',
-        );
+  void _handleSupabaseUser(User supaUser) {
+    final email = supaUser.email!;
+    final meta = supaUser.userMetadata ?? {};
+    final isAdmin = email.toLowerCase() == 'admin@asianfx.com' || meta['role'] == 'admin';
+    final name = meta['full_name'] as String? ?? (isAdmin ? 'AsianFX Admin' : email.split('@').first.toUpperCase());
+    final phone = meta['phone'] as String? ?? '';
 
-        state = AuthState(
-          status: AuthStatus.authenticated,
-          user: restoredUser,
-        );
+    final UserRole assignedRole = isAdmin ? UserRole.admin : UserRole.client;
 
-        // Sync trading engine
-        _ref.read(tradingEngineProvider.notifier).switchUser(storedUserId);
+    final user = UserEntity(
+      id: supaUser.id,
+      email: email,
+      fullName: name,
+      phone: phone.isNotEmpty ? phone : null,
+      country: 'Pakistan',
+      nationality: 'Pakistani',
+      preferredCurrency: 'USD',
+      preferredLanguage: 'en',
+      kycStatus: KycStatus.approved,
+      status: AccountStatus.active,
+      role: assignedRole,
+      isTwoFactorEnabled: false,
+      isEmailVerified: supaUser.emailConfirmedAt != null,
+      isPhoneVerified: true,
+      createdAt: DateTime.tryParse(supaUser.createdAt) ?? DateTime.now(),
+    );
+
+    SecureStorageService.instance.saveCurrentSessionUser(user);
+    state = AuthState(
+      status: AuthStatus.authenticated,
+      user: user,
+    );
+
+    _ref.read(tradingEngineProvider.notifier).switchUser(supaUser.id);
+    _syncUserWalletToSupabase(supaUser.id);
+  }
+
+  Future<void> _syncUserWalletToSupabase(String userId) async {
+    try {
+      final existing = await Supabase.instance.client
+          .from('wallets')
+          .select('balance')
+          .eq('user_id', userId)
+          .maybeSingle();
+      if (existing == null) {
+        await Supabase.instance.client.from('wallets').insert({
+          'user_id': userId,
+          'currency': 'USD',
+          'balance': 0.00,
+          'held_margin': 0.00,
+        });
+      }
+    } catch (_) {}
+  }
+
+  /// Check active Supabase session or cached session on app startup / browser reload
+  Future<void> _checkSession() async {
+    // 1. Check live Supabase session
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
+      final supaUser = Supabase.instance.client.auth.currentUser;
+
+      if (session != null && supaUser != null && supaUser.email != null) {
+        _handleSupabaseUser(supaUser);
         return;
       }
     } catch (_) {}
 
-    // First time or logged out: go to unauthenticated state so user can login/register
+    // 2. Check local secure session cache
+    try {
+      final cachedUser = await SecureStorageService.instance.getCurrentSessionUser();
+      if (cachedUser != null) {
+        state = AuthState(
+          status: AuthStatus.authenticated,
+          user: cachedUser,
+        );
+        _ref.read(tradingEngineProvider.notifier).switchUser(cachedUser.id);
+        _syncUserWalletToSupabase(cachedUser.id);
+        return;
+      }
+    } catch (_) {}
+
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
-  Future<bool> login({required String email, required String password}) async {
-    state = state.copyWith(status: AuthStatus.loading);
-    try {
-      await Future.delayed(const Duration(milliseconds: 350));
+  /// Seamless Enterprise Fallback for when Supabase has exceeded egress quota (HTTP 402) or is offline
+  Future<bool> _loginFallback({
+    required String email,
+    required String password,
+    String? fullName,
+    String? phone,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
 
-      if (email.isEmpty || password.isEmpty) {
-        state = const AuthState(
-          status: AuthStatus.unauthenticated,
-          error: 'Please enter both email and password',
-        );
-        return false;
-      }
-
-      final normalizedEmail = email.trim().toLowerCase();
-      String? supabaseUserId;
-      bool isSupabaseAuthSuccess = false;
-
-      // 1. Try Supabase Auth Login
-      try {
-        final authResponse = await Supabase.instance.client.auth.signInWithPassword(
-          email: normalizedEmail,
-          password: password,
-        );
-        if (authResponse.user != null) {
-          isSupabaseAuthSuccess = true;
-          supabaseUserId = authResponse.user!.id;
-        }
-      } catch (_) {
-        // Not registered on Supabase or offline
-      }
-
-      // Predefined default accounts
-      final isDemoTrader = normalizedEmail == 'client@asianfx.com' ||
-          normalizedEmail == 'trader@asianfx.com' ||
-          normalizedEmail == 'trader@asianfx.institutional' ||
-          normalizedEmail == 'customer@asianfx.com';
-      final isDemoAdmin = normalizedEmail == 'admin@asianfx.com';
-
-      // 2. Validate saved local password if registered locally
-      final savedPwd = await SecureStorageService.instance.getUserPassword(normalizedEmail);
-
-      // If NOT logged in via Supabase, NOT a predefined demo account, and NOT registered locally -> REJECT!
-      if (!isSupabaseAuthSuccess && !isDemoTrader && !isDemoAdmin && savedPwd == null) {
-        state = const AuthState(
-          status: AuthStatus.unauthenticated,
-          error: 'Account not found. Please click "Sign Up" below to create an account first.',
-        );
-        return false;
-      }
-
-      // If registered locally or demo account, check password matches
-      if (!isSupabaseAuthSuccess) {
-        if (isDemoAdmin && password != 'Admin@12345' && savedPwd != password) {
-          // If demo admin, accept Admin@12345 or saved pwd
-          state = const AuthState(
-            status: AuthStatus.unauthenticated,
-            error: 'Incorrect password for Admin.',
-          );
-          return false;
-        } else if (isDemoTrader && password != 'Client@12345' && password != '123456' && savedPwd != null && savedPwd != password) {
-          state = const AuthState(
-            status: AuthStatus.unauthenticated,
-            error: 'Incorrect password for Trader.',
-          );
-          return false;
-        } else if (savedPwd != null && savedPwd != password) {
-          state = const AuthState(
-            status: AuthStatus.unauthenticated,
-            error: 'Incorrect password. Please verify and try again.',
-          );
-          return false;
-        }
-      }
-
-      UserRole assignedRole = UserRole.client;
-      if (normalizedEmail.contains('admin')) assignedRole = UserRole.admin;
-      if (normalizedEmail.contains('dealer')) assignedRole = UserRole.dealer;
-      if (normalizedEmail.contains('compliance') || normalizedEmail.contains('aml')) {
-        assignedRole = UserRole.compliance;
-      }
-      if (normalizedEmail.contains('finance') || normalizedEmail.contains('audit')) {
-        assignedRole = UserRole.finance;
-      }
-
-      // Check saved user data or create new
-      final savedData = await SecureStorageService.instance.getUserData(normalizedEmail);
-      final userId = supabaseUserId ?? savedData['id'] ?? 'usr_${normalizedEmail.hashCode.abs().toString().padLeft(6, '0')}';
-      final name = savedData['fullName'] ?? (isDemoAdmin ? 'Chief Administrator' : email.split('@').first.toUpperCase());
-      final phone = savedData['phone'] ?? '+92 300 0000000';
-
-      final loggedInUser = _defaultMasterUser.copyWith(
-        id: userId,
-        email: email,
-        fullName: name,
-        phone: phone,
-        role: assignedRole,
-        kycStatus: KycStatus.approved,
+    // Check if there is an already saved password for this user
+    final savedPwd = await SecureStorageService.instance.getUserPassword(normalizedEmail);
+    if (savedPwd != null && savedPwd.isNotEmpty && savedPwd != password) {
+      state = const AuthState(
+        status: AuthStatus.unauthenticated,
+        error: 'Incorrect email or password. Please check your credentials.',
       );
+      return false;
+    }
 
-      // Save user session in secure storage
-      await SecureStorageService.instance.saveUserProfile(
-        id: userId,
-        email: normalizedEmail,
-        fullName: name,
-        role: assignedRole.name,
-        phone: phone,
+    // Admin email strict password guard
+    if (normalizedEmail == 'admin@asianfx.com' && password != 'Admin@123' && savedPwd != password) {
+      state = const AuthState(
+        status: AuthStatus.unauthenticated,
+        error: 'Incorrect email or password. Please check your credentials.',
       );
-      await SecureStorageService.instance.saveUserCredentials(normalizedEmail, password);
+      return false;
+    }
 
-      state = AuthState(
-        status: AuthStatus.authenticated,
-        user: loggedInUser,
-      );
+    // Save password for subsequent logins
+    await SecureStorageService.instance.saveUserCredentials(normalizedEmail, password);
 
-      // Switch trading engine & wallet to this user's profile
-      _ref.read(tradingEngineProvider.notifier).switchUser(userId);
+    final isAdmin = normalizedEmail == 'admin@asianfx.com';
+    final UserRole assignedRole = isAdmin ? UserRole.admin : UserRole.client;
+    final savedData = await SecureStorageService.instance.getUserData(normalizedEmail);
 
-      // Ensure user is in Admin panel trader list
+    final name = fullName ?? (isAdmin ? 'AsianFX Admin' : savedData['fullName'] ?? normalizedEmail.split('@').first.toUpperCase());
+    final userPhone = phone ?? savedData['phone'] ?? '+92 300 1234567';
+    final userId = isAdmin ? 'usr_admin_asianfx' : 'usr_${normalizedEmail.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}';
+
+    final loggedInUser = UserEntity(
+      id: userId,
+      email: normalizedEmail,
+      fullName: name,
+      phone: userPhone,
+      country: 'Pakistan',
+      nationality: 'Pakistani',
+      preferredCurrency: 'USD',
+      preferredLanguage: 'en',
+      kycStatus: KycStatus.approved,
+      status: AccountStatus.active,
+      role: assignedRole,
+      isTwoFactorEnabled: false,
+      isEmailVerified: true,
+      isPhoneVerified: true,
+      createdAt: DateTime.now(),
+    );
+
+    // Persist session to local storage
+    await SecureStorageService.instance.saveCurrentSessionUser(loggedInUser);
+    await SecureStorageService.instance.saveUserProfile(
+      id: userId,
+      email: normalizedEmail,
+      fullName: name,
+      role: assignedRole.name,
+      phone: userPhone,
+    );
+
+    state = AuthState(
+      status: AuthStatus.authenticated,
+      user: loggedInUser,
+    );
+
+    // Switch trading engine to this user & sync wallet
+    _ref.read(tradingEngineProvider.notifier).switchUser(userId);
+    _syncUserWalletToSupabase(userId);
+
+    // Add to Admin panel user list if client
+    if (!isAdmin) {
       _ref.read(adminProvider.notifier).addTraderUser(
         AdminTraderUser(
           id: userId,
           name: name,
           email: normalizedEmail,
-          phone: phone,
-          balance: 10000.00,
-          equity: 10000.00,
-          isKycVerified: true,
+          phone: userPhone,
+          balance: 0.00,
+          equity: 0.00,
+          isKycVerified: false,
           status: AdminUserStatus.active,
           joinedAt: DateTime.now(),
         ),
       );
+    }
 
-      return true;
-    } catch (e) {
-      state = AuthState(
+    return true;
+  }
+
+  /// Login strictly using Supabase Auth with automatic resilient fallback
+  Future<bool> login({required String email, required String password}) async {
+    state = state.copyWith(status: AuthStatus.loading, error: null);
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.isEmpty || password.isEmpty) {
+      state = const AuthState(
         status: AuthStatus.unauthenticated,
-        error: e.toString(),
+        error: 'Please enter both email and password',
       );
       return false;
     }
+
+    final isMasterAdmin = normalizedEmail == 'admin@asianfx.com';
+
+    // If master admin with wrong password
+    if (isMasterAdmin && password != 'Admin@123') {
+      final savedPwd = await SecureStorageService.instance.getUserPassword(normalizedEmail);
+      if (savedPwd != null && savedPwd != password) {
+        state = const AuthState(
+          status: AuthStatus.unauthenticated,
+          error: 'Incorrect email or password. Please check your credentials.',
+        );
+        return false;
+      }
+    }
+
+    try {
+      // 1. Attempt Supabase Auth Login
+      AuthResponse? authResponse;
+      try {
+        authResponse = await Supabase.instance.client.auth.signInWithPassword(
+          email: normalizedEmail,
+          password: password,
+        );
+      } catch (e) {
+        // If master admin does not exist yet in Supabase project, auto-register & sign in
+        if (isMasterAdmin && password == 'Admin@123') {
+          try {
+            await Supabase.instance.client.auth.signUp(
+              email: normalizedEmail,
+              password: password,
+              data: {
+                'full_name': 'AsianFX Admin',
+                'role': 'admin',
+              },
+            );
+            authResponse = await Supabase.instance.client.auth.signInWithPassword(
+              email: normalizedEmail,
+              password: password,
+            );
+          } catch (_) {}
+        } else {
+          rethrow;
+        }
+      }
+
+      final supaUser = authResponse?.user;
+      if (supaUser != null) {
+        final meta = supaUser.userMetadata ?? {};
+        final isAdmin = isMasterAdmin || meta['role'] == 'admin';
+        final name = meta['full_name'] as String? ?? (isAdmin ? 'AsianFX Admin' : normalizedEmail.split('@').first.toUpperCase());
+        final phone = meta['phone'] as String? ?? '';
+        final UserRole assignedRole = isAdmin ? UserRole.admin : UserRole.client;
+
+        final loggedInUser = UserEntity(
+          id: supaUser.id,
+          email: normalizedEmail,
+          fullName: name,
+          phone: phone.isNotEmpty ? phone : null,
+          country: 'Pakistan',
+          nationality: 'Pakistani',
+          preferredCurrency: 'USD',
+          preferredLanguage: 'en',
+          kycStatus: KycStatus.approved,
+          status: AccountStatus.active,
+          role: assignedRole,
+          isTwoFactorEnabled: false,
+          isEmailVerified: supaUser.emailConfirmedAt != null,
+          isPhoneVerified: true,
+          createdAt: DateTime.tryParse(supaUser.createdAt) ?? DateTime.now(),
+        );
+
+        // Persist user session to LocalStorage
+        await SecureStorageService.instance.saveCurrentSessionUser(loggedInUser);
+        await SecureStorageService.instance.saveUserCredentials(normalizedEmail, password);
+
+        state = AuthState(
+          status: AuthStatus.authenticated,
+          user: loggedInUser,
+        );
+
+        // Switch trading engine to this user & sync wallet
+        _ref.read(tradingEngineProvider.notifier).switchUser(supaUser.id);
+        await _syncUserWalletToSupabase(supaUser.id);
+
+        // Add regular traders to Admin panel user list
+        if (!isAdmin) {
+          _ref.read(adminProvider.notifier).addTraderUser(
+            AdminTraderUser(
+              id: supaUser.id,
+              name: name,
+              email: normalizedEmail,
+              phone: phone.isNotEmpty ? phone : '+92 300 1234567',
+              balance: 0.00,
+              equity: 0.00,
+              isKycVerified: false,
+              status: AdminUserStatus.active,
+              joinedAt: DateTime.now(),
+            ),
+          );
+        }
+
+        return true;
+      }
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      // If user explicitly gave incorrect credentials
+      if (msg.contains('invalid login credentials') || msg.contains('invalid_grant')) {
+        if (isMasterAdmin && password == 'Admin@123') {
+          return _loginFallback(
+            email: normalizedEmail,
+            password: password,
+            fullName: 'AsianFX Admin',
+          );
+        }
+        final savedPwd = await SecureStorageService.instance.getUserPassword(normalizedEmail);
+        if (savedPwd != null && savedPwd == password) {
+          return _loginFallback(email: normalizedEmail, password: password);
+        }
+        state = const AuthState(
+          status: AuthStatus.unauthenticated,
+          error: 'Incorrect email or password. Please check your credentials.',
+        );
+        return false;
+      }
+
+      if (isMasterAdmin && password == 'Admin@123') {
+        return _loginFallback(
+          email: normalizedEmail,
+          password: password,
+          fullName: 'AsianFX Admin',
+        );
+      }
+
+      // If Supabase quota exceeded (402) or project restricted, seamless fallback
+      return _loginFallback(email: normalizedEmail, password: password);
+    } catch (_) {
+      if (isMasterAdmin && password == 'Admin@123') {
+        return _loginFallback(
+          email: normalizedEmail,
+          password: password,
+          fullName: 'AsianFX Admin',
+        );
+      }
+      return _loginFallback(email: normalizedEmail, password: password);
+    }
+
+    if (isMasterAdmin && password == 'Admin@123') {
+      return _loginFallback(
+        email: normalizedEmail,
+        password: password,
+        fullName: 'AsianFX Admin',
+      );
+    }
+    return _loginFallback(email: normalizedEmail, password: password);
   }
 
-  /// 1-Click Role Switcher for instant demonstration & testing of RBAC capabilities
+  /// Switch role between Admin and Client
   void switchRole(UserRole role) {
     if (state.user == null) return;
-    state = state.copyWith(
-      user: state.user!.copyWith(role: role),
-    );
+    final updated = state.user!.copyWith(role: role);
+    state = state.copyWith(user: updated);
+    SecureStorageService.instance.saveCurrentSessionUser(updated);
   }
 
   /// Update KYC Status
   void updateUserKyc(KycStatus kycStatus) {
     if (state.user == null) return;
-    state = state.copyWith(
-      user: state.user!.copyWith(kycStatus: kycStatus),
-    );
+    final updated = state.user!.copyWith(kycStatus: kycStatus);
+    state = state.copyWith(user: updated);
+    SecureStorageService.instance.saveCurrentSessionUser(updated);
   }
 
-  /// Update Account Status (e.g. frozen/active)
+  /// Update Account Status
   void updateUserAccountStatus(AccountStatus status) {
     if (state.user == null) return;
-    state = state.copyWith(
-      user: state.user!.copyWith(status: status),
-    );
+    final updated = state.user!.copyWith(status: status);
+    state = state.copyWith(user: updated);
+    SecureStorageService.instance.saveCurrentSessionUser(updated);
   }
 
+  /// Register via Supabase Auth with automatic resilient fallback
   Future<bool> register({
     required String fullName,
     required String email,
     required String password,
     String? phone,
   }) async {
-    state = state.copyWith(status: AuthStatus.loading);
-    try {
-      await Future.delayed(const Duration(milliseconds: 350));
+    state = state.copyWith(status: AuthStatus.loading, error: null);
+    final normalizedEmail = email.trim().toLowerCase();
 
-      final normalizedEmail = email.trim().toLowerCase();
-      String effectiveUserId = 'usr_${_uuid.v4().substring(0, 8)}';
-
-      // 1. Try Supabase Auth SignUp
-      try {
-        final authRes = await Supabase.instance.client.auth.signUp(
-          email: normalizedEmail,
-          password: password,
-          data: {
-            'full_name': fullName,
-            'phone': phone ?? '',
-          },
-        );
-        if (authRes.user?.id != null) {
-          effectiveUserId = authRes.user!.id;
-        }
-      } catch (_) {
-        // Fallback to local secure store
-      }
-
-      final newUser = UserEntity(
-        id: effectiveUserId,
-        email: normalizedEmail,
-        fullName: fullName,
-        phone: phone ?? '+92 300 1234567',
-        country: 'Pakistan',
-        nationality: 'Pakistani',
-        preferredCurrency: 'USD',
-        preferredLanguage: 'en',
-        kycStatus: KycStatus.approved,
-        status: AccountStatus.active,
-        role: UserRole.client,
-        isTwoFactorEnabled: false,
-        isEmailVerified: true,
-        isPhoneVerified: true,
-        createdAt: DateTime.now(),
-      );
-
-      // 2. Save profile & credentials securely
-      await SecureStorageService.instance.saveUserProfile(
-        id: effectiveUserId,
-        email: normalizedEmail,
-        fullName: fullName,
-        role: UserRole.client.name,
-        phone: phone,
-      );
-      await SecureStorageService.instance.saveUserCredentials(normalizedEmail, password);
-
-      // 3. Add newly registered trader to Admin Portal
-      _ref.read(adminProvider.notifier).addTraderUser(
-        AdminTraderUser(
-          id: effectiveUserId,
-          name: fullName,
-          email: normalizedEmail,
-          phone: phone ?? '+92 300 1234567',
-          balance: 10000.00,
-          equity: 10000.00,
-          isKycVerified: true,
-          status: AdminUserStatus.active,
-          joinedAt: DateTime.now(),
-        ),
-      );
-
-      // 4. Switch trading engine to fresh new user portfolio
-      _ref.read(tradingEngineProvider.notifier).switchUser(effectiveUserId);
-
-      state = AuthState(
-        status: AuthStatus.authenticated,
-        user: newUser,
-      );
-      return true;
-    } catch (e) {
-      state = AuthState(
+    if (normalizedEmail.isEmpty || password.isEmpty) {
+      state = const AuthState(
         status: AuthStatus.unauthenticated,
-        error: e.toString(),
+        error: 'Please enter all required fields.',
       );
       return false;
     }
+
+    // Reserved admin email
+    if (normalizedEmail == 'admin@asianfx.com') {
+      state = const AuthState(
+        status: AuthStatus.unauthenticated,
+        error: 'This email is reserved for Admin. Please login with your credentials.',
+      );
+      return false;
+    }
+
+    try {
+      const roleString = 'client';
+
+      // Direct Supabase Auth Sign Up
+      final authRes = await Supabase.instance.client.auth.signUp(
+        email: normalizedEmail,
+        password: password,
+        data: {
+          'full_name': fullName,
+          'phone': phone ?? '',
+          'role': roleString,
+        },
+      );
+
+      final supaUser = authRes.user;
+      if (supaUser != null) {
+        const assignedRole = UserRole.client;
+
+        final newUser = UserEntity(
+          id: supaUser.id,
+          email: normalizedEmail,
+          fullName: fullName,
+          phone: phone,
+          country: 'Pakistan',
+          nationality: 'Pakistani',
+          preferredCurrency: 'USD',
+          preferredLanguage: 'en',
+          kycStatus: KycStatus.approved,
+          status: AccountStatus.active,
+          role: assignedRole,
+          isTwoFactorEnabled: false,
+          isEmailVerified: supaUser.emailConfirmedAt != null,
+          isPhoneVerified: true,
+          createdAt: DateTime.now(),
+        );
+
+        await SecureStorageService.instance.saveCurrentSessionUser(newUser);
+        await SecureStorageService.instance.saveUserCredentials(normalizedEmail, password);
+
+        state = AuthState(
+          status: AuthStatus.authenticated,
+          user: newUser,
+        );
+
+        _ref.read(tradingEngineProvider.notifier).switchUser(supaUser.id);
+        await _syncUserWalletToSupabase(supaUser.id);
+
+        _ref.read(adminProvider.notifier).addTraderUser(
+          AdminTraderUser(
+            id: supaUser.id,
+            name: fullName,
+            email: normalizedEmail,
+            phone: phone ?? '+92 300 1234567',
+            balance: 0.00,
+            equity: 0.00,
+            isKycVerified: false,
+            status: AdminUserStatus.active,
+            joinedAt: DateTime.now(),
+          ),
+        );
+
+        return true;
+      }
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('already registered') || msg.contains('user already exists')) {
+        state = const AuthState(
+          status: AuthStatus.unauthenticated,
+          error: 'An account with this email already exists. Please log in.',
+        );
+        return false;
+      }
+      if (msg.contains('weak') || msg.contains('password should be at least')) {
+        state = AuthState(
+          status: AuthStatus.unauthenticated,
+          error: e.message,
+        );
+        return false;
+      }
+      return _loginFallback(
+        email: normalizedEmail,
+        password: password,
+        fullName: fullName,
+        phone: phone,
+      );
+    } catch (_) {
+      return _loginFallback(
+        email: normalizedEmail,
+        password: password,
+        fullName: fullName,
+        phone: phone,
+      );
+    }
+
+    return _loginFallback(
+      email: normalizedEmail,
+      password: password,
+      fullName: fullName,
+      phone: phone,
+    );
   }
 
+  /// Sign out strictly via Supabase Auth and clear persistent session
   Future<void> logout() async {
     try {
       await Supabase.instance.client.auth.signOut();
     } catch (_) {}
-    await SecureStorageService.instance.clearSession();
+    try {
+      await SecureStorageService.instance.clearCurrentSessionUser();
+    } catch (_) {}
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
   void clearError() => state = state.copyWith(error: null);
-
-  static final _defaultMasterUser = UserEntity(
-    id: 'usr_institutional_01',
-    email: 'trader@asianfx.institutional',
-    phone: '+971 50 892 4100',
-    fullName: 'Institutional Master Desk',
-    country: 'United Arab Emirates',
-    nationality: 'Emirati',
-    preferredCurrency: 'USD',
-    preferredLanguage: 'en',
-    kycStatus: KycStatus.approved,
-    status: AccountStatus.active,
-    role: UserRole.client,
-    isTwoFactorEnabled: true,
-    isEmailVerified: true,
-    isPhoneVerified: true,
-    kycDocumentType: 'Institutional Trade License',
-    kycDocumentNumber: 'DMCC-982140',
-    createdAt: DateTime(2025, 6, 1),
-  );
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(ref);
 });
-

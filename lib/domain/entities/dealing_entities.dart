@@ -29,6 +29,9 @@ class InstrumentExposure extends Equatable {
     required this.routing,
   });
 
+  Decimal get totalLongLots => totalBuyLots;
+  Decimal get totalShortLots => totalSellLots;
+
   bool get isHouseNetLong => netExposureLots < Decimal.zero; // Client net short means house is net long
   bool get isHouseNetShort => netExposureLots > Decimal.zero;
 

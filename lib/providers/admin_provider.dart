@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
 enum AdminTxStatus { pending, approved, rejected }
@@ -17,6 +19,8 @@ class AdminTransaction {
   final String accountOrAddress;
   final AdminTxStatus status;
   final DateTime createdAt;
+  final String? proofImageName;
+  final Uint8List? proofImageBytes;
 
   const AdminTransaction({
     required this.id,
@@ -30,9 +34,15 @@ class AdminTransaction {
     required this.accountOrAddress,
     this.status = AdminTxStatus.pending,
     required this.createdAt,
+    this.proofImageName,
+    this.proofImageBytes,
   });
 
-  AdminTransaction copyWith({AdminTxStatus? status}) {
+  AdminTransaction copyWith({
+    AdminTxStatus? status,
+    String? proofImageName,
+    Uint8List? proofImageBytes,
+  }) {
     return AdminTransaction(
       id: id,
       userId: userId,
@@ -45,6 +55,8 @@ class AdminTransaction {
       accountOrAddress: accountOrAddress,
       status: status ?? this.status,
       createdAt: createdAt,
+      proofImageName: proofImageName ?? this.proofImageName,
+      proofImageBytes: proofImageBytes ?? this.proofImageBytes,
     );
   }
 }
@@ -193,129 +205,14 @@ class AdminState {
 class AdminNotifier extends StateNotifier<AdminState> {
   AdminNotifier() : super(const AdminState()) {
     _loadInitialData();
+    pruneOldApprovedScreenshots();
   }
 
   void _loadInitialData() {
-    final now = DateTime.now();
-    state = AdminState(
-      transactions: [
-        AdminTransaction(
-          id: 'TX-9482',
-          userId: 'usr_101',
-          userName: 'Muhammad Ali',
-          userEmail: 'ali.trader@gmail.com',
-          type: 'DEPOSIT',
-          amount: 500.0,
-          method: 'Easypaisa / Bank',
-          accountOrAddress: '0300-1234567 (TID: 8847291)',
-          status: AdminTxStatus.pending,
-          createdAt: now.subtract(const Duration(minutes: 15)),
-        ),
-        AdminTransaction(
-          id: 'TX-9481',
-          userId: 'usr_102',
-          userName: 'Hamza Tariq',
-          userEmail: 'hamza.fx@outlook.com',
-          type: 'DEPOSIT',
-          amount: 1250.0,
-          method: 'USDT (TRC20)',
-          accountOrAddress: 'TXz7aQ...98f4K (TxHash Verified)',
-          status: AdminTxStatus.pending,
-          createdAt: now.subtract(const Duration(hours: 1)),
-        ),
-        AdminTransaction(
-          id: 'TX-9480',
-          userId: 'usr_103',
-          userName: 'Zubair Khan',
-          userEmail: 'zubair.khan@gmail.com',
-          type: 'WITHDRAWAL',
-          amount: 350.0,
-          method: 'JazzCash',
-          accountOrAddress: '0321-9876543',
-          status: AdminTxStatus.pending,
-          createdAt: now.subtract(const Duration(hours: 3)),
-        ),
-        AdminTransaction(
-          id: 'TX-9475',
-          userId: 'usr_104',
-          userName: 'Bilal Ahmed',
-          userEmail: 'bilal@asianfx.com',
-          type: 'DEPOSIT',
-          amount: 3000.0,
-          method: 'Bank Wire (Meezan Bank)',
-          accountOrAddress: 'PK82MEZN0001092837482',
-          status: AdminTxStatus.approved,
-          createdAt: now.subtract(const Duration(days: 1)),
-        ),
-      ],
-      kycRequests: [
-        AdminKycItem(
-          id: 'KYC-501',
-          userId: 'usr_101',
-          userName: 'Muhammad Ali',
-          userEmail: 'ali.trader@gmail.com',
-          docType: 'CNIC / National ID',
-          docNumber: '35201-8392019-1',
-          status: AdminKycStatus.pending,
-          submittedAt: now.subtract(const Duration(minutes: 45)),
-        ),
-        AdminKycItem(
-          id: 'KYC-502',
-          userId: 'usr_105',
-          userName: 'Usman Farooq',
-          userEmail: 'usman.f@gmail.com',
-          docType: 'Passport',
-          docNumber: 'PK89230192',
-          status: AdminKycStatus.pending,
-          submittedAt: now.subtract(const Duration(hours: 4)),
-        ),
-      ],
-      users: [
-        AdminTraderUser(
-          id: 'usr_101',
-          name: 'Muhammad Ali',
-          email: 'ali.trader@gmail.com',
-          phone: '+92 300 1234567',
-          balance: 2450.00,
-          equity: 2510.50,
-          isKycVerified: false,
-          status: AdminUserStatus.active,
-          joinedAt: now.subtract(const Duration(days: 14)),
-        ),
-        AdminTraderUser(
-          id: 'usr_102',
-          name: 'Hamza Tariq',
-          email: 'hamza.fx@outlook.com',
-          phone: '+92 321 5554321',
-          balance: 5820.00,
-          equity: 6100.00,
-          isKycVerified: true,
-          status: AdminUserStatus.active,
-          joinedAt: now.subtract(const Duration(days: 30)),
-        ),
-        AdminTraderUser(
-          id: 'usr_103',
-          name: 'Zubair Khan',
-          email: 'zubair.khan@gmail.com',
-          phone: '+92 333 7891234',
-          balance: 890.00,
-          equity: 890.00,
-          isKycVerified: true,
-          status: AdminUserStatus.active,
-          joinedAt: now.subtract(const Duration(days: 45)),
-        ),
-        AdminTraderUser(
-          id: 'usr_104',
-          name: 'Bilal Ahmed',
-          email: 'bilal@asianfx.com',
-          phone: '+92 301 9998877',
-          balance: 14500.00,
-          equity: 15120.00,
-          isKycVerified: true,
-          status: AdminUserStatus.active,
-          joinedAt: now.subtract(const Duration(days: 60)),
-        ),
-      ],
+    state = const AdminState(
+      transactions: [],
+      kycRequests: [],
+      users: [],
     );
   }
 
@@ -375,6 +272,52 @@ class AdminNotifier extends StateNotifier<AdminState> {
         return tx;
       }).toList(),
     );
+  }
+
+  /// Remove built-in sample demo transactions so admin can see only fresh trader requests
+  void clearDemoTransactions() {
+    state = state.copyWith(
+      transactions: state.transactions.where((tx) => !tx.id.startsWith('TX-948')).toList(),
+    );
+  }
+
+  /// Clear all transaction list
+  void clearAllTransactions() {
+    state = state.copyWith(transactions: []);
+  }
+
+  /// Automatically prune/delete screenshots of approved transactions older than 3 days
+  Future<void> pruneOldApprovedScreenshots({int retentionDays = 3}) async {
+    final cutoff = DateTime.now().subtract(Duration(days: retentionDays));
+    final List<String> filesToDelete = [];
+
+    final updatedTxs = state.transactions.map((tx) {
+      if (tx.status == AdminTxStatus.approved && tx.createdAt.isBefore(cutoff)) {
+        if (tx.proofImageName != null && tx.proofImageName!.isNotEmpty) {
+          filesToDelete.add(tx.proofImageName!);
+        }
+        // Remove binary bytes and file name from memory/state to free up space
+        return tx.copyWith(
+          proofImageBytes: null,
+          proofImageName: null,
+        );
+      }
+      return tx;
+    }).toList();
+
+    state = state.copyWith(transactions: updatedTxs);
+
+    // Delete matching files from Supabase Storage 'reciept-proof' bucket
+    if (filesToDelete.isNotEmpty) {
+      try {
+        await Supabase.instance.client.storage
+            .from('reciept-proof')
+            .remove(filesToDelete);
+        debugPrint('Auto-pruned ${filesToDelete.length} deposit screenshots older than $retentionDays days.');
+      } catch (e) {
+        debugPrint('Supabase Storage auto-prune error: $e');
+      }
+    }
   }
 
   void approveKyc(String kycId, String userId) {

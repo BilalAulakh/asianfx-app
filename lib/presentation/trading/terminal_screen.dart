@@ -123,51 +123,43 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                   ),
                   const Spacer(),
 
-                  // Quick Role Switcher Pill for Testing
-                  PopupMenuButton<UserRole>(
-                    onSelected: (role) {
-                      ref.read(authProvider.notifier).switchRole(role);
-                    },
-                    color: const Color(0xFF1E2838),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF162030),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF2B384E)),
+                  // Status / Role Indicator (Secure, non-switchable for normal clients)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF162030),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: authUser?.role == UserRole.admin
+                            ? const Color(0xFFFFD600).withAlpha(150)
+                            : const Color(0xFF2B384E),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.shield_outlined,
-                            size: 14,
-                            color: authUser?.role == UserRole.admin ||
-                                    authUser?.role == UserRole.dealer
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          authUser?.role == UserRole.admin
+                              ? Icons.admin_panel_settings_rounded
+                              : Icons.verified_user_rounded,
+                          size: 14,
+                          color: authUser?.role == UserRole.admin
+                              ? const Color(0xFFFFD600)
+                              : const Color(0xFF00D68F),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          authUser?.role == UserRole.admin ? 'ADMIN' : 'TRADER (LIVE)',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: authUser?.role == UserRole.admin
                                 ? const Color(0xFFFFD600)
                                 : const Color(0xFF00D68F),
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            authUser?.role.name.toUpperCase() ?? 'CLIENT',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: authUser?.role == UserRole.admin ||
-                                      authUser?.role == UserRole.dealer
-                                  ? const Color(0xFFFFD600)
-                                  : const Color(0xFF00D68F),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 16),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    itemBuilder: (ctx) => [
-                      _roleMenuItem(UserRole.client, 'Trader'),
-                      _roleMenuItem(UserRole.admin, 'Admin'),
-                    ],
                   ),
                 ],
               ),

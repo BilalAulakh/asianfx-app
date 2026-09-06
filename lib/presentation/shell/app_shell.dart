@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/router/app_router.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
 
 class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
@@ -21,18 +22,30 @@ class AppShell extends ConsumerWidget {
     final currentIndex = navigationShell.currentIndex;
     final authUser = ref.watch(authProvider).user;
     final isAdmin = authUser?.role == UserRole.admin;
+    final isDark = ref.watch(themeProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E17),
+      backgroundColor: isDark ? const Color(0xFF0A0E17) : const Color(0xFFF4F6F9),
       body: navigationShell,
 
       // ── Institutional Bottom Navigation Items ───────────────────────
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF151D28),
+          color: isDark ? const Color(0xFF151D28) : Colors.white,
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
           border: Border(
             top: BorderSide(
-              color: isAdmin ? const Color(0xFFFFD600).withOpacity(0.5) : const Color(0xFF1C2535),
+              color: isAdmin
+                  ? const Color(0xFFFFD600).withValues(alpha: 0.5)
+                  : (isDark ? const Color(0xFF1C2535) : const Color(0xFFE2E8F0)),
               width: isAdmin ? 1.5 : 1.0,
             ),
           ),
@@ -47,6 +60,7 @@ class AppShell extends ConsumerWidget {
                   activeIcon: Icons.candlestick_chart_rounded,
                   label: 'Terminal',
                   isActive: currentIndex == 0,
+                  isDark: isDark,
                   onTap: () => _goBranch(0),
                 ),
                 _NavItem(
@@ -54,6 +68,7 @@ class AppShell extends ConsumerWidget {
                   activeIcon: Icons.pie_chart_rounded,
                   label: 'Positions',
                   isActive: currentIndex == 1,
+                  isDark: isDark,
                   onTap: () => _goBranch(1),
                 ),
                 if (isAdmin)
@@ -63,6 +78,7 @@ class AppShell extends ConsumerWidget {
                     label: 'Admin Desk',
                     isActive: false,
                     isSpecialAdmin: true,
+                    isDark: isDark,
                     onTap: () => context.push(AppRoutes.admin),
                   )
                 else
@@ -71,21 +87,16 @@ class AppShell extends ConsumerWidget {
                     activeIcon: Icons.account_balance_wallet_rounded,
                     label: 'Vault',
                     isActive: currentIndex == 2,
+                    isDark: isDark,
                     onTap: () => _goBranch(2),
                   ),
-                _NavItem(
-                  icon: Icons.receipt_long_outlined,
-                  activeIcon: Icons.receipt_long_rounded,
-                  label: 'Statement',
-                  isActive: currentIndex == 3,
-                  onTap: () => _goBranch(3),
-                ),
                 _NavItem(
                   icon: Icons.person_outline_rounded,
                   activeIcon: Icons.person_rounded,
                   label: isAdmin ? 'Admin' : 'Profile',
-                  isActive: currentIndex == 4,
-                  onTap: () => _goBranch(4),
+                  isActive: currentIndex == 3,
+                  isDark: isDark,
+                  onTap: () => _goBranch(3),
                 ),
               ],
             ),
@@ -102,6 +113,7 @@ class _NavItem extends StatelessWidget {
   final String label;
   final bool isActive;
   final bool isSpecialAdmin;
+  final bool isDark;
   final VoidCallback onTap;
 
   const _NavItem({
@@ -110,13 +122,18 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.isActive,
     this.isSpecialAdmin = false,
+    required this.isDark,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = isSpecialAdmin ? const Color(0xFFFFD600) : const Color(0xFFFFD600);
-    final inactiveColor = isSpecialAdmin ? const Color(0xFFFFD600) : const Color(0xFF848E9C);
+    final activeColor = isSpecialAdmin
+        ? const Color(0xFFFFD600)
+        : (isDark ? const Color(0xFFFFD600) : const Color(0xFF00C896));
+    final inactiveColor = isSpecialAdmin
+        ? const Color(0xFFFFD600)
+        : (isDark ? const Color(0xFF848E9C) : const Color(0xFF64748B));
 
     return Expanded(
       child: InkWell(

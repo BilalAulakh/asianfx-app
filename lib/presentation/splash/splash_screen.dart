@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
+import '../../domain/entities/user_entity.dart';
 import '../../providers/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -74,9 +75,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (!mounted) return;
     final finalState = ref.read(authProvider);
     if (finalState.status == AuthStatus.authenticated) {
-      context.go(AppRoutes.dashboard);
+      if (finalState.user?.role == UserRole.admin) {
+        context.go(AppRoutes.admin);
+      } else {
+        context.go(AppRoutes.dashboard);
+      }
     } else {
-      context.go(AppRoutes.onboarding);
+      context.go(AppRoutes.login);
     }
   }
 

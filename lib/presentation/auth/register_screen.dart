@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
+import '../../domain/entities/user_entity.dart';
 import '../../providers/auth_provider.dart';
 import '../common/widgets/fx_button.dart';
 import '../common/widgets/fx_text_field.dart';
@@ -65,7 +66,25 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     );
     if (!mounted) return;
     setState(() => _isLoading = false);
-    if (success) context.go(AppRoutes.dashboard);
+    if (success) {
+      final user = ref.read(authProvider).user;
+      if (user?.role == UserRole.admin) {
+        context.go(AppRoutes.admin);
+      } else {
+        context.go(AppRoutes.vault);
+      }
+    } else {
+      final error = ref.read(authProvider).error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error ?? 'Registration failed. Please check your details.'),
+          backgroundColor: AppColors.loss,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    }
   }
 
   @override

@@ -1,14 +1,12 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
-import '../../core/constants/app_constants.dart';
 import '../../core/math/money_math.dart';
 import '../../core/theme/app_colors.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../providers/trading_engine_provider.dart';
-import '../../providers/ledger_provider.dart';
+import '../../providers/theme_provider.dart';
 
 class PositionsScreen extends ConsumerStatefulWidget {
   const PositionsScreen({super.key});
@@ -20,6 +18,14 @@ class PositionsScreen extends ConsumerStatefulWidget {
 class _PositionsScreenState extends ConsumerState<PositionsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  bool get _isDark => ref.watch(themeProvider);
+  Color get _bg => _isDark ? const Color(0xFF0A0E17) : const Color(0xFFF1F5F9);
+  Color get _appBarBg => _isDark ? const Color(0xFF151D28) : Colors.white;
+  Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
+  Color get _borderColor => _isDark ? const Color(0xFF1C2535) : const Color(0xFFE2E8F0);
+  Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0F172A);
+  Color get _textSecondary => _isDark ? const Color(0xFF848E9C) : const Color(0xFF64748B);
 
   @override
   void initState() {
@@ -37,27 +43,40 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
   Widget build(BuildContext context) {
     final engineState = ref.watch(tradingEngineProvider);
     final account = engineState.accountState;
+    final isDark = _isDark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E17),
+      backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF151D28),
-        elevation: 0,
-        title: const Text(
+        backgroundColor: _appBarBg,
+        elevation: isDark ? 0 : 1,
+        shadowColor: Colors.black.withValues(alpha: 0.08),
+        title: Text(
           'Positions & Portfolio',
           style: TextStyle(
             fontFamily: 'Inter',
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: _textPrimary,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+              color: const Color(0xFFFFD600),
+              size: 20,
+            ),
+            tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            onPressed: () => ref.read(themeProvider.notifier).toggleTheme(),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: const Color(0xFFFFD600),
           indicatorWeight: 3,
-          labelColor: const Color(0xFFFFD600),
-          unselectedLabelColor: const Color(0xFF848E9C),
+          labelColor: isDark ? const Color(0xFFFFD600) : const Color(0xFFD97706),
+          unselectedLabelColor: _textSecondary,
           labelStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold, fontSize: 13),
           tabs: [
             Tab(text: 'Open (${engineState.openPositions.length})'),
@@ -73,15 +92,28 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF162030), Color(0xFF0F1622)],
+              gradient: LinearGradient(
+                colors: isDark
+                    ? const [Color(0xFF162030), Color(0xFF0F1622)]
+                    : const [Colors.white, Color(0xFFF8FAFC)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: account.isMarginCall ? AppColors.loss : const Color(0xFF222F44),
+                color: account.isMarginCall
+                    ? AppColors.loss
+                    : (isDark ? const Color(0xFF222F44) : const Color(0xFFE2E8F0)),
               ),
+              boxShadow: isDark
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
             ),
             child: Column(
               children: [
@@ -91,23 +123,23 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'TOTAL EQUITY',
                           style: TextStyle(
                             fontFamily: 'Inter',
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF848E9C),
+                            color: _textSecondary,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           MoneyMath.formatCurrency(account.equity),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'Inter',
                             fontSize: 22,
                             fontWeight: FontWeight.w900,
-                            color: Colors.white,
+                            color: _textPrimary,
                           ),
                         ),
                       ],
@@ -115,13 +147,13 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text(
+                        Text(
                           'UNREALIZED PnL',
                           style: TextStyle(
                             fontFamily: 'Inter',
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF848E9C),
+                            color: _textSecondary,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -141,7 +173,7 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                   ],
                 ),
                 const SizedBox(height: 14),
-                const Divider(color: Color(0xFF222F44), height: 1),
+                Divider(color: isDark ? const Color(0xFF222F44) : const Color(0xFFE2E8F0), height: 1),
                 const SizedBox(height: 12),
 
                 // 4-Quadrant Account Metrics
@@ -193,10 +225,10 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
 
   Widget _buildOpenPositionsList(List<TradeEntity> positions) {
     if (positions.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No open trading positions.',
-          style: TextStyle(fontFamily: 'Inter', color: Color(0xFF848E9C)),
+          style: TextStyle(fontFamily: 'Inter', color: _textSecondary),
         ),
       );
     }
@@ -204,7 +236,7 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       itemCount: positions.length,
-      itemBuilder: (context, idx) {
+      itemBuilder: (itemCtx, idx) {
         final pos = positions[idx];
         final isProfit = pos.unrealizedPnl >= Decimal.zero;
 
@@ -212,9 +244,18 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFF151D28),
+            color: _cardBg,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF1C2535)),
+            border: Border.all(color: _borderColor),
+            boxShadow: _isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -226,8 +267,8 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: pos.isBuy
-                          ? const Color(0xFF00D68F).withOpacity(0.15)
-                          : const Color(0xFFFF4757).withOpacity(0.15),
+                          ? const Color(0xFF00D68F).withValues(alpha: 0.15)
+                          : const Color(0xFFFF4757).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -243,11 +284,11 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                   const SizedBox(width: 8),
                   Text(
                     '${pos.symbol} • ${pos.lots.toDouble().toStringAsFixed(2)} Lots',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: _textPrimary,
                     ),
                   ),
                   const Spacer(),
@@ -270,16 +311,16 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                 children: [
                   Text(
                     'Entry: ${MoneyMath.formatDec(pos.openPrice, 2)}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF848E9C)),
+                    style: TextStyle(fontSize: 12, color: _textSecondary),
                   ),
-                  const Icon(Icons.arrow_forward, size: 14, color: Color(0xFF848E9C)),
+                  Icon(Icons.arrow_forward, size: 14, color: _textSecondary),
                   Text(
                     'Current: ${MoneyMath.formatDec(pos.currentPrice, 2)}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _textPrimary),
                   ),
                   Text(
                     'Margin: ${MoneyMath.formatCurrency(pos.requiredMargin)}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFFFFD600)),
+                    style: const TextStyle(fontSize: 12, color: Color(0xFFFFD600), fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -292,10 +333,10 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        backgroundColor: const Color(0xFF1E2838),
+                        backgroundColor: _cardBg,
                         content: Text(
                           'Position ${pos.symbol} Closed. PnL booked to Double-Entry Ledger.',
-                          style: const TextStyle(color: Colors.white),
+                          style: TextStyle(color: _textPrimary),
                         ),
                       ),
                     );
@@ -325,10 +366,10 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
 
   Widget _buildPendingOrdersList(List<TradeEntity> orders) {
     if (orders.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No pending limit or stop orders.',
-          style: TextStyle(fontFamily: 'Inter', color: Color(0xFF848E9C)),
+          style: TextStyle(fontFamily: 'Inter', color: _textSecondary),
         ),
       );
     }
@@ -342,9 +383,18 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFF151D28),
+            color: _cardBg,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF1C2535)),
+            border: Border.all(color: _borderColor),
+            boxShadow: _isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
           ),
           child: Row(
             children: [
@@ -354,17 +404,17 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                   children: [
                     Text(
                       '${ord.type.name.toUpperCase()} ${ord.side.name.toUpperCase()} • ${ord.symbol}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Inter',
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: _textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Target: ${MoneyMath.formatDec(ord.targetPrice ?? ord.openPrice, 2)} • Lots: ${ord.lots.toDouble().toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF848E9C)),
+                      style: TextStyle(fontSize: 11, color: _textSecondary),
                     ),
                   ],
                 ),
@@ -384,10 +434,10 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
 
   Widget _buildHistoryList(List<TradeEntity> trades) {
     if (trades.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No closed trades recorded yet.',
-          style: TextStyle(fontFamily: 'Inter', color: Color(0xFF848E9C)),
+          style: TextStyle(fontFamily: 'Inter', color: _textSecondary),
         ),
       );
     }
@@ -403,9 +453,18 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF151D28),
+            color: _cardBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF1C2535)),
+            border: Border.all(color: _borderColor),
+            boxShadow: _isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
           ),
           child: Row(
             children: [
@@ -413,8 +472,8 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
                   color: t.isBuy
-                      ? const Color(0xFF00D68F).withOpacity(0.15)
-                      : const Color(0xFFFF4757).withOpacity(0.15),
+                      ? const Color(0xFF00D68F).withValues(alpha: 0.15)
+                      : const Color(0xFFFF4757).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -434,16 +493,16 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
                   children: [
                     Text(
                       '${t.symbol} • ${t.lots.toDouble().toStringAsFixed(2)} Lots',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Inter',
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: _textPrimary,
                       ),
                     ),
                     Text(
                       'Closed: ${t.closePrice != null ? MoneyMath.formatDec(t.closePrice!, 2) : '-'} • Reason: ${t.closeReason ?? 'manual'}',
-                      style: const TextStyle(fontSize: 10, color: Color(0xFF848E9C)),
+                      style: TextStyle(fontSize: 10, color: _textSecondary),
                     ),
                   ],
                 ),
@@ -471,10 +530,10 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Inter',
               fontSize: 10,
-              color: Color(0xFF848E9C),
+              color: _textSecondary,
             ),
           ),
           const SizedBox(height: 1),
@@ -484,7 +543,7 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
               fontFamily: 'Inter',
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              color: highlightColor ?? Colors.white,
+              color: highlightColor ?? _textPrimary,
             ),
           ),
         ],

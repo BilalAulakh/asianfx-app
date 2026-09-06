@@ -16,7 +16,70 @@ class SupabaseTradeService {
     }
   }
 
-  /// Save / Insert trade into Supabase 'trades' table
+  /// Execute Atomic Order via Supabase Stored Procedure (Margin Hold Check)
+  Future<Map<String, dynamic>?> openTradeRpc({
+    required TradeEntity trade,
+  }) async {
+    final client = _client;
+    if (client == null) return null;
+
+    try {
+      final res = await client.rpc('rpc_open_trade', params: {
+        'p_trade_id': trade.id,
+        'p_order_id': trade.orderId,
+        'p_symbol': trade.symbol,
+        'p_side': trade.isBuy ? 'buy' : 'sell',
+        'p_lots': trade.lots.toDouble(),
+        'p_contract_size': trade.contractSize.toDouble(),
+        'p_open_price': trade.openPrice.toDouble(),
+        'p_leverage': trade.leverage.toDouble(),
+        'p_stop_loss': trade.stopLoss?.toDouble(),
+        'p_take_profit': trade.takeProfit?.toDouble(),
+      });
+      return res is Map<String, dynamic> ? res : null;
+    } catch (e) {
+      // Return null to trigger client fallback if RPC is not yet loaded in Supabase
+      return null;
+    }
+  }
+
+  /// Close Trade via Supabase Stored Procedure (PnL Settlement & Margin Release)
+  Future<Map<String, dynamic>?> closeTradeRpc({
+    required String tradeId,
+    required double closePrice,
+  }) async {
+    final client = _client;
+    if (client == null) return null;
+
+    try {
+      final res = await client.rpc('rpc_close_trade', params: {
+        'p_trade_id': tradeId,
+        'p_close_price': closePrice,
+      });
+      return res is Map<String, dynamic> ? res : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Fetch User Wallet (Balance & Held Margin)
+  Future<Map<String, dynamic>?> fetchUserWallet(String userId) async {
+    final client = _client;
+    if (client == null) return null;
+
+    try {
+      final res = await client
+          .from('wallets')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
+      return res;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Save / Insert trade into Supabase 'trades' table (direct fallback)
   Future<void> insertTrade({
     required TradeEntity trade,
     required String userId,
@@ -45,11 +108,10 @@ class SupabaseTradeService {
       });
     } catch (e) {
       // Graceful fallback for offline / unconfigured database table
-      // print('Supabase trade insert notice: $e');
     }
   }
 
-  /// Update closed trade in Supabase
+  /// Update closed trade in Supabase (direct fallback)
   Future<void> updateClosedTrade(TradeEntity trade) async {
     final client = _client;
     if (client == null) return;

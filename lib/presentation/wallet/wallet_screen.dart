@@ -1,11 +1,12 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/constants/app_strings.dart';
 import '../../core/utils/formatters.dart';
 import '../../providers/admin_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/market_provider.dart';
 import '../../providers/wallet_provider.dart';
 import '../../domain/entities/trading_entities.dart';
 
@@ -603,6 +604,29 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
   final _amountController = TextEditingController();
   String _selectedMethod = 'Bank Transfer';
   bool _isLoading = false;
+  Uint8List? _proofBytes;
+  String? _proofFileName;
+  bool _isPickingImage = false;
+
+  Future<void> _pickProof(ImageSource source) async {
+    try {
+      setState(() => _isPickingImage = true);
+      final picker = ImagePicker();
+      final file = await picker.pickImage(source: source, imageQuality: 85, maxWidth: 1920);
+      if (file != null) {
+        final bytes = await file.readAsBytes();
+        setState(() {
+          _proofBytes = bytes;
+          _proofFileName = file.name;
+          _isPickingImage = false;
+        });
+      } else {
+        setState(() => _isPickingImage = false);
+      }
+    } catch (e) {
+      setState(() => _isPickingImage = false);
+    }
+  }
 
   final List<Map<String, dynamic>> _methods = [
     {'name': 'Bank Transfer', 'icon': Icons.account_balance_outlined, 'color': const Color(0xFF3D91FF)},
@@ -763,6 +787,127 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
                 ),
               ),
             ))),
+            if (widget.type.toLowerCase().contains('deposit')) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Payment Receipt / Screenshot',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  if (_proofBytes != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.brandPrimary.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('✓ ATTACHED', style: TextStyle(color: AppColors.brandPrimary, fontSize: 9, fontWeight: FontWeight.bold)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_proofBytes == null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.darkBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.darkBorder),
+                  ),
+                  child: _isPickingImage
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: CircularProgressIndicator(color: AppColors.brandPrimary, strokeWidth: 2),
+                          ),
+                        )
+                      : Row(
+                          children: [
+                            const Icon(Icons.cloud_upload_outlined, color: AppColors.brandPrimary, size: 24),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Attach Screenshot Proof',
+                                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                  Text(
+                                    'JPG, PNG proof of payment',
+                                    style: TextStyle(color: AppColors.textMuted, fontSize: 10),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => _pickProof(ImageSource.gallery),
+                              icon: const Icon(Icons.photo_library_outlined, size: 14),
+                              label: const Text('Upload', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.brandPrimary,
+                                side: const BorderSide(color: AppColors.brandPrimary),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              ),
+                            ),
+                          ],
+                        ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.darkBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.brandPrimary),
+                  ),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.memory(
+                          _proofBytes!,
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _proofFileName ?? 'screenshot.png',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              '${(_proofBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB • Verified',
+                              style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: AppColors.loss, size: 18),
+                        onPressed: () => setState(() {
+                          _proofBytes = null;
+                          _proofFileName = null;
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -785,6 +930,26 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
                   final isDeposit = widget.type.toLowerCase().contains('deposit');
                   final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
+                  String? uploadedStoragePath;
+                  if (_proofBytes != null) {
+                    final fileExt = (_proofFileName != null && _proofFileName!.contains('.'))
+                        ? _proofFileName!.split('.').last.toLowerCase()
+                        : 'png';
+                    final storagePath = 'receipt_${user?.id ?? 'usr'}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+                    try {
+                      Supabase.instance.client.storage
+                          .from('reciept-proof')
+                          .uploadBinary(
+                            storagePath,
+                            _proofBytes!,
+                            fileOptions: FileOptions(contentType: 'image/$fileExt', upsert: true),
+                          );
+                      uploadedStoragePath = storagePath;
+                    } catch (e) {
+                      debugPrint('Storage upload error: $e');
+                    }
+                  }
+
                   // 1. Add to Admin Pending Transactions
                   ref.read(adminProvider.notifier).addTransactionRequest(
                     AdminTransaction(
@@ -798,6 +963,8 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
                       accountOrAddress: 'REF-${DateTime.now().millisecondsSinceEpoch}',
                       status: AdminTxStatus.pending,
                       createdAt: DateTime.now(),
+                      proofImageName: uploadedStoragePath ?? _proofFileName,
+                      proofImageBytes: _proofBytes,
                     ),
                   );
 
@@ -816,18 +983,21 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
                   );
 
                   if (mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    final messenger = ScaffoldMessenger.of(context);
+                    Navigator.of(context).pop();
+                    messenger.showSnackBar(
                       SnackBar(
                         backgroundColor: const Color(0xFF0ECB81),
                         content: Text(
-                          '✓ ${widget.type} request of \$$amount submitted! Awaiting Admin approval.',
+                          '✓ ${widget.type} request of \$$amount submitted! ${_proofBytes != null ? 'Screenshot proof attached.' : 'Awaiting Admin approval.'}',
                           style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
                         ),
                       ),
                     );
                   }
-                  setState(() => _isLoading = false);
+                  if (mounted) {
+                    setState(() => _isLoading = false);
+                  }
                 },
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.brandPrimary,

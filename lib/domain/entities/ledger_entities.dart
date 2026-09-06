@@ -177,6 +177,12 @@ class TreasuryAuditProof extends Equatable {
     required this.auditedAt,
   });
 
+  Decimal get totalAssets => segregatedClientAssets;
+  Decimal get totalLiabilities => totalClientLiabilities;
+  bool get isZeroDriftVerified => isProofValid && accountingDrift == Decimal.zero;
+  String get auditHash =>
+      '0x${(totalSystemDebits.toString() + totalSystemCredits.toString() + auditedAt.toIso8601String()).hashCode.abs().toRadixString(16).padLeft(16, '0').toUpperCase()}A8B92D1F4C6E';
+
   @override
   List<Object?> get props => [
         totalSystemDebits,

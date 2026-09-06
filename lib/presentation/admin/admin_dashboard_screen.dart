@@ -406,6 +406,69 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                 style: const TextStyle(color: Color(0xFF848E9C), fontSize: 12),
               ),
 
+              if (tx.proofImageBytes != null) ...[
+                const SizedBox(height: 10),
+                InkWell(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (dialogCtx) => Dialog(
+                        backgroundColor: const Color(0xFF1E2329),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Payment Proof (${tx.id})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, color: Color(0xFF848E9C), size: 20),
+                                    onPressed: () => Navigator.pop(dialogCtx),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxHeight: 400),
+                                  child: Image.memory(tx.proofImageBytes!, fit: BoxFit.contain),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF14171A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF0ECB81).withOpacity(0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.memory(tx.proofImageBytes!, width: 28, height: 28, fit: BoxFit.cover),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('View Attached Screenshot Proof', style: TextStyle(color: Color(0xFF0ECB81), fontSize: 11, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.open_in_new_rounded, color: Color(0xFF0ECB81), size: 14),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 12),
               const Divider(color: Color(0xFF2B313A), height: 1),
               const SizedBox(height: 12),

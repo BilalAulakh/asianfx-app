@@ -31,6 +31,7 @@ class AppConstants {
   static const String acctFeeSpreadRevenue = '4001';         // Revenue: Spread Markup, Commissions, Swaps
   static const String acctDealingDeskPnl = '4002';           // Revenue/Expense: B-Book Market Making PnL
 
-  // Default initial deposit for demo / preview simulation
-  static final Decimal defaultClientInitialBalance = Decimal.fromInt(25000);
+  static final Decimal defaultClientInitialBalance = Decimal.zero;
+
+  static const String usdtTrc20DepositAddress = 'TA199GDmT2ybpMKdHwZkjMgo2awuk1N1fV';
 }

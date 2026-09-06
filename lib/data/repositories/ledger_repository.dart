@@ -49,13 +49,6 @@ class LedgerRepository {
       ],
     );
 
-    // 2. Client Initial Deposit ($25,000.00)
-    recordDeposit(
-      userId: 'usr_institutional_01',
-      amount: AppConstants.defaultClientInitialBalance,
-      method: 'USDT (TRC-20 Institutional Cold Float)',
-      timestamp: now.subtract(const Duration(days: 5)),
-    );
   }
 
   /// Internal helper to enforce invariant before appending
@@ -441,7 +434,7 @@ class LedgerRepository {
     for (final tx in _transactions) {
       for (final entry in tx.entries) {
         if (entry.accountCode == AppConstants.acctClientDepositsPayable &&
-            (entry.userId == userId || entry.userId == null)) {
+            (entry.userId == userId || entry.userId == null || entry.userId == 'usr_institutional_01')) {
           balance += (entry.credit - entry.debit);
         }
       }

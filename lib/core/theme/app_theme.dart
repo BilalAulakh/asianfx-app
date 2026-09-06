@@ -515,6 +515,182 @@ class AppTheme {
           ),
         ),
       ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.brandPrimary,
+          side: const BorderSide(color: AppColors.brandPrimary, width: 1.5),
+          minimumSize: const Size(double.infinity, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(
+            fontFamily: _fontFamily,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.brandPrimary,
+          textStyle: const TextStyle(
+            fontFamily: _fontFamily,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.lightSurface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.lightBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.lightBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.brandPrimary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.loss),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.loss, width: 1.5),
+        ),
+        hintStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          color: AppColors.textMuted,
+          fontSize: 14,
+        ),
+        labelStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          color: AppColors.textDark,
+          fontSize: 14,
+        ),
+        prefixIconColor: AppColors.textMuted,
+        suffixIconColor: AppColors.textMuted,
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: AppColors.lightSurface,
+        selectedItemColor: AppColors.brandPrimary,
+        unselectedItemColor: AppColors.textMuted,
+        type: BottomNavigationBarType.fixed,
+        elevation: 4,
+        selectedLabelStyle: TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+        unselectedLabelStyle: TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 10,
+          fontWeight: FontWeight.w400,
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.lightCard,
+        selectedColor: AppColors.brandPrimary.withAlpha(30),
+        side: const BorderSide(color: AppColors.lightBorder),
+        labelStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textDark,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.lightBorder,
+        thickness: 1,
+        space: 1,
+      ),
+      tabBarTheme: const TabBarThemeData(
+        labelColor: AppColors.brandPrimary,
+        unselectedLabelColor: AppColors.textMuted,
+        indicatorColor: AppColors.brandPrimary,
+        labelStyle: TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+        unselectedLabelStyle: TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+        ),
+        indicator: UnderlineTabIndicator(
+          borderSide: BorderSide(color: AppColors.brandPrimary, width: 2),
+          borderRadius: BorderRadius.all(Radius.circular(2)),
+        ),
+        overlayColor: WidgetStatePropertyAll(Colors.transparent),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.lightSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 4,
+        titleTextStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textDark,
+        ),
+        contentTextStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 14,
+          color: AppColors.textMuted,
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.lightSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        elevation: 6,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.textDark,
+        contentTextStyle: const TextStyle(
+          fontFamily: _fontFamily,
+          fontSize: 13,
+          color: Colors.white,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        behavior: SnackBarBehavior.floating,
+      ),
+      iconTheme: const IconThemeData(
+        color: AppColors.textMuted,
+        size: 22,
+      ),
+      listTileTheme: const ListTileThemeData(
+        iconColor: AppColors.textMuted,
+        textColor: AppColors.textDark,
+        contentPadding: EdgeInsets.symmetric(horizontal: 20),
+        tileColor: Colors.transparent,
+      ),
     );
   }
+}
+
+/// Helper extension to easily access adaptive dark/light values in any widget
+extension ThemeContextExtension on BuildContext {
+  bool get isDarkMode => Theme.of(this).brightness == Brightness.dark;
+  Color get surfaceColor => isDarkMode ? const Color(0xFF151D28) : Colors.white;
+  Color get scaffoldBg => isDarkMode ? const Color(0xFF0A0E17) : const Color(0xFFF4F6F9);
+  Color get cardBg => isDarkMode ? const Color(0xFF151D28) : Colors.white;
+  Color get elevatedCardBg => isDarkMode ? const Color(0xFF1A2338) : const Color(0xFFF8FAFC);
+  Color get headerBg => isDarkMode ? const Color(0xFF151D28) : Colors.white;
+  Color get borderColor => isDarkMode ? const Color(0xFF1C2535) : const Color(0xFFE2E8F0);
+  Color get subtleBorderColor => isDarkMode ? const Color(0xFF2B384E) : const Color(0xFFE2E8F0);
+  Color get textPrimaryColor => isDarkMode ? Colors.white : const Color(0xFF0F172A);
+  Color get textSecondaryColor => isDarkMode ? const Color(0xFF848E9C) : const Color(0xFF64748B);
+  Color get inputBg => isDarkMode ? const Color(0xFF0F141C) : const Color(0xFFF1F5F9);
 }

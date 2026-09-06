@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/router/app_router.dart';
+import '../../domain/entities/user_entity.dart';
 import '../../providers/auth_provider.dart';
 import '../common/widgets/fx_button.dart';
 import '../common/widgets/fx_text_field.dart';
@@ -65,7 +66,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     setState(() => _isLoading = false);
 
     if (success) {
-      context.go(AppRoutes.dashboard);
+      final user = ref.read(authProvider).user;
+      if (user?.role == UserRole.admin) {
+        context.go(AppRoutes.admin);
+      } else {
+        context.go(AppRoutes.dashboard);
+      }
     } else {
       final error = ref.read(authProvider).error;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -196,51 +202,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             ),
                           ),
                         ),
-                        // Quick Test Chips
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('Quick Test: ', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                            GestureDetector(
-                              onTap: () {
-                                _emailController.text = 'trader@asianfx.com';
-                                _passwordController.text = 'Trader@123';
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: AppColors.darkCard,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppColors.brandPrimary.withAlpha(80)),
-                                ),
-                                child: const Text(
-                                  'Trader Demo',
-                                  style: TextStyle(color: AppColors.brandPrimary, fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () {
-                                _emailController.text = 'admin@asianfx.com';
-                                _passwordController.text = 'Admin@123';
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: AppColors.darkCard,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: const Color(0xFFFFD600).withAlpha(80)),
-                                ),
-                                child: const Text(
-                                  'Admin Portal',
-                                  style: TextStyle(color: Color(0xFFFFD600), fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
 
                         // Login Button
                         FxButton(
@@ -249,50 +211,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           onPressed: _handleLogin,
                         ),
                         const SizedBox(height: 24),
-
-                        // Divider
-                        Row(
-                          children: [
-                            const Expanded(child: Divider(color: AppColors.darkBorder)),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: Text(
-                                AppStrings.continueWith,
-                                style: const TextStyle(
-                                  color: AppColors.textMuted,
-                                  fontSize: 12,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                            ),
-                            const Expanded(child: Divider(color: AppColors.darkBorder)),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Social Buttons
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildSocialButton(
-                                icon: Icons.g_mobiledata_rounded,
-                                label: 'Google',
-                                color: const Color(0xFFEA4335),
-                                onTap: () {},
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildSocialButton(
-                                icon: Icons.apple_rounded,
-                                label: 'Apple',
-                                color: AppColors.textPrimary,
-                                onTap: () {},
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 32),
 
                         // Register Link
                         Center(
@@ -394,42 +312,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ],
         ),
       ],
-    );
-  }
-
-  Widget _buildSocialButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        height: 52,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: AppColors.darkCard,
-          border: Border.all(color: AppColors.darkBorder),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

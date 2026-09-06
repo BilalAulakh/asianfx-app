@@ -40,6 +40,14 @@ class DealingDeskNotifier extends StateNotifier<DealerRiskSummary> {
     calculateExposure();
   }
 
+  void toggleRoutingMode(String symbol) {
+    final current = _routingMap[symbol] ?? ExecutionRouting.bBookInternal;
+    final next = current == ExecutionRouting.bBookInternal
+        ? ExecutionRouting.aBookStp
+        : ExecutionRouting.bBookInternal;
+    updateRouting(symbol, next);
+  }
+
   void updateSpreadMarkup(String symbol, int markupPips) {
     _ref.read(marketFeedServiceProvider).updateSpreadMarkup(symbol, markupPips);
     calculateExposure();

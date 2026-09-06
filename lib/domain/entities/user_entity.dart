@@ -158,6 +158,67 @@ class UserEntity extends Equatable {
     );
   }
 
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'email': email,
+      'phone': phone,
+      'fullName': fullName,
+      'avatarUrl': avatarUrl,
+      'country': country,
+      'nationality': nationality,
+      'dateOfBirth': dateOfBirth?.toIso8601String(),
+      'preferredCurrency': preferredCurrency,
+      'preferredLanguage': preferredLanguage,
+      'kycStatus': kycStatus.name,
+      'status': status.name,
+      'role': role.name,
+      'isTwoFactorEnabled': isTwoFactorEnabled,
+      'isEmailVerified': isEmailVerified,
+      'isPhoneVerified': isPhoneVerified,
+      'kycDocumentType': kycDocumentType,
+      'kycDocumentNumber': kycDocumentNumber,
+      'kycRejectionReason': kycRejectionReason,
+      'kycSubmittedAt': kycSubmittedAt?.toIso8601String(),
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
+  factory UserEntity.fromMap(Map<String, dynamic> map) {
+    return UserEntity(
+      id: map['id'] as String? ?? 'usr_001',
+      email: map['email'] as String? ?? '',
+      phone: map['phone'] as String?,
+      fullName: map['fullName'] as String? ?? 'Trader',
+      avatarUrl: map['avatarUrl'] as String?,
+      country: map['country'] as String? ?? 'Pakistan',
+      nationality: map['nationality'] as String? ?? 'Pakistani',
+      dateOfBirth: map['dateOfBirth'] != null ? DateTime.tryParse(map['dateOfBirth'] as String) : null,
+      preferredCurrency: map['preferredCurrency'] as String? ?? 'USD',
+      preferredLanguage: map['preferredLanguage'] as String? ?? 'en',
+      kycStatus: KycStatus.values.firstWhere(
+        (k) => k.name == map['kycStatus'],
+        orElse: () => KycStatus.approved,
+      ),
+      status: AccountStatus.values.firstWhere(
+        (s) => s.name == map['status'],
+        orElse: () => AccountStatus.active,
+      ),
+      role: UserRole.values.firstWhere(
+        (r) => r.name == map['role'],
+        orElse: () => UserRole.client,
+      ),
+      isTwoFactorEnabled: map['isTwoFactorEnabled'] as bool? ?? false,
+      isEmailVerified: map['isEmailVerified'] as bool? ?? true,
+      isPhoneVerified: map['isPhoneVerified'] as bool? ?? true,
+      kycDocumentType: map['kycDocumentType'] as String?,
+      kycDocumentNumber: map['kycDocumentNumber'] as String?,
+      kycRejectionReason: map['kycRejectionReason'] as String?,
+      kycSubmittedAt: map['kycSubmittedAt'] != null ? DateTime.tryParse(map['kycSubmittedAt'] as String) : null,
+      createdAt: map['createdAt'] != null ? DateTime.tryParse(map['createdAt'] as String) ?? DateTime.now() : DateTime.now(),
+    );
+  }
+
   @override
   List<Object?> get props => [
         id, email, phone, fullName, avatarUrl, country, nationality,

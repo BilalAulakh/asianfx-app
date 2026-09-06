@@ -1,4 +1,3 @@
-import 'package:decimal/decimal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/entities/user_entity.dart';
 import 'auth_provider.dart';
@@ -85,48 +84,10 @@ class KycComplianceNotifier extends StateNotifier<ComplianceState> {
 
   KycComplianceNotifier(this._ref)
       : super(
-          ComplianceState(
-            pendingApplications: [
-              KycApplication(
-                id: 'KYC-APP-901',
-                userId: 'usr_client_02',
-                fullName: 'Alexander Wright',
-                email: 'a.wright@hedgefund.uk',
-                country: 'United Kingdom',
-                documentType: 'Passport',
-                documentNumber: 'GB98234101',
-                status: KycStatus.pending,
-                submittedAt: DateTime.now().subtract(const Duration(minutes: 45)),
-              ),
-              KycApplication(
-                id: 'KYC-APP-902',
-                userId: 'usr_client_03',
-                fullName: 'Mei-Ling Chen',
-                email: 'chen.trader@singapore.sg',
-                country: 'Singapore',
-                documentType: 'National ID (NRIC)',
-                documentNumber: 'S8834921D',
-                status: KycStatus.pending,
-                submittedAt: DateTime.now().subtract(const Duration(hours: 2)),
-              ),
-            ],
-            processedApplications: [
-              KycApplication(
-                id: 'KYC-APP-900',
-                userId: 'usr_institutional_01',
-                fullName: 'Institutional Master Account',
-                email: 'desk@asianfx.institutional',
-                country: 'United Arab Emirates',
-                documentType: 'Institutional Trade License',
-                documentNumber: 'DMCC-982140',
-                status: KycStatus.approved,
-                submittedAt: DateTime.now().subtract(const Duration(days: 10)),
-              ),
-            ],
-            highRiskAmlAlerts: [
-              'AML Alert: High velocity deposits detected on Account #9802 (\$100k aggregate in 2h)',
-              'PEP Screening Match: Cleared Tier-1 background verification for Client #900',
-            ],
+          const ComplianceState(
+            pendingApplications: [],
+            processedApplications: [],
+            highRiskAmlAlerts: [],
           ),
         );
 

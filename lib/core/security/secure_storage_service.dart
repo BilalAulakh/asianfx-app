@@ -1,11 +1,71 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../domain/entities/user_entity.dart';
 
 /// Secure Storage Service — wraps FlutterSecureStorage with SharedPreferences fallback
 /// All sensitive data (tokens, user credentials) stored with rock-solid persistence
 class SecureStorageService {
   SecureStorageService._();
   static final SecureStorageService instance = SecureStorageService._();
+
+  static const String _keyActiveSessionUser = 'active_session_user_json';
+
+  Future<void> saveCurrentSessionUser(UserEntity user) async {
+    try {
+      final jsonStr = jsonEncode(user.toMap());
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyActiveSessionUser, jsonStr);
+      await prefs.setString(_keyUserId, user.id);
+      await prefs.setString(_keyUserEmail, user.email);
+
+      if (!kIsWeb) {
+        try {
+          await _storage.write(key: _keyActiveSessionUser, value: jsonStr);
+          await _storage.write(key: _keyUserId, value: user.id);
+          await _storage.write(key: _keyUserEmail, value: user.email);
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('Error saving session user: $e');
+    }
+  }
+
+  Future<UserEntity?> getCurrentSessionUser() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? jsonStr = prefs.getString(_keyActiveSessionUser);
+      if ((jsonStr == null || jsonStr.isEmpty) && !kIsWeb) {
+        try {
+          jsonStr = await _storage.read(key: _keyActiveSessionUser);
+        } catch (_) {}
+      }
+      if (jsonStr == null || jsonStr.isEmpty) return null;
+      final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return UserEntity.fromMap(map);
+    } catch (e) {
+      debugPrint('Error restoring session user: $e');
+      return null;
+    }
+  }
+
+  Future<void> clearCurrentSessionUser() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyActiveSessionUser);
+      await prefs.remove(_keyUserId);
+      await prefs.remove(_keyUserEmail);
+      if (!kIsWeb) {
+        try {
+          await _storage.delete(key: _keyActiveSessionUser);
+          await _storage.delete(key: _keyUserId);
+          await _storage.delete(key: _keyUserEmail);
+        } catch (_) {}
+      }
+      await clearSession();
+    } catch (_) {}
+  }
 
   final _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(
@@ -23,7 +83,6 @@ class SecureStorageService {
   static const String _keyUserEmail = 'user_email';
   static const String _keyBiometricEnabled = 'biometric_enabled';
   static const String _keyDeviceId = 'device_id';
-  static const String _keyPinHash = 'pin_hash';
 
   // ── Tokens ───────────────────────────────────────────────────────────────────
   Future<void> saveAccessToken(String token) async {

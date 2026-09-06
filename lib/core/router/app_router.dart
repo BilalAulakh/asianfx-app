@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/entities/user_entity.dart';
 import '../../providers/auth_provider.dart';
 import '../../presentation/splash/splash_screen.dart';
 import '../../presentation/onboarding/onboarding_screen.dart';
@@ -28,7 +29,7 @@ abstract class AppRoutes {
   static const forgotPassword = '/forgot-password';
   static const shell = '/app';
   static const terminal = '/app/terminal';
-  static const dashboard = '/app/terminal';
+  static const dashboard = '/app/vault';
   static const positions = '/app/positions';
   static const vault = '/app/vault';
   static const statement = '/app/statement';
@@ -49,12 +50,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == AppRoutes.register ||
           state.matchedLocation == AppRoutes.onboarding;
       final isSplash = state.matchedLocation == AppRoutes.splash;
+      final isAdminRoute = state.matchedLocation == AppRoutes.admin;
+      final isAdmin = authState.user?.role == UserRole.admin;
 
       if (isSplash) return null;
       if (authState.status == AuthStatus.loading) return null;
 
       if (!isAuthenticated && !isAuthRoute) return AppRoutes.login;
-      if (isAuthenticated && isAuthRoute) return AppRoutes.terminal;
+      if (isAuthenticated && isAuthRoute) {
+        return isAdmin ? AppRoutes.admin : AppRoutes.vault;
+      }
+
+      // Strict protection: Non-admin users cannot access admin desk
+      if (isAdminRoute && !isAdmin) {
+        return AppRoutes.vault;
+      }
+
+      // Strict protection: Admin users ONLY access Admin Portal and are isolated from client trader terminal
+      if (isAuthenticated && isAdmin && !isAdminRoute) {
+        return AppRoutes.admin;
+      }
 
       return null;
     },
@@ -104,7 +119,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const KycFlowScreen(),
       ),
 
-      // Institutional 5 Branch Navigation Shell
+      GoRoute(
+        path: AppRoutes.statement,
+        builder: (context, state) => const DoubleEntryStatementScreen(),
+      ),
+
+      // Institutional 4 Branch Navigation Shell
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(navigationShell: shell),
         branches: [
@@ -135,16 +155,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // 4. Double-Entry Statement
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.statement,
-                builder: (context, state) => const DoubleEntryStatementScreen(),
-              ),
-            ],
-          ),
-          // 5. Profile & KYC
+          // 4. Profile & KYC
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -165,12 +176,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             const CircularProgressIndicator(color: Color(0xFFFFD600)),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => context.go(AppRoutes.terminal),
+              onPressed: () => context.go(AppRoutes.vault),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFD600),
                 foregroundColor: Colors.black,
               ),
-              child: const Text('Go to Terminal'),
+              child: const Text('Go to Vault'),
             ),
           ],
         ),
