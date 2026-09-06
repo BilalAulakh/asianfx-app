@@ -54,13 +54,14 @@ jobs:
       - name: Build iOS (No codesign for direct export)
         run: flutter build ios --release --no-codesign
 
-      - name: Compress Runner.app
+      - name: Package directly into .ipa
         run: |
-          cd build/ios/iphoneos
-          tar -czf Runner.tar.gz Runner.app
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r AsianFX.ipa Payload
 
-      - name: Upload iOS Artifact
+      - name: Upload iOS IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-runner-app
-          path: build/ios/iphoneos/Runner.tar.gz
+          name: AsianFX-iOS-IPA
+          path: AsianFX.ipa
