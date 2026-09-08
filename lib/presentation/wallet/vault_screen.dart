@@ -596,7 +596,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                   ),
                   const SizedBox(height: 18),
 
-                  // ── Blockchain Transaction Hash (TxID) Field ───────────────
+                  // ── Blockchain Transaction ID (TxID) Field ───────────────
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -605,7 +605,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                           const Icon(Icons.tag_rounded, size: 15, color: Color(0xFF00D68F)),
                           const SizedBox(width: 6),
                           Text(
-                            'Transaction Hash / TxID (TID)',
+                            'Transaction ID (TxID)',
                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textPrimary),
                           ),
                         ],
@@ -629,12 +629,12 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                     controller: _txHashController,
                     style: TextStyle(color: _textPrimary, fontSize: 13, fontFamily: 'Inter', fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
-                      hintText: 'Paste 64-character TRC20 TxHash or Transfer TID...',
-                      hintStyle: TextStyle(color: _textSecondary.withValues(alpha: 0.6), fontSize: 11),
-                      prefixIcon: const Icon(Icons.receipt_rounded, color: Color(0xFF00D68F), size: 18),
+                      hintText: 'Enter or paste Transaction ID (TxID)...',
+                      hintStyle: TextStyle(color: _textSecondary.withValues(alpha: 0.6), fontSize: 12),
+                      prefixIcon: const Icon(Icons.tag_rounded, color: Color(0xFF00D68F), size: 18),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.paste_rounded, size: 18, color: Color(0xFF00D68F)),
-                        tooltip: 'Paste TxID from Clipboard',
+                        tooltip: 'Paste from Clipboard',
                         onPressed: () async {
                           final clipData = await Clipboard.getData('text/plain');
                           if (clipData?.text != null && clipData!.text!.trim().isNotEmpty) {
@@ -646,7 +646,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                                 const SnackBar(
                                   backgroundColor: Color(0xFF00D68F),
                                   duration: Duration(seconds: 1),
-                                  content: Text('TxID pasted from clipboard!'),
+                                  content: Text('Transaction ID pasted!'),
                                 ),
                               );
                             }
@@ -668,7 +668,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          'Copy the TxID from Binance / TrustWallet / OKX transfer details and paste here.',
+                          'Payment transfer ki Transaction ID / Reference ID yahan enter karein.',
                           style: TextStyle(fontSize: 10, color: _textSecondary),
                         ),
                       ),
@@ -1067,7 +1067,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                           Icon(Icons.tag_rounded, size: 14, color: Color(0xFF00D68F)),
                           SizedBox(width: 6),
                           Text(
-                            'Transaction Hash / TxID (TID)',
+                            'Transaction ID (TxID)',
                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
                           ),
                         ],
@@ -1087,9 +1087,9 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                     controller: txHashModalController,
                     style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
-                      hintText: 'Paste 64-char Tron TxHash or Transfer TID...',
-                      hintStyle: const TextStyle(color: Color(0xFF848E9C), fontSize: 11),
-                      prefixIcon: const Icon(Icons.receipt_rounded, color: Color(0xFF00D68F), size: 18),
+                      hintText: 'Enter or paste Transaction ID (TxID)...',
+                      hintStyle: const TextStyle(color: Color(0xFF848E9C), fontSize: 12),
+                      prefixIcon: const Icon(Icons.tag_rounded, color: Color(0xFF00D68F), size: 18),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.paste_rounded, size: 18, color: Color(0xFF00D68F)),
                         tooltip: 'Paste from clipboard',
