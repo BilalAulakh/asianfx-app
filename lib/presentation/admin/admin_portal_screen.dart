@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -669,9 +670,53 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text('Method: ${tx.method}', style: TextStyle(fontSize: 11, color: _textPrimary, fontWeight: FontWeight.w500)),
-                    Text('Account / Hash: ${tx.accountOrAddress}', style: TextStyle(fontSize: 11, color: _textSecondary)),
-                    Text('Email: ${tx.userEmail} • ${DateFormat('yyyy-MM-dd HH:mm').format(tx.createdAt)}', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                    Row(
+                      children: [
+                        Text('Method: ${tx.method}', style: TextStyle(fontSize: 11, color: _textPrimary, fontWeight: FontWeight.w500)),
+                        const Spacer(),
+                        Text('${DateFormat('yyyy-MM-dd HH:mm').format(tx.createdAt)}', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _subCardBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF2B384E)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.tag_rounded, size: 14, color: Color(0xFF00D68F)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'TxID: ${tx.txHash ?? tx.accountOrAddress}',
+                              style: const TextStyle(fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.w600, color: Color(0xFFFFD600)),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: tx.txHash ?? tx.accountOrAddress));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  backgroundColor: Color(0xFF00D68F),
+                                  duration: Duration(seconds: 1),
+                                  content: Text('TxID copied!'),
+                                ),
+                              );
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                              child: Icon(Icons.copy, size: 14, color: Color(0xFF00D68F)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text('Email: ${tx.userEmail}', style: TextStyle(fontSize: 10, color: _textSecondary)),
                     const SizedBox(height: 10),
 
                     // ── Screenshot Verification Card ─────────────────────────
@@ -956,6 +1001,95 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
                     IconButton(
                       icon: Icon(Icons.close, color: _textSecondary, size: 20),
                       onPressed: () => Navigator.of(dialogCtx).pop(),
+                    ),
+                  ],
+                ),
+              ),
+
+              // TxID & Blockchain Verification Toolbar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F141C),
+                  border: Border(bottom: BorderSide(color: _borderColor)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.tag_rounded, size: 16, color: Color(0xFF00D68F)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'TxID: ',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _textSecondary),
+                    ),
+                    Expanded(
+                      child: SelectableText(
+                        tx.txHash ?? tx.accountOrAddress,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          color: Color(0xFFFFD600),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: tx.txHash ?? tx.accountOrAddress));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            backgroundColor: Color(0xFF00D68F),
+                            duration: Duration(seconds: 2),
+                            content: Text('TxID copied to clipboard!'),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00D68F).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.5)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.copy_rounded, size: 13, color: Color(0xFF00D68F)),
+                            SizedBox(width: 4),
+                            Text('Copy TxID', style: TextStyle(fontSize: 11, color: Color(0xFF00D68F), fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () {
+                        final currentHash = tx.txHash ?? tx.accountOrAddress;
+                        Clipboard.setData(ClipboardData(text: 'https://tronscan.org/#/transaction/$currentHash'));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: const Color(0xFFFFD600),
+                            duration: const Duration(seconds: 3),
+                            content: Text('Tronscan URL copied: https://tronscan.org/#/transaction/$currentHash'),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFD600).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.5)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.open_in_new_rounded, size: 13, color: Color(0xFFFFD600)),
+                            SizedBox(width: 4),
+                            Text('Tronscan Link', style: TextStyle(fontSize: 11, color: Color(0xFFFFD600), fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),

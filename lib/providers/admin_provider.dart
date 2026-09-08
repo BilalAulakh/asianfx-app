@@ -21,6 +21,7 @@ class AdminTransaction {
   final DateTime createdAt;
   final String? proofImageName;
   final Uint8List? proofImageBytes;
+  final String? txHash;
 
   const AdminTransaction({
     required this.id,
@@ -36,12 +37,14 @@ class AdminTransaction {
     required this.createdAt,
     this.proofImageName,
     this.proofImageBytes,
+    this.txHash,
   });
 
   AdminTransaction copyWith({
     AdminTxStatus? status,
     String? proofImageName,
     Uint8List? proofImageBytes,
+    String? txHash,
   }) {
     return AdminTransaction(
       id: id,
@@ -57,6 +60,7 @@ class AdminTransaction {
       createdAt: createdAt,
       proofImageName: proofImageName ?? this.proofImageName,
       proofImageBytes: proofImageBytes ?? this.proofImageBytes,
+      txHash: txHash ?? this.txHash,
     );
   }
 }

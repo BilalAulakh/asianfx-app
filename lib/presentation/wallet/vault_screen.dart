@@ -26,6 +26,7 @@ class VaultScreen extends ConsumerStatefulWidget {
 
 class _VaultScreenState extends ConsumerState<VaultScreen> {
   final _amountController = TextEditingController(text: '100');
+  final _txHashController = TextEditingController();
   final _scrollController = ScrollController();
   final GlobalKey _depositSectionKey = GlobalKey();
   Uint8List? _proofBytes;
@@ -44,6 +45,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   @override
   void dispose() {
     _amountController.dispose();
+    _txHashController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -92,6 +94,43 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       return;
     }
 
+    final txHash = _txHashController.text.trim();
+    if (txHash.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFFF4757),
+          content: Text('Please enter the Transaction Hash / TxID from your wallet transfer!'),
+        ),
+      );
+      return;
+    }
+
+    if (txHash.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFFF4757),
+          content: Text('Transaction Hash (TxID) must be at least 8 characters.'),
+        ),
+      );
+      return;
+    }
+
+    // ── Duplicate Fraud Prevention Check ─────────────────────────────────
+    final existingTxs = ref.read(adminProvider).transactions;
+    final isDuplicate = existingTxs.any(
+      (t) => t.txHash != null && t.txHash!.trim().toLowerCase() == txHash.toLowerCase(),
+    );
+    if (isDuplicate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFFF4757),
+          duration: Duration(seconds: 4),
+          content: Text('⚠️ This Transaction ID (TxID) has already been submitted! Duplicate or recycled requests are blocked.'),
+        ),
+      );
+      return;
+    }
+
     final authUser = ref.read(authProvider).user;
     final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
     final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
@@ -120,7 +159,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       }
     }
 
-    // 2. Submit transaction with screenshot to Admin Provider as PENDING
+    // 2. Submit transaction with screenshot & TxHash to Admin Provider as PENDING
     ref.read(adminProvider.notifier).addTransactionRequest(
       AdminTransaction(
         id: txId,
@@ -130,7 +169,8 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         type: 'DEPOSIT',
         amount: amt,
         method: 'USDT (TRC20)',
-        accountOrAddress: _depositAddress,
+        accountOrAddress: txHash,
+        txHash: txHash,
         status: AdminTxStatus.pending,
         createdAt: DateTime.now(),
         proofImageName: uploadedStoragePath ?? _proofFileName,
@@ -139,6 +179,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     );
 
     // 3. Add pending transaction to Wallet Provider
+    final shortHash = txHash.length > 12 ? '${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 4)}' : txHash;
     ref.read(walletProvider.notifier).addPendingTransaction(
       TransactionEntity(
         id: txId,
@@ -147,7 +188,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         currency: 'USD',
         status: 'pending',
         method: 'USDT (TRC-20)',
-        description: 'USDT Deposit (Pending Admin Verification)',
+        description: 'USDT Deposit (TxID: $shortHash)',
         createdAt: DateTime.now(),
       ),
     );
@@ -158,8 +199,8 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           backgroundColor: storageErrorMsg != null ? const Color(0xFFFF9F43) : const Color(0xFFFFD600),
           content: Text(
             storageErrorMsg != null
-                ? '✓ Deposit submitted! (Note: Run Storage Policy in SQL editor)'
-                : '✓ Deposit request of \$${amt.toStringAsFixed(2)} submitted with proof! Waiting for Admin approval.',
+                ? '✓ Deposit submitted with TxID! (Note: Run Storage Policy in SQL editor)'
+                : '✓ Deposit request of \$${amt.toStringAsFixed(2)} with TxID submitted! Admin will verify on Tronscan.',
             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
           ),
           duration: const Duration(seconds: 4),
@@ -170,6 +211,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     setState(() {
       _proofBytes = null;
       _proofFileName = null;
+      _txHashController.clear();
     });
   }
 
@@ -260,6 +302,25 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                             fontSize: 10,
                             fontWeight: FontWeight.w900,
                             color: Color(0xFF00D68F),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFD600).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          'ACC: #AFX-${(authUser?.id ?? "TRADER01").length > 8 ? (authUser?.id ?? "TRADER01").substring(0, 8).toUpperCase() : (authUser?.id ?? "TRADER01").toUpperCase()}',
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFFD600),
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -535,6 +596,86 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                   ),
                   const SizedBox(height: 18),
 
+                  // ── Blockchain Transaction Hash (TxID) Field ───────────────
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.tag_rounded, size: 15, color: Color(0xFF00D68F)),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Transaction Hash / TxID (TID)',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textPrimary),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFD600).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.4)),
+                        ),
+                        child: const Text(
+                          'MANDATORY FOR VERIFICATION',
+                          style: TextStyle(color: Color(0xFFFFD600), fontSize: 9, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _txHashController,
+                    style: TextStyle(color: _textPrimary, fontSize: 13, fontFamily: 'Inter', fontWeight: FontWeight.w600),
+                    decoration: InputDecoration(
+                      hintText: 'Paste 64-character TRC20 TxHash or Transfer TID...',
+                      hintStyle: TextStyle(color: _textSecondary.withValues(alpha: 0.6), fontSize: 11),
+                      prefixIcon: const Icon(Icons.receipt_rounded, color: Color(0xFF00D68F), size: 18),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.paste_rounded, size: 18, color: Color(0xFF00D68F)),
+                        tooltip: 'Paste TxID from Clipboard',
+                        onPressed: () async {
+                          final clipData = await Clipboard.getData('text/plain');
+                          if (clipData?.text != null && clipData!.text!.trim().isNotEmpty) {
+                            setState(() {
+                              _txHashController.text = clipData.text!.trim();
+                            });
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  backgroundColor: Color(0xFF00D68F),
+                                  duration: Duration(seconds: 1),
+                                  content: Text('TxID pasted from clipboard!'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      filled: true,
+                      fillColor: _subCardBg,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00D68F), width: 1.5)),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 12, color: _textSecondary),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Copy the TxID from Binance / TrustWallet / OKX transfer details and paste here.',
+                          style: TextStyle(fontSize: 10, color: _textSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
                   // ── Screenshot / Payment Proof Upload Section ─────────────
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -765,6 +906,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
 
   void _showDepositModal(BuildContext context) {
     final amountController = TextEditingController(text: '5000');
+    final txHashModalController = TextEditingController();
     Uint8List? proofBytes;
     String? proofFileName;
     bool isPicking = false;
@@ -913,6 +1055,60 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                         ),
                       ),
                     )).toList(),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── Blockchain Transaction Hash (TxID) in Modal ────────────
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.tag_rounded, size: 14, color: Color(0xFF00D68F)),
+                          SizedBox(width: 6),
+                          Text(
+                            'Transaction Hash / TxID (TID)',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFD600).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text('REQUIRED', style: TextStyle(color: Color(0xFFFFD600), fontSize: 9, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: txHashModalController,
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    decoration: InputDecoration(
+                      hintText: 'Paste 64-char Tron TxHash or Transfer TID...',
+                      hintStyle: const TextStyle(color: Color(0xFF848E9C), fontSize: 11),
+                      prefixIcon: const Icon(Icons.receipt_rounded, color: Color(0xFF00D68F), size: 18),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.paste_rounded, size: 18, color: Color(0xFF00D68F)),
+                        tooltip: 'Paste from clipboard',
+                        onPressed: () async {
+                          final clipData = await Clipboard.getData('text/plain');
+                          if (clipData?.text != null && clipData!.text!.trim().isNotEmpty) {
+                            setModalState(() {
+                              txHashModalController.text = clipData.text!.trim();
+                            });
+                          }
+                        },
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFF0F141C),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2B384E))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2B384E))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00D68F))),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -1078,9 +1274,35 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                         return;
                       }
 
+                      final txHash = txHashModalController.text.trim();
+                      if (txHash.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            backgroundColor: Color(0xFFFF4757),
+                            content: Text('Please enter Transaction ID / Hash (TxID) from your wallet!'),
+                          ),
+                        );
+                        return;
+                      }
+
+                      // Duplicate Fraud Prevention
+                      final existingTxs = ref.read(adminProvider).transactions;
+                      final isDuplicate = existingTxs.any(
+                        (t) => t.txHash != null && t.txHash!.trim().toLowerCase() == txHash.toLowerCase(),
+                      );
+                      if (isDuplicate) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            backgroundColor: Color(0xFFFF4757),
+                            duration: Duration(seconds: 4),
+                            content: Text('⚠️ This Transaction ID (TxID) has already been submitted! Duplicate requests are blocked.'),
+                          ),
+                        );
+                        return;
+                      }
+
                       final authUser = ref.read(authProvider).user;
                       final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
-                      final amtDec = MoneyMath.toDec(amt);
                       final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
                       String? uploadedStoragePath;
@@ -1115,7 +1337,8 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                               type: 'DEPOSIT',
                               amount: amt,
                               method: 'USDT (TRC20)',
-                              accountOrAddress: depositAddress,
+                              accountOrAddress: txHash,
+                              txHash: txHash,
                               status: AdminTxStatus.pending,
                               createdAt: DateTime.now(),
                               proofImageName: uploadedStoragePath ?? proofFileName,
@@ -1124,6 +1347,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                           );
 
                       // 2. Add pending transaction to user wallet
+                      final shortHash = txHash.length > 12 ? '${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 4)}' : txHash;
                       ref.read(walletProvider.notifier).addPendingTransaction(
                             TransactionEntity(
                               id: txId,
@@ -1132,7 +1356,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                               currency: 'USD',
                               status: 'pending',
                               method: 'USDT (TRC-20)',
-                              description: 'USDT Deposit (Pending Admin Verification)',
+                              description: 'USDT Deposit (TxID: $shortHash)',
                               createdAt: DateTime.now(),
                             ),
                           );
@@ -1142,7 +1366,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                         SnackBar(
                           backgroundColor: const Color(0xFFFFD600),
                           content: Text(
-                            '✓ Deposit request of \$${amt.toStringAsFixed(2)} submitted! Waiting for Admin approval.',
+                            '✓ Deposit request of \$${amt.toStringAsFixed(2)} with TxID submitted! Waiting for Admin approval.',
                             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
                           ),
                         ),

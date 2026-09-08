@@ -15,6 +15,7 @@ class WalletState {
   });
 
   double get balance => wallet.balance;
+  double get totalBalance => wallet.balance;
   double get equity => wallet.equity;
   double get margin => wallet.margin;
   double get freeMargin => wallet.freeMargin;
