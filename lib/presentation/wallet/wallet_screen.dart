@@ -923,11 +923,24 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
                     return;
                   }
 
+                  final isDeposit = widget.type.toLowerCase().contains('deposit');
+                  if (!isDeposit) {
+                    final currentBalance = ref.read(walletProvider).totalBalance;
+                    if (amount > currentBalance) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Insufficient balance! Available: \$${currentBalance.toStringAsFixed(2)}'),
+                          backgroundColor: AppColors.loss,
+                        ),
+                      );
+                      return;
+                    }
+                  }
+
                   setState(() => _isLoading = true);
                   await Future.delayed(const Duration(milliseconds: 400));
 
                   final user = ref.read(authProvider).user;
-                  final isDeposit = widget.type.toLowerCase().contains('deposit');
                   final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
                   String? uploadedStoragePath;

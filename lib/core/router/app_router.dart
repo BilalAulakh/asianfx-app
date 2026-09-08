@@ -13,6 +13,7 @@ import '../../presentation/auth/forgot_password_screen.dart';
 import '../../presentation/shell/app_shell.dart';
 import '../../presentation/trading/terminal_screen.dart';
 import '../../presentation/trading/positions_screen.dart';
+import '../../presentation/markets/markets_screen.dart';
 import '../../presentation/wallet/vault_screen.dart';
 import '../../presentation/wallet/double_entry_statement_screen.dart';
 import '../../presentation/profile/profile_screen.dart';
@@ -28,10 +29,11 @@ abstract class AppRoutes {
   static const otp = '/otp';
   static const forgotPassword = '/forgot-password';
   static const shell = '/app';
-  static const terminal = '/app/terminal';
-  static const dashboard = '/app/vault';
-  static const positions = '/app/positions';
   static const vault = '/app/vault';
+  static const dashboard = '/app/vault';
+  static const markets = '/app/markets';
+  static const terminal = '/app/terminal';
+  static const positions = '/app/positions';
   static const statement = '/app/statement';
   static const profile = '/app/profile';
   static const kyc = '/app/kyc';
@@ -124,29 +126,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const DoubleEntryStatementScreen(),
       ),
 
-      // Institutional 4 Branch Navigation Shell
+      // Institutional 5 Branch Navigation Shell
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(navigationShell: shell),
         branches: [
-          // 1. Trading Terminal
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.terminal,
-                builder: (context, state) => const TerminalScreen(),
-              ),
-            ],
-          ),
-          // 2. Positions & Portfolio
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.positions,
-                builder: (context, state) => const PositionsScreen(),
-              ),
-            ],
-          ),
-          // 3. Client Vault & Wallet
+          // 1. Client Vault & Wallet (First tab)
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -155,7 +139,34 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // 4. Profile & KYC
+          // 2. Markets List
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.markets,
+                builder: (context, state) => const MarketsScreen(),
+              ),
+            ],
+          ),
+          // 3. Trading Terminal
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.terminal,
+                builder: (context, state) => const TerminalScreen(),
+              ),
+            ],
+          ),
+          // 4. Positions & Portfolio
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.positions,
+                builder: (context, state) => const PositionsScreen(),
+              ),
+            ],
+          ),
+          // 5. Profile & KYC
           StatefulShellBranch(
             routes: [
               GoRoute(

@@ -45,10 +45,26 @@ class BinanceMarketDataSource {
     'BNBUSD': 'BNBUSDT',
     'ADA/USD': 'ADAUSDT',
     'ADAUSD': 'ADAUSDT',
+    'DOGE/USD': 'DOGEUSDT',
+    'DOGEUSD': 'DOGEUSDT',
+    'AVAX/USD': 'AVAXUSDT',
+    'AVAXUSD': 'AVAXUSDT',
+    'LINK/USD': 'LINKUSDT',
+    'LINKUSD': 'LINKUSDT',
+    'DOT/USD': 'DOTUSDT',
+    'DOTUSD': 'DOTUSDT',
+    'NEAR/USD': 'NEARUSDT',
+    'NEARUSD': 'NEARUSDT',
+    'LTC/USD': 'LTCUSDT',
+    'LTCUSD': 'LTCUSDT',
     'XAU/USD': 'PAXGUSDT', // PAX Gold as direct institutional Binance spot proxy for Gold
     'XAUUSD': 'PAXGUSDT',
     'EUR/USD': 'EURUSDT',
     'EURUSD': 'EURUSDT',
+    'GBP/USD': 'GBPUSDT',
+    'GBPUSD': 'GBPUSDT',
+    'AUD/USD': 'AUDUSDT',
+    'AUDUSD': 'AUDUSDT',
     'XAG/USD': 'PAXGUSDT', // Silver proxy calculation
     'XAGUSD': 'PAXGUSDT',
   };
@@ -61,8 +77,16 @@ class BinanceMarketDataSource {
     'XRPUSDT': 'XRP/USD',
     'BNBUSDT': 'BNB/USD',
     'ADAUSDT': 'ADA/USD',
+    'DOGEUSDT': 'DOGE/USD',
+    'AVAXUSDT': 'AVAX/USD',
+    'LINKUSDT': 'LINK/USD',
+    'DOTUSDT': 'DOT/USD',
+    'NEARUSDT': 'NEAR/USD',
+    'LTCUSDT': 'LTC/USD',
     'PAXGUSDT': 'XAU/USD',
     'EURUSDT': 'EUR/USD',
+    'GBPUSDT': 'GBP/USD',
+    'AUDUSDT': 'AUD/USD',
   };
 
   static const List<String> _streamPairs = [
@@ -72,8 +96,16 @@ class BinanceMarketDataSource {
     'xrpusdt',
     'bnbusdt',
     'adausdt',
+    'dogeusdt',
+    'avaxusdt',
+    'linkusdt',
+    'dotusdt',
+    'nearusdt',
+    'ltcusdt',
     'paxgusdt',
     'eurusdt',
+    'gbpusdt',
+    'audusdt',
   ];
 
   Stream<InstrumentEntity> get cryptoStream {

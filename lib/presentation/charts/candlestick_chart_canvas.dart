@@ -88,7 +88,16 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
         final height = constraints.maxHeight;
 
         return MouseRegion(
-          cursor: SystemMouseCursors.grab,
+          cursor: SystemMouseCursors.precise,
+          onHover: (event) {
+            _handleCrosshair(event.localPosition, width);
+          },
+          onExit: (_) {
+            setState(() {
+              _crosshairPosition = null;
+              _inspectedCandle = null;
+            });
+          },
           child: Listener(
             behavior: HitTestBehavior.opaque,
             onPointerSignal: (pointerSignal) {
@@ -113,7 +122,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                   }
                   _panOffset += details.focalPointDelta.dx;
                   final totalCandles = widget.candles.length;
-                  final slotWidth = max(3.5, ((width - 68.0) / 80.0) * _scale);
+                  final slotWidth = max(5.0, ((width - 68.0) / 45.0) * _scale);
                   final maxPan = max(0.0, (totalCandles * slotWidth) - (width - 68.0));
                   _panOffset = _panOffset.clamp(-80.0, maxPan + 200.0);
                 });
@@ -304,7 +313,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
     const rightMargin = 16.0;
     final chartWidth = totalWidth - rightAxis;
     final totalCandles = widget.candles.length;
-    final slotWidth = max(3.5, ((chartWidth - rightMargin) / 80.0) * _scale);
+    final slotWidth = max(5.0, ((chartWidth - rightMargin) / 45.0) * _scale);
 
     final distFromRight = (chartWidth - rightMargin + _panOffset) - localPos.dx;
     final indexFromRight = (distFromRight / slotWidth).round();
@@ -347,9 +356,9 @@ class _InstitutionalChartPainter extends CustomPainter {
 
     final totalCandles = candles.length;
 
-    // Dynamically calculate slot width: 80 candles visible across default viewport
-    final slotWidth = max(3.5, ((chartWidth - rightMargin) / 80.0) * scale);
-    final candleBodyWidth = max(2.2, slotWidth * 0.70);
+    // Dynamically calculate slot width: 45 candles visible across default viewport
+    final slotWidth = max(5.0, ((chartWidth - rightMargin) / 45.0) * scale);
+    final candleBodyWidth = max(3.0, slotWidth * 0.70);
 
     // 1. Calculate min and max prices strictly from candles VISIBLE on viewport
     double minPrice = double.infinity;
@@ -427,15 +436,16 @@ class _InstitutionalChartPainter extends CustomPainter {
     final bullPaint = Paint()..color = bullColor;
     final bearPaint = Paint()..color = bearColor;
 
+    final wickWidth = max(1.1, min(1.8, slotWidth * 0.09));
     final wickPaintBull = Paint()
       ..color = bullColor
-      ..strokeWidth = 1.3
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = wickWidth
+      ..strokeCap = StrokeCap.square;
 
     final wickPaintBear = Paint()
       ..color = bearColor
-      ..strokeWidth = 1.3
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = wickWidth
+      ..strokeCap = StrokeCap.square;
 
     // 3. Draw Candlesticks & Bottom Time Axis
     int lastTimeMarkX = -100;
@@ -470,26 +480,52 @@ class _InstitutionalChartPainter extends CustomPainter {
         final highY = getY(c.high);
         final lowY = getY(c.low);
 
-        // Center Wick Line
-        canvas.drawLine(
-          Offset(x, highY),
-          Offset(x, lowY),
-          isBull ? wickPaintBull : wickPaintBear,
-        );
+        final bodyTop = min(openY, closeY);
+        final bodyBottom = max(openY, closeY);
+        final rawHeight = bodyBottom - bodyTop;
+
+        // Upper Wick (clean segment from highY to bodyTop)
+        if (highY < bodyTop) {
+          canvas.drawLine(
+            Offset(x, highY),
+            Offset(x, bodyTop),
+            isBull ? wickPaintBull : wickPaintBear,
+          );
+        }
+
+        // Lower Wick (clean segment from bodyBottom to lowY)
+        if (lowY > bodyBottom) {
+          canvas.drawLine(
+            Offset(x, bodyBottom),
+            Offset(x, lowY),
+            isBull ? wickPaintBull : wickPaintBear,
+          );
+        }
 
         // Candle Body
-        final top = min(openY, closeY);
-        final height = max(1.8, (openY - closeY).abs());
-        final bodyRect = Rect.fromCenter(
-          center: Offset(x, top + (height / 2)),
-          width: candleBodyWidth,
-          height: height,
-        );
-
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(bodyRect, const Radius.circular(1.5)),
-          isBull ? bullPaint : bearPaint,
-        );
+        if (rawHeight < 1.5) {
+          // Doji: crisp horizontal bar
+          canvas.drawLine(
+            Offset(x - (candleBodyWidth / 2), bodyTop),
+            Offset(x + (candleBodyWidth / 2), bodyTop),
+            Paint()
+              ..color = isBull ? bullColor : bearColor
+              ..strokeWidth = 1.6
+              ..strokeCap = StrokeCap.square,
+          );
+        } else {
+          // Solid clean rectangle
+          final bodyRect = Rect.fromLTWH(
+            x - (candleBodyWidth / 2),
+            bodyTop,
+            candleBodyWidth,
+            rawHeight,
+          );
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(bodyRect, const Radius.circular(1.0)),
+            isBull ? bullPaint : bearPaint,
+          );
+        }
 
         // Time mark on bottom axis
         if (x - lastTimeMarkX > timeMarkInterval && x > 20 && x < chartWidth - 30) {

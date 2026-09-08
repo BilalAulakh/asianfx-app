@@ -56,20 +56,36 @@ class AppShell extends ConsumerWidget {
             child: Row(
               children: [
                 _NavItem(
-                  icon: Icons.candlestick_chart_outlined,
-                  activeIcon: Icons.candlestick_chart_rounded,
-                  label: 'Terminal',
+                  icon: Icons.account_balance_wallet_outlined,
+                  activeIcon: Icons.account_balance_wallet_rounded,
+                  label: 'Vault',
                   isActive: currentIndex == 0,
                   isDark: isDark,
                   onTap: () => _goBranch(0),
                 ),
                 _NavItem(
-                  icon: Icons.pie_chart_outline_rounded,
-                  activeIcon: Icons.pie_chart_rounded,
-                  label: 'Positions',
+                  icon: Icons.trending_up_rounded,
+                  activeIcon: Icons.trending_up_rounded,
+                  label: 'Markets',
                   isActive: currentIndex == 1,
                   isDark: isDark,
                   onTap: () => _goBranch(1),
+                ),
+                _NavItem(
+                  icon: Icons.candlestick_chart_outlined,
+                  activeIcon: Icons.candlestick_chart_rounded,
+                  label: 'Terminal',
+                  isActive: currentIndex == 2,
+                  isDark: isDark,
+                  onTap: () => _goBranch(2),
+                ),
+                _NavItem(
+                  icon: Icons.pie_chart_outline_rounded,
+                  activeIcon: Icons.pie_chart_rounded,
+                  label: 'Positions',
+                  isActive: currentIndex == 3,
+                  isDark: isDark,
+                  onTap: () => _goBranch(3),
                 ),
                 if (isAdmin)
                   _NavItem(
@@ -83,21 +99,13 @@ class AppShell extends ConsumerWidget {
                   )
                 else
                   _NavItem(
-                    icon: Icons.account_balance_wallet_outlined,
-                    activeIcon: Icons.account_balance_wallet_rounded,
-                    label: 'Vault',
-                    isActive: currentIndex == 2,
+                    icon: Icons.person_outline_rounded,
+                    activeIcon: Icons.person_rounded,
+                    label: 'Profile',
+                    isActive: currentIndex == 4,
                     isDark: isDark,
-                    onTap: () => _goBranch(2),
+                    onTap: () => _goBranch(4),
                   ),
-                _NavItem(
-                  icon: Icons.person_outline_rounded,
-                  activeIcon: Icons.person_rounded,
-                  label: isAdmin ? 'Admin' : 'Profile',
-                  isActive: currentIndex == 3,
-                  isDark: isDark,
-                  onTap: () => _goBranch(3),
-                ),
               ],
             ),
           ),
@@ -147,9 +155,9 @@ class _NavItem extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFD600).withOpacity(0.15),
+                  color: const Color(0xFFFFD600).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFFFD600).withOpacity(0.5)),
+                  border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.5)),
                 ),
                 child: Icon(activeIcon, size: 18, color: const Color(0xFFFFD600)),
               )

@@ -875,6 +875,15 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
     final isPending = tx.status == AdminTxStatus.pending;
     final isDeposit = tx.type == 'DEPOSIT';
 
+    final allUsers = ref.read(adminProvider).users;
+    AdminTraderUser? traderUser;
+    for (final u in allUsers) {
+      if (u.id == tx.userId) {
+        traderUser = u;
+        break;
+      }
+    }
+
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -1062,6 +1071,42 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
                         ],
                       ),
                     ),
+                    if (traderUser != null) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _miniInfo('Trader Live Balance', '\$${traderUser.balance.toStringAsFixed(2)}', const Color(0xFF00D68F)),
+                          ),
+                          Expanded(
+                            child: _miniInfo('Trader Live Equity', '\$${traderUser.equity.toStringAsFixed(2)}', _textPrimary),
+                          ),
+                        ],
+                      ),
+                      if (!isDeposit && traderUser.balance < tx.amount) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF4757).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFFF4757)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFFF4757)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'WARNING: User balance (\$${traderUser.balance.toStringAsFixed(2)}) is LESS than requested withdrawal amount (\$${tx.amount.toStringAsFixed(2)})!',
+                                  style: const TextStyle(color: Color(0xFFFF4757), fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ],
                 ),
               ),

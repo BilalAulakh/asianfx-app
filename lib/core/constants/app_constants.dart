@@ -13,6 +13,9 @@ class AppConstants {
   static final Decimal contractSizeSilver = Decimal.fromInt(5000);    // 1 Lot XAGUSD = 5,000 oz
   static final Decimal contractSizeForex = Decimal.fromInt(100000);   // 1 Lot EURUSD = 100,000 units
   static final Decimal contractSizeCrypto = Decimal.one;              // 1 Lot BTCUSD = 1 BTC
+  static final Decimal contractSizeCommodity = Decimal.fromInt(100);  // 1 Lot Oil/Gas = 100 units
+  static final Decimal contractSizeIndex = Decimal.one;               // 1 Lot Index CFD = 1 unit
+  static final Decimal contractSizeStock = Decimal.fromInt(10);       // 1 Lot Stock CFD = 10 shares
 
   // Dynamic leverage choices
   static const List<int> availableLeverages = [50, 100, 200, 500];
