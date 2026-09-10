@@ -58,7 +58,7 @@ class AppShell extends ConsumerWidget {
                 _NavItem(
                   icon: Icons.account_balance_wallet_outlined,
                   activeIcon: Icons.account_balance_wallet_rounded,
-                  label: 'Vault',
+                  label: 'Wallet',
                   isActive: currentIndex == 0,
                   isDark: isDark,
                   onTap: () => _goBranch(0),

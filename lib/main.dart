@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/router/app_router.dart';
+import 'core/security/app_lock_gate.dart';
 import 'core/theme/app_theme.dart';
+import 'presentation/common/widgets/network_status_overlay.dart';
 import 'providers/theme_provider.dart';
 
 void main() async {
@@ -12,7 +14,7 @@ void main() async {
   // Initialize Supabase Backend
   await Supabase.initialize(
     url: 'https://jrdyiqjejhkescsrircn.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyZHlpcWplamhrZXNjc3JpcmNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MTI1NjIsImV4cCI6MjEwNDA4ODU2Mn0.o0Orm6Km_G0cSYh8osjWSJIEIBTqQm40ZtCST-WDzhQ',
+    publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyZHlpcWplamhrZXNjc3JpcmNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MTI1NjIsImV4cCI6MjEwNDA4ODU2Mn0.o0Orm6Km_G0cSYh8osjWSJIEIBTqQm40ZtCST-WDzhQ',
   );
 
   // Lock to portrait mode
@@ -60,7 +62,9 @@ class FXAsianApp extends ConsumerWidget {
               MediaQuery.of(context).textScaler.scale(1.0).clamp(0.8, 1.2),
             ),
           ),
-          child: child!,
+          child: NetworkStatusOverlay(
+            child: AppLockGate(child: child!),
+          ),
         );
       },
     );

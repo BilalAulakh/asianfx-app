@@ -26,18 +26,17 @@ class VaultScreen extends ConsumerStatefulWidget {
 
 class _VaultScreenState extends ConsumerState<VaultScreen> {
   final _amountController = TextEditingController(text: '100');
-  final _txHashController = TextEditingController();
   final _scrollController = ScrollController();
   final GlobalKey _depositSectionKey = GlobalKey();
   Uint8List? _proofBytes;
   String? _proofFileName;
   bool _isPicking = false;
+  bool _showDepositSection = false;
   static const _depositAddress = AppConstants.usdtTrc20DepositAddress;
 
   bool get _isDark => ref.watch(themeProvider);
   Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
   Color get _subCardBg => _isDark ? const Color(0xFF0F141C) : const Color(0xFFF8FAFC);
-  Color get _borderColor => _isDark ? const Color(0xFF1C2535) : const Color(0xFFE2E8F0);
   Color get _subtleBorder => _isDark ? const Color(0xFF2B384E) : const Color(0xFFCBD5E1);
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0F172A);
   Color get _textSecondary => _isDark ? const Color(0xFF848E9C) : const Color(0xFF64748B);
@@ -45,7 +44,6 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   @override
   void dispose() {
     _amountController.dispose();
-    _txHashController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -94,38 +92,11 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       return;
     }
 
-    final txHash = _txHashController.text.trim();
-    if (txHash.isEmpty) {
+    if (_proofBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Color(0xFFFF4757),
-          content: Text('Please enter the Transaction Hash / TxID from your wallet transfer!'),
-        ),
-      );
-      return;
-    }
-
-    if (txHash.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xFFFF4757),
-          content: Text('Transaction Hash (TxID) must be at least 8 characters.'),
-        ),
-      );
-      return;
-    }
-
-    // ── Duplicate Fraud Prevention Check ─────────────────────────────────
-    final existingTxs = ref.read(adminProvider).transactions;
-    final isDuplicate = existingTxs.any(
-      (t) => t.txHash != null && t.txHash!.trim().toLowerCase() == txHash.toLowerCase(),
-    );
-    if (isDuplicate) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xFFFF4757),
-          duration: Duration(seconds: 4),
-          content: Text('⚠️ This Transaction ID (TxID) has already been submitted! Duplicate or recycled requests are blocked.'),
+          content: Text('Please attach your deposit screenshot or payment receipt!'),
         ),
       );
       return;
@@ -159,18 +130,18 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       }
     }
 
-    // 2. Submit transaction with screenshot & TxHash to Admin Provider as PENDING
+    // 2. Submit transaction with screenshot to Admin Provider as PENDING
     ref.read(adminProvider.notifier).addTransactionRequest(
       AdminTransaction(
         id: txId,
         userId: effectiveUserId,
-        userName: authUser?.fullName ?? 'Institutional Trader',
+        userName: authUser?.fullName ?? 'Trader',
         userEmail: authUser?.email ?? 'trader@asianfx.com',
         type: 'DEPOSIT',
         amount: amt,
         method: 'USDT (TRC20)',
-        accountOrAddress: txHash,
-        txHash: txHash,
+        accountOrAddress: 'USDT TRC20 Wallet',
+        txHash: txId,
         status: AdminTxStatus.pending,
         createdAt: DateTime.now(),
         proofImageName: uploadedStoragePath ?? _proofFileName,
@@ -179,7 +150,6 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     );
 
     // 3. Add pending transaction to Wallet Provider
-    final shortHash = txHash.length > 12 ? '${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 4)}' : txHash;
     ref.read(walletProvider.notifier).addPendingTransaction(
       TransactionEntity(
         id: txId,
@@ -188,7 +158,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         currency: 'USD',
         status: 'pending',
         method: 'USDT (TRC-20)',
-        description: 'USDT Deposit (TxID: $shortHash)',
+        description: 'USDT Deposit ($txId)',
         createdAt: DateTime.now(),
       ),
     );
@@ -199,8 +169,8 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           backgroundColor: storageErrorMsg != null ? const Color(0xFFFF9F43) : const Color(0xFFFFD600),
           content: Text(
             storageErrorMsg != null
-                ? '✓ Deposit submitted with TxID! (Note: Run Storage Policy in SQL editor)'
-                : '✓ Deposit request of \$${amt.toStringAsFixed(2)} with TxID submitted! Admin will verify on Tronscan.',
+                ? '✓ Deposit submitted! (Note: Run Storage Policy in SQL editor)'
+                : '✓ Deposit request of \$${amt.toStringAsFixed(2)} submitted! Admin will verify and credit your balance.',
             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
           ),
           duration: const Duration(seconds: 4),
@@ -211,7 +181,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     setState(() {
       _proofBytes = null;
       _proofFileName = null;
-      _txHashController.clear();
+      _showDepositSection = false;
     });
   }
 
@@ -244,7 +214,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         backgroundColor: isDark ? const Color(0xFF151D28) : Colors.white,
         elevation: 0,
         title: Text(
-          'Vault & Wallet',
+          'Wallet',
           style: TextStyle(
             fontFamily: 'Inter',
             fontSize: 18,
@@ -325,13 +295,6 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                           ),
                         ),
                       ),
-                      const Spacer(),
-                      const Icon(Icons.verified_user_rounded, color: Color(0xFF00D68F), size: 18),
-                      const SizedBox(width: 4),
-                      const Text(
-                        'Tier-1 Protected',
-                        style: TextStyle(fontFamily: 'Inter', fontSize: 11, color: Color(0xFF00D68F)),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -374,9 +337,21 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _scrollToDeposit,
-                    icon: const Icon(Icons.arrow_downward_rounded, size: 18),
-                    label: const Text('DEPOSIT'),
+                    onPressed: () {
+                      setState(() {
+                        _showDepositSection = !_showDepositSection;
+                      });
+                      if (_showDepositSection) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _scrollToDeposit();
+                        });
+                      }
+                    },
+                    icon: Icon(
+                      _showDepositSection ? Icons.close_rounded : Icons.arrow_downward_rounded,
+                      size: 18,
+                    ),
+                    label: Text(_showDepositSection ? 'HIDE DEPOSIT' : 'DEPOSIT'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF00D68F),
                       foregroundColor: Colors.black,
@@ -405,450 +380,375 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── Interactive Institutional USDT TRC-20 Deposit Gateway Card ──
-            Container(
-              key: _depositSectionKey,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: _cardBg,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.4)),
-                boxShadow: _isDark
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.currency_bitcoin, color: Color(0xFF00D68F), size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Institutional Deposit Gateway (USDT TRC-20)',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: _textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Instant 0% Network Fee • Segregated Treasury Settlement',
-                              style: TextStyle(fontSize: 11, color: _textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF00D68F)),
-                        ),
-                        child: const Text(
-                          'ONLINE',
-                          style: TextStyle(color: Color(0xFF00D68F), fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+            // ── Active Open Trades Section (Directly Below Balance & Action Buttons) ──
+            _buildActiveTradesSection(engineState.openPositions),
+            const SizedBox(height: 20),
 
-                  // ── Official TRC-20 Address Box ────────────────────────────
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: _subCardBg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _subtleBorder),
+            // ── Interactive Institutional USDT TRC-20 Deposit Gateway Card (Shown on click) ──
+            if (_showDepositSection) ...[
+              Container(
+                key: _depositSectionKey,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: _cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.5)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF00D68F).withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.account_balance_wallet_outlined, size: 14, color: _textSecondary),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'USDT (TRC-20) Vault Deposit Address:',
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _textSecondary),
-                                ),
-                              ],
-                            ),
-                            InkWell(
-                              onTap: () {
-                                Clipboard.setData(const ClipboardData(text: _depositAddress));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    backgroundColor: Color(0xFF00D68F),
-                                    duration: Duration(seconds: 2),
-                                    content: Text('Address copied to clipboard!'),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.copy_rounded, size: 12, color: Color(0xFF00D68F)),
-                                    SizedBox(width: 4),
-                                    Text('Copy', style: TextStyle(fontSize: 11, color: Color(0xFF00D68F), fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        SelectableText(
-                          _depositAddress,
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontWeight: FontWeight.bold,
-                            color: _isDark ? const Color(0xFFFFD600) : const Color(0xFFD97706),
-                            fontSize: 14,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Send only USDT via Tron (TRC-20) network. Other assets cannot be recovered.',
-                          style: TextStyle(fontSize: 10, color: _textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ── Amount Input Field ──────────────────────────────────────
-                  Text(
-                    'Deposit Amount (USD)',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _textSecondary),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
-                    decoration: InputDecoration(
-                      prefixText: '\$ ',
-                      prefixStyle: const TextStyle(color: Color(0xFF00D68F), fontSize: 18, fontWeight: FontWeight.bold),
-                      filled: true,
-                      fillColor: _subCardBg,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00D68F))),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Quick amount chips
-                  Row(
-                    children: [500, 1000, 5000, 10000, 25000].map((preset) => Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _amountController.text = '$preset'),
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 2),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          decoration: BoxDecoration(
-                            color: _subCardBg,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: _subtleBorder),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '\$$preset',
-                              style: TextStyle(fontSize: 11, color: _textPrimary, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ),
-                    )).toList(),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // ── Blockchain Transaction ID (TxID) Field ───────────────
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.tag_rounded, size: 15, color: Color(0xFF00D68F)),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Transaction ID (TxID)',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textPrimary),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFD600).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.4)),
-                        ),
-                        child: const Text(
-                          'MANDATORY FOR VERIFICATION',
-                          style: TextStyle(color: Color(0xFFFFD600), fontSize: 9, fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _txHashController,
-                    style: TextStyle(color: _textPrimary, fontSize: 13, fontFamily: 'Inter', fontWeight: FontWeight.w600),
-                    decoration: InputDecoration(
-                      hintText: 'Enter or paste Transaction ID (TxID)...',
-                      hintStyle: TextStyle(color: _textSecondary.withValues(alpha: 0.6), fontSize: 12),
-                      prefixIcon: const Icon(Icons.tag_rounded, color: Color(0xFF00D68F), size: 18),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.paste_rounded, size: 18, color: Color(0xFF00D68F)),
-                        tooltip: 'Paste from Clipboard',
-                        onPressed: () async {
-                          final clipData = await Clipboard.getData('text/plain');
-                          if (clipData?.text != null && clipData!.text!.trim().isNotEmpty) {
-                            setState(() {
-                              _txHashController.text = clipData.text!.trim();
-                            });
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  backgroundColor: Color(0xFF00D68F),
-                                  duration: Duration(seconds: 1),
-                                  content: Text('Transaction ID pasted!'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                      filled: true,
-                      fillColor: _subCardBg,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00D68F), width: 1.5)),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 12, color: _textSecondary),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Payment transfer ki Transaction ID / Reference ID yahan enter karein.',
-                          style: TextStyle(fontSize: 10, color: _textSecondary),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-
-                  // ── Screenshot / Payment Proof Upload Section ─────────────
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF00D68F)),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Deposit Screenshot / Payment Receipt',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textPrimary),
-                          ),
-                        ],
-                      ),
-                      if (_proofBytes != null)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Text('✓ ATTACHED', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9, fontWeight: FontWeight.bold)),
+                          child: const Icon(Icons.currency_bitcoin, color: Color(0xFF00D68F), size: 22),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  if (_proofBytes == null)
-                    GestureDetector(
-                      onTap: _pickProof,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: _subCardBg,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: _subtleBorder),
-                        ),
-                        child: _isPicking
-                            ? const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(12.0),
-                                  child: CircularProgressIndicator(color: Color(0xFF00D68F), strokeWidth: 2),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Deposit Gateway (USDT TRC-20)',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: _textPrimary,
                                 ),
-                              )
-                            : Column(
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Instant 0% Network Fee • Segregated Treasury Settlement',
+                                style: TextStyle(fontSize: 11, color: _textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.close_rounded, color: _textSecondary, size: 20),
+                          tooltip: 'Hide Deposit',
+                          onPressed: () => setState(() => _showDepositSection = false),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Official TRC-20 Address Box ────────────────────────────
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _subCardBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _subtleBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
                                 children: [
-                                  const Icon(Icons.cloud_upload_outlined, color: Color(0xFF00D68F), size: 36),
-                                  const SizedBox(height: 8),
+                                  Icon(Icons.account_balance_wallet_outlined, size: 14, color: _textSecondary),
+                                  const SizedBox(width: 6),
                                   Text(
-                                    'Click to Attach Transfer Screenshot or TxHash Slip',
-                                    style: TextStyle(color: _textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Supports PNG, JPG, JPEG (Max 10 MB)',
-                                    style: TextStyle(color: _textSecondary, fontSize: 11),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ElevatedButton.icon(
-                                    onPressed: _pickProof,
-                                    icon: const Icon(Icons.photo_library_outlined, size: 16),
-                                    label: const Text('Choose Screenshot File', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF00D68F).withValues(alpha: 0.2),
-                                      foregroundColor: const Color(0xFF00D68F),
-                                      elevation: 0,
-                                      side: const BorderSide(color: Color(0xFF00D68F)),
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
+                                    'USDT (TRC-20) Vault Deposit Address:',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _textSecondary),
                                   ),
                                 ],
                               ),
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: _subCardBg,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFF00D68F)),
-                      ),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.memory(
-                              _proofBytes!,
-                              width: 54,
-                              height: 54,
-                              fit: BoxFit.cover,
+                              InkWell(
+                                onTap: () {
+                                  Clipboard.setData(const ClipboardData(text: _depositAddress));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      backgroundColor: Color(0xFF00D68F),
+                                      duration: Duration(seconds: 2),
+                                      content: Text('Address copied to clipboard!'),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF00D68F).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.copy_rounded, size: 12, color: Color(0xFF00D68F)),
+                                      SizedBox(width: 4),
+                                      Text('Copy', style: TextStyle(fontSize: 11, color: Color(0xFF00D68F), fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          SelectableText(
+                            _depositAddress,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontWeight: FontWeight.bold,
+                              color: _isDark ? const Color(0xFFFFD600) : const Color(0xFFD97706),
+                              fontSize: 14,
+                              letterSpacing: 0.5,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _proofFileName ?? 'payment_receipt.png',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: _textPrimary, fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${(_proofBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB • Verified Proof',
-                                  style: const TextStyle(color: Color(0xFF00D68F), fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.edit_outlined, color: _textSecondary, size: 20),
-                            tooltip: 'Change File',
-                            onPressed: _pickProof,
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Color(0xFFFF4757), size: 20),
-                            tooltip: 'Remove',
-                            onPressed: () => setState(() {
-                              _proofBytes = null;
-                              _proofFileName = null;
-                            }),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Send only USDT via Tron (TRC-20) network. Other assets cannot be recovered.',
+                            style: TextStyle(fontSize: 10, color: _textSecondary),
                           ),
                         ],
                       ),
                     ),
-                  const SizedBox(height: 18),
+                    const SizedBox(height: 16),
 
-                  // ── Submit Button ──────────────────────────────────────────
-                  ElevatedButton(
-                    onPressed: _submitDeposit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00D68F),
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      elevation: 2,
+                    // ── Amount Input Field ──────────────────────────────────────
+                    Text(
+                      'Deposit Amount (USD)',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _textSecondary),
                     ),
-                    child: const Text(
-                      '⚡ CONFIRM DEPOSIT SETTLEMENT',
-                      style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+                      decoration: InputDecoration(
+                        prefixText: '\$ ',
+                        prefixStyle: const TextStyle(color: Color(0xFF00D68F), fontSize: 18, fontWeight: FontWeight.bold),
+                        filled: true,
+                        fillColor: _subCardBg,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00D68F))),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+                    const SizedBox(height: 10),
 
-            // ── Other Institutional Channels ────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _cardBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _borderColor),
-                boxShadow: _isDark
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.03),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+                    // Quick amount chips
+                    Row(
+                      children: [500, 1000, 5000, 10000, 25000].map((preset) => Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _amountController.text = '$preset'),
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _subCardBg,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: _subtleBorder),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '\$$preset',
+                                style: TextStyle(fontSize: 11, color: _textPrimary, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
                         ),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // ── Screenshot / Payment Proof Upload Section ─────────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF00D68F)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Deposit Screenshot / Payment Receipt',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textPrimary),
+                            ),
+                          ],
+                        ),
+                        if (_proofBytes != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00D68F).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('✓ ATTACHED', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9, fontWeight: FontWeight.bold)),
+                          ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    if (_proofBytes == null)
+                      GestureDetector(
+                        onTap: _pickProof,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: _subCardBg,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: _subtleBorder),
+                          ),
+                          child: _isPicking
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(12.0),
+                                    child: CircularProgressIndicator(color: Color(0xFF00D68F), strokeWidth: 2),
+                                  ),
+                                )
+                              : Column(
+                                  children: [
+                                    const Icon(Icons.cloud_upload_outlined, color: Color(0xFF00D68F), size: 36),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Click to Attach Transfer Screenshot',
+                                      style: TextStyle(color: _textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Supports PNG, JPG, JPEG (Max 10 MB)',
+                                      style: TextStyle(color: _textSecondary, fontSize: 11),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    ElevatedButton.icon(
+                                      onPressed: _pickProof,
+                                      icon: const Icon(Icons.photo_library_outlined, size: 16),
+                                      label: const Text('Choose Screenshot File', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF00D68F).withValues(alpha: 0.2),
+                                        foregroundColor: const Color(0xFF00D68F),
+                                        elevation: 0,
+                                        side: const BorderSide(color: Color(0xFF00D68F)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _subCardBg,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFF00D68F)),
+                        ),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Image.memory(
+                                _proofBytes!,
+                                width: 54,
+                                height: 54,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _proofFileName ?? 'payment_receipt.png',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: _textPrimary, fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${(_proofBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB • Verified Proof',
+                                    style: const TextStyle(color: Color(0xFF00D68F), fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.edit_outlined, color: _textSecondary, size: 20),
+                              tooltip: 'Change File',
+                              onPressed: _pickProof,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Color(0xFFFF4757), size: 20),
+                              tooltip: 'Remove',
+                              onPressed: () => setState(() {
+                                _proofBytes = null;
+                                _proofFileName = null;
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 18),
+
+                    // ── Submit Button ──────────────────────────────────────────
+                    ElevatedButton(
+                      onPressed: _submitDeposit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00D68F),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 2,
+                      ),
+                      child: const Text(
+                        '⚡ CONFIRM DEPOSIT SETTLEMENT',
+                        style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveTradesSection(List<TradeEntity> positions) {
+    if (positions.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _cardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _subtleBorder),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00D68F).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF00D68F), size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Other Supported Channels',
+                    'No Active Trades Open',
                     style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 13,
@@ -856,15 +756,197 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                       color: _textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  _gatewayItem('USDT Tether (ERC-20)', 'Tier-1 Segregated Cold Wallet', Icons.shield),
-                  Divider(color: _borderColor, height: 16),
-                  _gatewayItem('Institutional Bank Wire', 'SWIFT Fedwire Clearance', Icons.account_balance),
+                  const SizedBox(height: 2),
+                  Text(
+                    'All funds available in Free Margin for trading.',
+                    style: TextStyle(fontSize: 11, color: _textSecondary),
+                  ),
                 ],
               ),
             ),
           ],
         ),
+      );
+    }
+
+    // Total floating PnL of all open positions
+    final totalPnL = positions.fold<Decimal>(Decimal.zero, (sum, p) => sum + p.unrealizedPnl);
+    final isTotalProfit = totalPnL >= Decimal.zero;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _subtleBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF00D68F),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'OPEN TRADES (${positions.length})',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: _textPrimary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isTotalProfit
+                      ? const Color(0xFF00D68F).withValues(alpha: 0.15)
+                      : const Color(0xFFFF4757).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  MoneyMath.formatPnL(totalPnL),
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: isTotalProfit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // List of Active Trades
+          ...positions.map((pos) {
+            final isPosProfit = pos.unrealizedPnl >= Decimal.zero;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _subCardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _subtleBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Row 1: Symbol, Side badge, Lots, Floating PnL
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: pos.isBuy
+                              ? const Color(0xFF00D68F).withValues(alpha: 0.15)
+                              : const Color(0xFFFF4757).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          pos.isBuy ? 'BUY' : 'SELL',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            color: pos.isBuy ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${pos.symbol} • ${pos.lots.toDouble().toStringAsFixed(2)} Lots',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: _textPrimary,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        MoneyMath.formatPnL(pos.unrealizedPnl),
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: isPosProfit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Row 2: Entry, Current Price, Locked Margin
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Entry: ${MoneyMath.formatDec(pos.openPrice, 2)}',
+                        style: TextStyle(fontSize: 11, color: _textSecondary),
+                      ),
+                      Row(
+                        children: [
+                          Icon(Icons.trending_up, size: 12, color: _textSecondary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Live: ${MoneyMath.formatDec(pos.currentPrice, 2)}',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _textPrimary),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'Margin: ${MoneyMath.formatCurrency(pos.requiredMargin)}',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFFFFD600), fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Row 3: Direct Close Trade Button
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await ref.read(tradingEngineProvider.notifier).closePosition(pos.id);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: _cardBg,
+                            content: Text(
+                              'Position ${pos.symbol} Closed. Margin released & PnL booked to Ledger.',
+                              style: TextStyle(color: _textPrimary),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.close_rounded, size: 14),
+                    label: const Text('CLOSE POSITION', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFFF4757),
+                      side: const BorderSide(color: Color(0xFFFF4757)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -881,510 +963,6 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _textPrimary),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _gatewayItem(String title, String subtitle, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: const Color(0xFFFFD600), size: 20),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: _textPrimary, fontSize: 13)),
-              Text(subtitle, style: TextStyle(color: _textSecondary, fontSize: 11)),
-            ],
-          ),
-        ),
-        const Text('ONLINE', style: TextStyle(color: Color(0xFF00D68F), fontSize: 11, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-
-  void _showDepositModal(BuildContext context) {
-    final amountController = TextEditingController(text: '5000');
-    final txHashModalController = TextEditingController();
-    Uint8List? proofBytes;
-    String? proofFileName;
-    bool isPicking = false;
-    const depositAddress = AppConstants.usdtTrc20DepositAddress;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF151D28),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          Future<void> pickProof(ImageSource source) async {
-            try {
-              setModalState(() => isPicking = true);
-              final picker = ImagePicker();
-              final XFile? file = await picker.pickImage(
-                source: source,
-                imageQuality: 85,
-                maxWidth: 1920,
-              );
-              if (file != null) {
-                final bytes = await file.readAsBytes();
-                setModalState(() {
-                  proofBytes = bytes;
-                  proofFileName = file.name;
-                  isPicking = false;
-                });
-              } else {
-                setModalState(() => isPicking = false);
-              }
-            } catch (e) {
-              setModalState(() => isPicking = false);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: const Color(0xFFFF4757),
-                    content: Text('Failed to select image: $e'),
-                  ),
-                );
-              }
-            }
-          }
-
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              left: 20,
-              right: 20,
-              top: 16,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Institutional Deposit Gateway',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Color(0xFF848E9C), size: 20),
-                        onPressed: () => Navigator.of(ctx).pop(),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F141C),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF2B384E)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('USDT (TRC-20) Vault Deposit Address:', style: TextStyle(fontSize: 11, color: Color(0xFF848E9C))),
-                            InkWell(
-                              onTap: () {
-                                Clipboard.setData(const ClipboardData(text: depositAddress));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    backgroundColor: Color(0xFF00D68F),
-                                    duration: Duration(seconds: 2),
-                                    content: Text('Address copied to clipboard!'),
-                                  ),
-                                );
-                              },
-                              child: const Row(
-                                children: [
-                                  Icon(Icons.copy_rounded, size: 12, color: Color(0xFF00D68F)),
-                                  SizedBox(width: 4),
-                                  Text('Copy', style: TextStyle(fontSize: 11, color: Color(0xFF00D68F), fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        const SelectableText(
-                          depositAddress,
-                          style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold, color: Color(0xFFFFD600), fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-                    decoration: const InputDecoration(
-                      labelText: 'Deposit Amount (USD)',
-                      prefixText: '\$ ',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  // Quick amounts
-                  Row(
-                    children: [500, 1000, 5000, 10000].map((preset) => Expanded(
-                      child: GestureDetector(
-                        onTap: () => setModalState(() => amountController.text = '$preset'),
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F141C),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFF2B384E)),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '\$$preset',
-                              style: const TextStyle(fontSize: 11, color: Color(0xFF848E9C), fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ),
-                    )).toList(),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ── Blockchain Transaction Hash (TxID) in Modal ────────────
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.tag_rounded, size: 14, color: Color(0xFF00D68F)),
-                          SizedBox(width: 6),
-                          Text(
-                            'Transaction ID (TxID)',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFD600).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text('REQUIRED', style: TextStyle(color: Color(0xFFFFD600), fontSize: 9, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: txHashModalController,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                    decoration: InputDecoration(
-                      hintText: 'Enter or paste Transaction ID (TxID)...',
-                      hintStyle: const TextStyle(color: Color(0xFF848E9C), fontSize: 12),
-                      prefixIcon: const Icon(Icons.tag_rounded, color: Color(0xFF00D68F), size: 18),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.paste_rounded, size: 18, color: Color(0xFF00D68F)),
-                        tooltip: 'Paste from clipboard',
-                        onPressed: () async {
-                          final clipData = await Clipboard.getData('text/plain');
-                          if (clipData?.text != null && clipData!.text!.trim().isNotEmpty) {
-                            setModalState(() {
-                              txHashModalController.text = clipData.text!.trim();
-                            });
-                          }
-                        },
-                      ),
-                      filled: true,
-                      fillColor: const Color(0xFF0F141C),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2B384E))),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2B384E))),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00D68F))),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ── Screenshot / Payment Proof Upload Section ─────────────
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF00D68F)),
-                          SizedBox(width: 6),
-                          Text(
-                            'Deposit Screenshot / Payment Receipt',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                      if (proofBytes != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF00D68F).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text('✓ ATTACHED', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9, fontWeight: FontWeight.bold)),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  if (proofBytes == null)
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F141C),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFF2B384E)),
-                      ),
-                      child: isPicking
-                          ? const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(12.0),
-                                child: CircularProgressIndicator(color: Color(0xFF00D68F), strokeWidth: 2),
-                              ),
-                            )
-                          : Column(
-                              children: [
-                                const Icon(Icons.cloud_upload_outlined, color: Color(0xFF00D68F), size: 30),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  'Attach Transfer Screenshot or TxHash Slip',
-                                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Instant institutional ledger verification',
-                                  style: TextStyle(color: Color(0xFF848E9C), fontSize: 10),
-                                ),
-                                const SizedBox(height: 10),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    OutlinedButton.icon(
-                                      onPressed: () => pickProof(ImageSource.gallery),
-                                      icon: const Icon(Icons.photo_library_outlined, size: 14),
-                                      label: const Text('Select Screenshot', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(0xFF00D68F),
-                                        side: const BorderSide(color: Color(0xFF00D68F)),
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    OutlinedButton.icon(
-                                      onPressed: () => pickProof(ImageSource.camera),
-                                      icon: const Icon(Icons.camera_alt_outlined, size: 14),
-                                      label: const Text('Camera', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(0xFF848E9C),
-                                        side: const BorderSide(color: Color(0xFF2B384E)),
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F141C),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFF00D68F)),
-                      ),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.memory(
-                              proofBytes!,
-                              width: 60,
-                              height: 60,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  proofFileName ?? 'screenshot.png',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${(proofBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB • Verified Image',
-                                  style: const TextStyle(color: Color(0xFF848E9C), fontSize: 10),
-                                ),
-                                const SizedBox(height: 4),
-                                const Row(
-                                  children: [
-                                    Icon(Icons.check_circle_rounded, color: Color(0xFF00D68F), size: 12),
-                                    SizedBox(width: 4),
-                                    Text('Screenshot ready for upload', style: TextStyle(color: Color(0xFF00D68F), fontSize: 10, fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined, color: Color(0xFF848E9C), size: 18),
-                            tooltip: 'Change Screenshot',
-                            onPressed: () => pickProof(ImageSource.gallery),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Color(0xFFFF4757), size: 18),
-                            tooltip: 'Remove Screenshot',
-                            onPressed: () => setModalState(() {
-                              proofBytes = null;
-                              proofFileName = null;
-                            }),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  const SizedBox(height: 18),
-                  ElevatedButton(
-                    onPressed: () {
-                      final amt = double.tryParse(amountController.text) ?? 0.0;
-                      if (amt <= 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            backgroundColor: Color(0xFFFF4757),
-                            content: Text('Please enter a valid deposit amount'),
-                          ),
-                        );
-                        return;
-                      }
-
-                      final txHash = txHashModalController.text.trim();
-                      if (txHash.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            backgroundColor: Color(0xFFFF4757),
-                            content: Text('Please enter Transaction ID / Hash (TxID) from your wallet!'),
-                          ),
-                        );
-                        return;
-                      }
-
-                      // Duplicate Fraud Prevention
-                      final existingTxs = ref.read(adminProvider).transactions;
-                      final isDuplicate = existingTxs.any(
-                        (t) => t.txHash != null && t.txHash!.trim().toLowerCase() == txHash.toLowerCase(),
-                      );
-                      if (isDuplicate) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            backgroundColor: Color(0xFFFF4757),
-                            duration: Duration(seconds: 4),
-                            content: Text('⚠️ This Transaction ID (TxID) has already been submitted! Duplicate requests are blocked.'),
-                          ),
-                        );
-                        return;
-                      }
-
-                      final authUser = ref.read(authProvider).user;
-                      final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
-                      final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-
-                      String? uploadedStoragePath;
-                      final localBytes = proofBytes;
-                      final localName = proofFileName;
-                      if (localBytes != null) {
-                        final fileExt = (localName != null && localName.contains('.'))
-                            ? localName.split('.').last.toLowerCase()
-                            : 'png';
-                        final storagePath = 'receipt_${effectiveUserId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
-                        try {
-                          Supabase.instance.client.storage
-                              .from('reciept-proof')
-                              .uploadBinary(
-                                storagePath,
-                                localBytes,
-                                fileOptions: FileOptions(contentType: 'image/$fileExt', upsert: true),
-                              );
-                          uploadedStoragePath = storagePath;
-                        } catch (e) {
-                          debugPrint('Storage upload error: $e');
-                        }
-                      }
-
-                      // 1. Submit transaction with screenshot to Admin Provider as PENDING
-                      ref.read(adminProvider.notifier).addTransactionRequest(
-                            AdminTransaction(
-                              id: txId,
-                              userId: effectiveUserId,
-                              userName: authUser?.fullName ?? 'Institutional Trader',
-                              userEmail: authUser?.email ?? 'trader@asianfx.com',
-                              type: 'DEPOSIT',
-                              amount: amt,
-                              method: 'USDT (TRC20)',
-                              accountOrAddress: txHash,
-                              txHash: txHash,
-                              status: AdminTxStatus.pending,
-                              createdAt: DateTime.now(),
-                              proofImageName: uploadedStoragePath ?? proofFileName,
-                              proofImageBytes: proofBytes,
-                            ),
-                          );
-
-                      // 2. Add pending transaction to user wallet
-                      final shortHash = txHash.length > 12 ? '${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 4)}' : txHash;
-                      ref.read(walletProvider.notifier).addPendingTransaction(
-                            TransactionEntity(
-                              id: txId,
-                              type: 'deposit',
-                              amount: amt,
-                              currency: 'USD',
-                              status: 'pending',
-                              method: 'USDT (TRC-20)',
-                              description: 'USDT Deposit (TxID: $shortHash)',
-                              createdAt: DateTime.now(),
-                            ),
-                          );
-
-                      Navigator.of(ctx).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: const Color(0xFFFFD600),
-                          content: Text(
-                            '✓ Deposit request of \$${amt.toStringAsFixed(2)} with TxID submitted! Waiting for Admin approval.',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-                          ),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00D68F),
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: const Text('CONFIRM DEPOSIT SETTLEMENT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }
@@ -1453,7 +1031,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Institutional Withdrawal Disbursement',
+                        'Withdrawal Disbursement',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
                       IconButton(
@@ -1620,7 +1198,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                             AdminTransaction(
                               id: txId,
                               userId: effectiveUserId,
-                              userName: authUser?.fullName ?? 'Institutional Trader',
+                              userName: authUser?.fullName ?? 'Trader',
                               userEmail: authUser?.email ?? 'trader@asianfx.com',
                               type: 'WITHDRAWAL',
                               amount: amt,

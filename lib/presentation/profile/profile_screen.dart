@@ -8,6 +8,8 @@ import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../admin/admin_portal_screen.dart';
 import '../kyc/kyc_flow_screen.dart';
+import 'widgets/change_security_pin_sheet.dart';
+import 'widgets/two_factor_auth_sheet.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -23,7 +25,7 @@ class ProfileScreen extends ConsumerWidget {
         backgroundColor: context.headerBg,
         elevation: 0,
         title: Text(
-          'Institutional Account & Profile',
+          'Account & Profile',
           style: TextStyle(
             fontFamily: 'Inter',
             fontSize: 18,
@@ -77,7 +79,7 @@ class ProfileScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              user?.fullName ?? 'Institutional Trader',
+                              user?.fullName ?? 'Trader',
                               style: TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 16,
@@ -87,24 +89,8 @@ class ProfileScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              user?.email ?? 'trader@asianfx.institutional',
+                              user?.email ?? 'trader@asianfx.com',
                               style: TextStyle(fontSize: 12, color: context.textSecondaryColor),
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFD600).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                user?.roleDisplay.toUpperCase() ?? 'INSTITUTIONAL TRADER',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  color: Color(0xFFFFD600),
-                                ),
-                              ),
                             ),
                           ],
                         ),
@@ -203,7 +189,7 @@ class ProfileScreen extends ConsumerWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                isDark ? 'Currently Dark Theme (Institutional)' : 'Currently Light Theme (Daylight Clean)',
+                                isDark ? 'Currently Dark Theme' : 'Currently Light Theme (Daylight Clean)',
                                 style: TextStyle(fontSize: 11, color: context.textSecondaryColor),
                               ),
                             ],
@@ -268,7 +254,7 @@ class ProfileScreen extends ConsumerWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 const Text(
-                                  'Institutional Charcoal',
+                                  'Charcoal Dark',
                                   style: TextStyle(color: Color(0xFF848E9C), fontSize: 10),
                                 ),
                               ],
@@ -391,14 +377,81 @@ class ProfileScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.verified_user_outlined, color: Color(0xFF00D68F)),
-                    title: Text('Two-Factor Authentication (2FA)', style: TextStyle(color: context.textPrimaryColor, fontSize: 13)),
-                    trailing: const Text('ENABLED', style: TextStyle(color: Color(0xFF00D68F), fontWeight: FontWeight.bold, fontSize: 11)),
+                    onTap: () {
+                      final email = user?.email ?? 'trader@asianfx.com';
+                      TwoFactorAuthSheet.show(
+                        context,
+                        userEmail: email,
+                        isCurrentlyEnabled: user?.isTwoFactorEnabled ?? false,
+                      );
+                    },
+                    leading: Icon(
+                      user?.isTwoFactorEnabled == true
+                          ? Icons.verified_user_rounded
+                          : Icons.security_outlined,
+                      color: user?.isTwoFactorEnabled == true
+                          ? const Color(0xFF00D68F)
+                          : const Color(0xFFFF9F43),
+                    ),
+                    title: Text(
+                      'Two-Factor Authentication (2FA)',
+                      style: TextStyle(
+                        color: context.textPrimaryColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      user?.isTwoFactorEnabled == true
+                          ? 'Protected with Authenticator'
+                          : 'Tap to enable extra account defense',
+                      style: TextStyle(fontSize: 11, color: context.textSecondaryColor),
+                    ),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: (user?.isTwoFactorEnabled == true
+                                ? const Color(0xFF00D68F)
+                                : const Color(0xFFFF9F43))
+                            .withAlpha(25),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: user?.isTwoFactorEnabled == true
+                              ? const Color(0xFF00D68F)
+                              : const Color(0xFFFF9F43),
+                        ),
+                      ),
+                      child: Text(
+                        user?.isTwoFactorEnabled == true ? 'ENABLED' : 'DISABLED',
+                        style: TextStyle(
+                          color: user?.isTwoFactorEnabled == true
+                              ? const Color(0xFF00D68F)
+                              : const Color(0xFFFF9F43),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
                   ),
                   Divider(color: context.borderColor, height: 1),
                   ListTile(
-                    leading: Icon(Icons.lock_reset_rounded, color: context.textSecondaryColor),
-                    title: Text('Change Security PIN', style: TextStyle(color: context.textPrimaryColor, fontSize: 13)),
+                    onTap: () {
+                      final email = user?.email ?? 'trader@asianfx.com';
+                      ChangeSecurityPinSheet.show(context, email);
+                    },
+                    leading: const Icon(Icons.lock_reset_rounded, color: Color(0xFFFFD600)),
+                    title: Text(
+                      'Change Security PIN',
+                      style: TextStyle(
+                        color: context.textPrimaryColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Manage 4-digit security code',
+                      style: TextStyle(fontSize: 11, color: context.textSecondaryColor),
+                    ),
                     trailing: Icon(Icons.chevron_right, color: context.textSecondaryColor),
                   ),
                 ],
@@ -425,34 +478,6 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _roleChip(WidgetRef ref, UserRole? current, UserRole role, String label) {
-    final isSelected = current == role;
-    return GestureDetector(
-      onTap: () {
-        ref.read(authProvider.notifier).switchRole(role);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF0F141C),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF2B384E),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 11,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.black : const Color(0xFF848E9C),
-          ),
         ),
       ),
     );

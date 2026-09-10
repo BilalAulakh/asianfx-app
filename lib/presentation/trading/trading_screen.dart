@@ -17,8 +17,7 @@ class _TradingScreenState extends ConsumerState<TradingScreen> {
     'Favorites',
     'Most traded',
     'Top Movers',
-    'Majors',
-    'Metals',
+    'Forex',
     'Crypto',
     'Indices',
   ];
@@ -33,9 +32,9 @@ class _TradingScreenState extends ConsumerState<TradingScreen> {
       if (_selectedCategoryIndex == 0) return true; // Favorites
       if (_selectedCategoryIndex == 1) return inst.category == 'crypto' || inst.category == 'forex'; // Most traded
       if (_selectedCategoryIndex == 2) return inst.changePercent.abs() > 0.1; // Top Movers
-      if (_selectedCategoryIndex == 3) return inst.category == 'forex'; // Majors
-      if (_selectedCategoryIndex == 4) return inst.symbol.contains('XAU') || inst.symbol.contains('XAG'); // Metals
-      if (_selectedCategoryIndex == 5) return inst.category == 'crypto'; // Crypto
+      if (_selectedCategoryIndex == 3) return inst.category == 'forex'; // Forex
+      if (_selectedCategoryIndex == 4) return inst.category == 'crypto'; // Crypto
+      if (_selectedCategoryIndex == 5) return inst.category == 'indices'; // Indices
       return true;
     }).toList();
 

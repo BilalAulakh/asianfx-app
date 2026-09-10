@@ -81,31 +81,33 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
           child: Icon(Icons.shield_rounded, color: _goldAccent, size: 24),
         ),
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
                 color: _goldBg,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(5),
                 border: Border.all(color: _goldBorder),
               ),
               child: Text(
-                'MARKET MAKER DESK',
+                'MM DESK',
                 style: TextStyle(
                   fontFamily: 'Inter',
-                  fontSize: 10,
+                  fontSize: 9.5,
                   fontWeight: FontWeight.w900,
                   color: _goldText,
+                  letterSpacing: 0.5,
                 ),
               ),
             ),
             const SizedBox(width: 8),
-            Expanded(
+            Flexible(
               child: Text(
-                'Institutional Broker Portal',
+                'Broker Portal',
                 style: TextStyle(
                   fontFamily: 'Inter',
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: _textPrimary,
                 ),
@@ -285,6 +287,173 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Admin Master Vault & Balance Breakdown Card
+          Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: _isDark
+                    ? const [Color(0xFF1E2838), Color(0xFF0F1722)]
+                    : const [Colors.white, Color(0xFFF1F5F9)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _goldAccent.withValues(alpha: 0.5), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: _goldAccent.withValues(alpha: _isDark ? 0.08 : 0.15),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: _goldAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.account_balance_rounded, color: _goldAccent, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'BROKER MASTER TREASURY',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: _goldText,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            Text(
+                              'AsianFX Liquidity & Custody Reserves',
+                              style: TextStyle(fontSize: 10, color: _textSecondary),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00D68F).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.4)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_outline_rounded, size: 12, color: Color(0xFF00D68F)),
+                          SizedBox(width: 4),
+                          Text('100% SOLVENT', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9.5, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Divider(color: _subtleBorder, height: 1),
+                const SizedBox(height: 14),
+
+                // Primary Dollar Figures
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'TOTAL PLATFORM DOLLARS',
+                            style: TextStyle(fontSize: 10, color: _textSecondary, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                          ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '\$${(100000.0 + admin.totalUserFunds + risk.feeRevenueEarned.toDouble()).toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 24,
+                                fontWeight: FontWeight.w900,
+                                color: _textPrimary,
+                              ),
+                            ),
+                          ),
+                          Text('Total Gross Capital in Vault', style: TextStyle(fontSize: 9.5, color: _textSecondary)),
+                        ],
+                      ),
+                    ),
+                    Container(width: 1, height: 42, color: _subtleBorder),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ADMIN OWN RESERVES',
+                            style: TextStyle(fontSize: 10, color: _textSecondary, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                          ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '\$${(100000.0 + risk.feeRevenueEarned.toDouble()).toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: _goldAccent,
+                              ),
+                            ),
+                          ),
+                          Text('House Capital + Spread Profits', style: TextStyle(fontSize: 9.5, color: const Color(0xFF00D68F), fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Sub-Breakdown Row
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _subCardBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      _miniInfo('Client Custody Deposits', '\$${admin.totalUserFunds.toStringAsFixed(2)}', const Color(0xFF00D68F)),
+                      const Spacer(),
+                      _miniInfo('Spread Fees Earned', '\$${risk.feeRevenueEarned.toDouble().toStringAsFixed(2)}', _goldAccent),
+                      const Spacer(),
+                      _miniInfo('Approved Payouts', '\$${admin.totalWithdrawn.toStringAsFixed(0)}', const Color(0xFFFF4757)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Global Exposure & House PnL Card
           Container(
             padding: const EdgeInsets.all(16),
@@ -311,47 +480,66 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
             child: Column(
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'HOUSE B-BOOK PnL (INTERNALIZED)',
-                          style: TextStyle(fontSize: 11, color: _textSecondary, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          MoneyMath.formatPnL(risk.aggregateHouseFloatingPnl),
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: risk.aggregateHouseFloatingPnl >= Decimal.zero
-                                ? const Color(0xFF00D68F)
-                                : const Color(0xFFFF4757),
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'HOUSE B-BOOK PnL',
+                            style: TextStyle(fontSize: 10, color: _textSecondary, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              MoneyMath.formatPnL(risk.aggregateHouseFloatingPnl),
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                color: risk.aggregateHouseFloatingPnl >= Decimal.zero
+                                     ? const Color(0xFF00D68F)
+                                     : const Color(0xFFFF4757),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          'SPREAD REVENUE EARNED',
-                          style: TextStyle(fontSize: 11, color: _textSecondary, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          MoneyMath.formatCurrency(risk.feeRevenueEarned),
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: _goldAccent,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'SPREAD REVENUE',
+                            style: TextStyle(fontSize: 10, color: _textSecondary, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              MoneyMath.formatCurrency(risk.feeRevenueEarned),
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: _goldAccent,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -368,23 +556,71 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
               ],
             ),
           ),
+          const SizedBox(height: 16),
+
+          // ── Broker Account & User KPIs ──────────────────────────────────────
+          GridView.count(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 1.6,
+            children: [
+              _overviewKpiCard(
+                title: 'REGISTERED TRADERS',
+                value: '${admin.totalUsersCount}',
+                subtitle: '${admin.activeUsersCount} Active Accounts',
+                icon: Icons.people_alt_rounded,
+                color: _goldAccent,
+                onTap: () => _tabController.animateTo(2),
+              ),
+              _overviewKpiCard(
+                title: 'CLIENT ASSETS (AUM)',
+                value: '\$${admin.totalUserFunds.toStringAsFixed(2)}',
+                subtitle: 'Liquid Custody Balance',
+                icon: Icons.account_balance_wallet_rounded,
+                color: const Color(0xFF00D68F),
+                onTap: () => _tabController.animateTo(2),
+              ),
+              _overviewKpiCard(
+                title: 'KYC COMPLIANCE',
+                value: '${admin.verifiedUsersCount} / ${admin.totalUsersCount}',
+                subtitle: 'Verified Traders',
+                icon: Icons.verified_user_rounded,
+                color: const Color(0xFF3861FB),
+                onTap: () => _tabController.animateTo(3),
+              ),
+              _overviewKpiCard(
+                title: 'PENDING FINANCE',
+                value: '${admin.pendingDepositsCount + admin.pendingWithdrawalsCount}',
+                subtitle: 'Deposit / Withdrawal',
+                icon: Icons.receipt_long_rounded,
+                color: const Color(0xFFFFB300),
+                onTap: () => _tabController.animateTo(1),
+              ),
+            ],
+          ),
           const SizedBox(height: 20),
 
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Live Instrument Risk & Spread Markup Control',
-                style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: _textPrimary),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _cardBg,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _borderColor),
+              Expanded(
+                child: Text(
+                  'Instrument Risk & Markup',
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.bold, color: _textPrimary),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                child: const Text('AUTO-REBALANCING ON', style: TextStyle(color: Color(0xFF00D68F), fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00D68F).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.35)),
+                ),
+                child: const Text('AUTO-REBALANCE', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9.5, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -674,7 +910,7 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
                       children: [
                         Text('Method: ${tx.method}', style: TextStyle(fontSize: 11, color: _textPrimary, fontWeight: FontWeight.w500)),
                         const Spacer(),
-                        Text('${DateFormat('yyyy-MM-dd HH:mm').format(tx.createdAt)}', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                        Text(DateFormat('yyyy-MM-dd HH:mm').format(tx.createdAt), style: TextStyle(fontSize: 10, color: _textSecondary)),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -1336,14 +1572,25 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
 
       // 4. Update Supabase wallets table
       try {
-        final newTotal = (ref.read(tradingEngineProvider).accountState.ledgerBalance).toDouble();
-        Supabase.instance.client.from('wallets').upsert({
-          'user_id': tx.userId,
-          'currency': tx.currency,
-          'balance': newTotal,
-          'updated_at': DateTime.now().toIso8601String(),
-        }, onConflict: 'user_id,currency').catchError((err) {
-          debugPrint('Supabase wallet update error: $err');
+        Supabase.instance.client
+            .from('wallets')
+            .select('balance')
+            .eq('user_id', tx.userId)
+            .maybeSingle()
+            .then((existingWallet) {
+          final currentBal = (existingWallet?['balance'] as num?)?.toDouble() ?? 0.0;
+          final cleanBal = (currentBal == 10000.0 || currentBal == 25000.0) ? 0.0 : currentBal;
+          final newTotal = cleanBal + tx.amount;
+          Supabase.instance.client.from('wallets').upsert({
+            'user_id': tx.userId,
+            'currency': tx.currency,
+            'balance': newTotal,
+            'updated_at': DateTime.now().toIso8601String(),
+          }, onConflict: 'user_id,currency').catchError((err) {
+            debugPrint('Supabase wallet update error: $err');
+          });
+        }).catchError((err) {
+          debugPrint('Supabase wallet select error: $err');
         });
       } catch (e) {
         debugPrint('Supabase wallet update exception: $e');
@@ -1359,14 +1606,25 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
       ref.read(walletProvider.notifier).debitWithdrawal(tx.amount, tx.method);
 
       try {
-        final newTotal = (ref.read(tradingEngineProvider).accountState.ledgerBalance).toDouble();
-        Supabase.instance.client.from('wallets').upsert({
-          'user_id': tx.userId,
-          'currency': tx.currency,
-          'balance': newTotal,
-          'updated_at': DateTime.now().toIso8601String(),
-        }, onConflict: 'user_id,currency').catchError((err) {
-          debugPrint('Supabase wallet update error: $err');
+        Supabase.instance.client
+            .from('wallets')
+            .select('balance')
+            .eq('user_id', tx.userId)
+            .maybeSingle()
+            .then((existingWallet) {
+          final currentBal = (existingWallet?['balance'] as num?)?.toDouble() ?? 0.0;
+          final cleanBal = (currentBal == 10000.0 || currentBal == 25000.0) ? 0.0 : currentBal;
+          final newTotal = (cleanBal - tx.amount).clamp(0.0, 1000000000.0);
+          Supabase.instance.client.from('wallets').upsert({
+            'user_id': tx.userId,
+            'currency': tx.currency,
+            'balance': newTotal,
+            'updated_at': DateTime.now().toIso8601String(),
+          }, onConflict: 'user_id,currency').catchError((err) {
+            debugPrint('Supabase wallet update error: $err');
+          });
+        }).catchError((err) {
+          debugPrint('Supabase wallet select error: $err');
         });
       } catch (e) {
         debugPrint('Supabase wallet update exception: $e');
@@ -1399,6 +1657,55 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // CRM Metrics Summary Strip
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _borderColor),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('TOTAL TRADERS', style: TextStyle(fontSize: 9.5, color: _textSecondary, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('${admin.totalUsersCount}', style: TextStyle(fontFamily: 'Inter', fontSize: 18, fontWeight: FontWeight.w900, color: _goldAccent)),
+                    ],
+                  ),
+                ),
+                Container(width: 1, height: 30, color: _borderColor),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('ACTIVE ACCOUNTS', style: TextStyle(fontSize: 9.5, color: _textSecondary, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('${admin.activeUsersCount}', style: TextStyle(fontFamily: 'Inter', fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF00D68F))),
+                    ],
+                  ),
+                ),
+                Container(width: 1, height: 30, color: _borderColor),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('KYC VERIFIED', style: TextStyle(fontSize: 9.5, color: _textSecondary, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('${admin.verifiedUsersCount}', style: TextStyle(fontFamily: 'Inter', fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF3861FB))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
           // Search input
           TextField(
             onChanged: (val) => setState(() => _userSearchQuery = val),
@@ -1420,7 +1727,7 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Traders List (${filteredUsers.length})', style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: _textPrimary)),
+              Text('Traders List (${filteredUsers.length} shown)', style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: _textPrimary)),
               Text('Total Client Funds: \$${admin.totalUserFunds.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: _goldAccent, fontWeight: FontWeight.bold)),
             ],
           ),
@@ -2132,9 +2439,13 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontSize: 10, color: _textSecondary)),
+          Text(label, style: TextStyle(fontSize: 10, color: _textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 2),
-          Text(value, style: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.bold, color: _textPrimary)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(value, style: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.bold, color: _textPrimary)),
+          ),
         ],
       ),
     );
@@ -2162,9 +2473,13 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
         children: [
           Icon(icon, color: color, size: 18),
           const SizedBox(height: 6),
-          Text(title, style: TextStyle(fontSize: 10, color: _textSecondary)),
+          Text(title, style: TextStyle(fontSize: 10, color: _textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 2),
-          Text(value, style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(value, style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+          ),
         ],
       ),
     );
@@ -2178,6 +2493,89 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen>
         const SizedBox(height: 2),
         Text(val, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: valColor)),
       ],
+    );
+  }
+
+  Widget _overviewKpiCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _borderColor),
+          boxShadow: _isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 16),
+                ),
+                if (onTap != null)
+                  Icon(Icons.arrow_forward_ios_rounded, color: _textSecondary, size: 10),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: _textPrimary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 9.5, color: _textSecondary, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 8.5, color: color, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

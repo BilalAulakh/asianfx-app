@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:decimal/decimal.dart';
+import 'package:dio/dio.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/math/money_math.dart';
 import '../../domain/entities/trading_entities.dart';
@@ -15,12 +16,54 @@ class MarketFeedService {
   final StreamController<InstrumentEntity> _tickController = StreamController<InstrumentEntity>.broadcast();
   Stream<InstrumentEntity> get tickStream => _tickController.stream;
 
+  final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 8),
+    receiveTimeout: const Duration(seconds: 8),
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    },
+  ));
+
   StreamSubscription? _binanceTickSub;
   StreamSubscription? _binanceKlineSub;
   Timer? _liveTickTimer;
+  Timer? _liveMarketSyncTimer;
 
   final Map<String, List<CandleStickModel>> _candleHistory = {};
   final Map<String, InstrumentEntity> _instruments = {};
+
+  static const Map<String, String> _appToYahooSymbol = {
+    'XAU/USD': 'GC=F',
+    'XAG/USD': 'SI=F',
+    'XPT/USD': 'PL=F',
+    'WTI/USD': 'CL=F',
+    'BRENT/USD': 'BZ=F',
+    'NGAS/USD': 'NG=F',
+    'US30/USD': '^DJI',
+    'NAS100/USD': '^IXIC',
+    'SPX500/USD': '^GSPC',
+    'GER40/EUR': '^GDAXI',
+    'UK100/GBP': '^FTSE',
+    'JP225/USD': '^N225',
+    'AAPL/USD': 'AAPL',
+    'NVDA/USD': 'NVDA',
+    'TSLA/USD': 'TSLA',
+    'AMZN/USD': 'AMZN',
+    'MSFT/USD': 'MSFT',
+    'GOOGL/USD': 'GOOGL',
+    'EUR/USD': 'EURUSD=X',
+    'GBP/USD': 'GBPUSD=X',
+    'USD/JPY': 'JPY=X',
+    'USD/CHF': 'CHF=X',
+    'AUD/USD': 'AUDUSD=X',
+    'USD/CAD': 'CAD=X',
+    'NZD/USD': 'NZDUSD=X',
+    'USD/PKR': 'PKR=X',
+    'USD/INR': 'INR=X',
+    'USD/TRY': 'TRY=X',
+    'USD/SGD': 'SGD=X',
+    'USD/AED': 'AED=X',
+  };
 
   // Dealer Spread Markup Map (Symbol -> pips)
   final Map<String, int> _spreadMarkupMap = {
@@ -68,7 +111,7 @@ class MarketFeedService {
 
     // Metals
     'XAU/USD': 15,
-    'XAG/USD': 18,
+    'XAG/USD': 3,
     'XPT/USD': 25,
 
     // Commodities
@@ -113,56 +156,54 @@ class MarketFeedService {
 
   void _initializeFeed() {
     // ── 1. FOREX MAJOR & CROSS PAIRS ──────────────────────────────────────────
-    _addInst('EUR/USD', 'Euro vs US Dollar', 'forex', 1.0845, 1.0847, 4, AppConstants.contractSizeForex, 0.18, 1.0890, 1.0815, 450000, true);
-    _addInst('GBP/USD', 'British Pound vs US Dollar', 'forex', 1.2980, 1.2983, 4, AppConstants.contractSizeForex, 0.35, 1.3040, 1.2925, 380000, true);
-    _addInst('USD/JPY', 'US Dollar vs Japanese Yen', 'forex', 153.40, 153.43, 2, AppConstants.contractSizeForex, -0.22, 154.10, 152.85, 410000, true);
-    _addInst('USD/CHF', 'US Dollar vs Swiss Franc', 'forex', 0.8870, 0.8873, 4, AppConstants.contractSizeForex, 0.12, 0.8910, 0.8840, 220000, false);
-    _addInst('AUD/USD', 'Australian Dollar vs US Dollar', 'forex', 0.6540, 0.6543, 4, AppConstants.contractSizeForex, 0.45, 0.6590, 0.6495, 290000, false);
-    _addInst('USD/CAD', 'US Dollar vs Canadian Dollar', 'forex', 1.3980, 1.3984, 4, AppConstants.contractSizeForex, -0.15, 1.4030, 1.3940, 260000, false);
-    _addInst('NZD/USD', 'New Zealand Dollar vs US Dollar', 'forex', 0.5890, 0.5894, 4, AppConstants.contractSizeForex, 0.28, 0.5930, 0.5850, 180000, false);
-    _addInst('EUR/GBP', 'Euro vs British Pound', 'forex', 0.8355, 0.8358, 4, AppConstants.contractSizeForex, -0.11, 0.8390, 0.8320, 210000, false);
-    _addInst('EUR/JPY', 'Euro vs Japanese Yen', 'forex', 166.35, 166.39, 2, AppConstants.contractSizeForex, -0.08, 167.20, 165.70, 320000, false);
-    _addInst('GBP/JPY', 'British Pound vs Japanese Yen', 'forex', 199.10, 199.15, 2, AppConstants.contractSizeForex, 0.15, 200.20, 198.30, 340000, false);
-    _addInst('AUD/CAD', 'Australian Dollar vs Canadian Dollar', 'forex', 0.9150, 0.9154, 4, AppConstants.contractSizeForex, 0.10, 0.9190, 0.9120, 190000, false);
-    _addInst('AUD/CHF', 'Australian Dollar vs Swiss Franc', 'forex', 0.5800, 0.5804, 4, AppConstants.contractSizeForex, 0.22, 0.5835, 0.5770, 160000, false);
-    _addInst('AUD/JPY', 'Australian Dollar vs Japanese Yen', 'forex', 100.30, 100.34, 2, AppConstants.contractSizeForex, 0.35, 100.85, 99.80, 240000, false);
-    _addInst('AUD/NZD', 'Australian Dollar vs New Zealand Dollar', 'forex', 1.1105, 1.1109, 4, AppConstants.contractSizeForex, 0.08, 1.1145, 1.1070, 150000, false);
-    _addInst('CAD/CHF', 'Canadian Dollar vs Swiss Franc', 'forex', 0.6345, 0.6349, 4, AppConstants.contractSizeForex, -0.05, 0.6380, 0.6315, 140000, false);
-    _addInst('CAD/JPY', 'Canadian Dollar vs Japanese Yen', 'forex', 109.70, 109.74, 2, AppConstants.contractSizeForex, 0.18, 110.30, 109.20, 175000, false);
-    _addInst('CHF/JPY', 'Swiss Franc vs Japanese Yen', 'forex', 172.90, 172.94, 2, AppConstants.contractSizeForex, -0.12, 173.60, 172.20, 185000, false);
-    _addInst('EUR/AUD', 'Euro vs Australian Dollar', 'forex', 1.6580, 1.6584, 4, AppConstants.contractSizeForex, -0.25, 1.6640, 1.6520, 210000, false);
-    _addInst('EUR/CAD', 'Euro vs Canadian Dollar', 'forex', 1.5160, 1.5164, 4, AppConstants.contractSizeForex, 0.05, 1.5220, 1.5110, 195000, false);
-    _addInst('EUR/CHF', 'Euro vs Swiss Franc', 'forex', 0.9620, 0.9623, 4, AppConstants.contractSizeForex, 0.04, 0.9660, 0.9590, 170000, false);
-    _addInst('EUR/NZD', 'Euro vs New Zealand Dollar', 'forex', 1.8410, 1.8415, 4, AppConstants.contractSizeForex, -0.18, 1.8490, 1.8350, 160000, false);
-    _addInst('GBP/AUD', 'British Pound vs Australian Dollar', 'forex', 1.9840, 1.9845, 4, AppConstants.contractSizeForex, 0.12, 1.9920, 1.9760, 220000, false);
-    _addInst('GBP/CAD', 'British Pound vs Canadian Dollar', 'forex', 1.8140, 1.8145, 4, AppConstants.contractSizeForex, 0.20, 1.8210, 1.8080, 205000, false);
-    _addInst('GBP/CHF', 'British Pound vs Swiss Franc', 'forex', 1.1510, 1.1514, 4, AppConstants.contractSizeForex, 0.14, 1.1560, 1.1470, 180000, false);
-    _addInst('GBP/NZD', 'British Pound vs New Zealand Dollar', 'forex', 2.2030, 2.2036, 4, AppConstants.contractSizeForex, 0.25, 2.2120, 2.1950, 190000, false);
-    _addInst('NZD/CAD', 'New Zealand Dollar vs Canadian Dollar', 'forex', 0.8235, 0.8239, 4, AppConstants.contractSizeForex, -0.06, 0.8280, 0.8190, 140000, false);
-    _addInst('NZD/CHF', 'New Zealand Dollar vs Swiss Franc', 'forex', 0.5225, 0.5229, 4, AppConstants.contractSizeForex, 0.10, 0.5260, 0.5195, 130000, false);
-    _addInst('NZD/JPY', 'New Zealand Dollar vs Japanese Yen', 'forex', 90.35, 90.39, 2, AppConstants.contractSizeForex, 0.22, 90.85, 89.90, 165000, false);
+    _addInst('EUR/USD', 'Euro vs US Dollar', 'forex', 1.1633, 1.1635, 4, AppConstants.contractSizeForex, 0.18, 1.1690, 1.1585, 450000, true);
+    _addInst('GBP/USD', 'British Pound vs US Dollar', 'forex', 1.3549, 1.3552, 4, AppConstants.contractSizeForex, 0.35, 1.3620, 1.3480, 380000, true);
+    _addInst('USD/JPY', 'US Dollar vs Japanese Yen', 'forex', 153.59, 153.62, 2, AppConstants.contractSizeForex, -0.22, 154.30, 152.95, 410000, true);
+    _addInst('XAU/USD', 'Gold vs US Dollar', 'forex', 4333.02, 4333.42, 2, AppConstants.contractSizeGold, -1.53, 4420.00, 4310.00, 248000, true);
+    _addInst('XAG/USD', 'Silver vs US Dollar', 'forex', 63.78, 63.81, 2, AppConstants.contractSizeSilver, -5.19, 67.95, 63.75, 185000, true);
+    _addInst('XPT/USD', 'Platinum vs US Dollar', 'forex', 1045.60, 1046.20, 2, AppConstants.contractSizeGold, 0.85, 1060.00, 1032.50, 48000, false);
+    _addInst('USD/CHF', 'US Dollar vs Swiss Franc', 'forex', 0.8095, 0.8098, 4, AppConstants.contractSizeForex, 0.12, 0.8140, 0.8050, 220000, false);
+    _addInst('AUD/USD', 'Australian Dollar vs US Dollar', 'forex', 0.7221, 0.7224, 4, AppConstants.contractSizeForex, 0.45, 0.7280, 0.7160, 290000, false);
+    _addInst('USD/CAD', 'US Dollar vs Canadian Dollar', 'forex', 1.3795, 1.3798, 4, AppConstants.contractSizeForex, -0.15, 1.3850, 1.3740, 260000, false);
+    _addInst('NZD/USD', 'New Zealand Dollar vs US Dollar', 'forex', 0.5845, 0.5849, 4, AppConstants.contractSizeForex, 0.28, 0.5890, 0.5790, 180000, false);
+    _addInst('EUR/GBP', 'Euro vs British Pound', 'forex', 0.8585, 0.8588, 4, AppConstants.contractSizeForex, -0.11, 0.8620, 0.8540, 210000, false);
+    _addInst('EUR/JPY', 'Euro vs Japanese Yen', 'forex', 178.65, 178.69, 2, AppConstants.contractSizeForex, -0.08, 179.40, 177.80, 320000, false);
+    _addInst('GBP/JPY', 'British Pound vs Japanese Yen', 'forex', 208.10, 208.15, 2, AppConstants.contractSizeForex, 0.15, 209.20, 207.10, 340000, false);
+    _addInst('AUD/CAD', 'Australian Dollar vs Canadian Dollar', 'forex', 0.9960, 0.9964, 4, AppConstants.contractSizeForex, 0.10, 1.0020, 0.9910, 190000, false);
+    _addInst('AUD/CHF', 'Australian Dollar vs Swiss Franc', 'forex', 0.5845, 0.5849, 4, AppConstants.contractSizeForex, 0.22, 0.5890, 0.5800, 160000, false);
+    _addInst('AUD/JPY', 'Australian Dollar vs Japanese Yen', 'forex', 110.85, 110.89, 2, AppConstants.contractSizeForex, 0.35, 111.40, 110.20, 240000, false);
+    _addInst('AUD/NZD', 'Australian Dollar vs New Zealand Dollar', 'forex', 1.2350, 1.2354, 4, AppConstants.contractSizeForex, 0.08, 1.2410, 1.2290, 150000, false);
+    _addInst('CAD/CHF', 'Canadian Dollar vs Swiss Franc', 'forex', 0.5865, 0.5869, 4, AppConstants.contractSizeForex, -0.05, 0.5910, 0.5820, 140000, false);
+    _addInst('CAD/JPY', 'Canadian Dollar vs Japanese Yen', 'forex', 111.30, 111.34, 2, AppConstants.contractSizeForex, 0.18, 112.00, 110.70, 175000, false);
+    _addInst('CHF/JPY', 'Swiss Franc vs Japanese Yen', 'forex', 189.70, 189.74, 2, AppConstants.contractSizeForex, -0.12, 190.50, 188.80, 185000, false);
+    _addInst('EUR/AUD', 'Euro vs Australian Dollar', 'forex', 1.6110, 1.6114, 4, AppConstants.contractSizeForex, -0.25, 1.6180, 1.6040, 210000, false);
+    _addInst('EUR/CAD', 'Euro vs Canadian Dollar', 'forex', 1.6045, 1.6049, 4, AppConstants.contractSizeForex, 0.05, 1.6120, 1.5980, 195000, false);
+    _addInst('EUR/CHF', 'Euro vs Swiss Franc', 'forex', 0.9415, 0.9418, 4, AppConstants.contractSizeForex, 0.04, 0.9460, 0.9370, 170000, false);
+    _addInst('EUR/NZD', 'Euro vs New Zealand Dollar', 'forex', 1.9900, 1.9905, 4, AppConstants.contractSizeForex, -0.18, 1.9980, 1.9820, 160000, false);
+    _addInst('GBP/AUD', 'British Pound vs Australian Dollar', 'forex', 1.8760, 1.8765, 4, AppConstants.contractSizeForex, 0.12, 1.8840, 1.8680, 220000, false);
+    _addInst('GBP/CAD', 'British Pound vs Canadian Dollar', 'forex', 1.8685, 1.8690, 4, AppConstants.contractSizeForex, 0.20, 1.8760, 1.8610, 205000, false);
+    _addInst('GBP/CHF', 'British Pound vs Swiss Franc', 'forex', 1.0965, 1.0969, 4, AppConstants.contractSizeForex, 0.14, 1.1020, 1.0910, 180000, false);
+    _addInst('GBP/NZD', 'British Pound vs New Zealand Dollar', 'forex', 2.3180, 2.3186, 4, AppConstants.contractSizeForex, 0.25, 2.3270, 2.3090, 190000, false);
+    _addInst('NZD/CAD', 'New Zealand Dollar vs Canadian Dollar', 'forex', 0.8060, 0.8064, 4, AppConstants.contractSizeForex, -0.06, 0.8110, 0.8010, 140000, false);
+    _addInst('NZD/CHF', 'New Zealand Dollar vs Swiss Franc', 'forex', 0.4730, 0.4734, 4, AppConstants.contractSizeForex, 0.10, 0.4770, 0.4690, 130000, false);
+    _addInst('NZD/JPY', 'New Zealand Dollar vs Japanese Yen', 'forex', 89.75, 89.79, 2, AppConstants.contractSizeForex, 0.22, 90.30, 89.20, 165000, false);
 
     // Asian & Global Emerging Currencies
-    _addInst('USD/SGD', 'US Dollar vs Singapore Dollar', 'forex', 1.3480, 1.3484, 4, AppConstants.contractSizeForex, -0.05, 1.3520, 1.3440, 195000, false);
-    _addInst('USD/HKD', 'US Dollar vs Hong Kong Dollar', 'forex', 7.7820, 7.7825, 4, AppConstants.contractSizeForex, 0.02, 7.7850, 7.7790, 230000, false);
-    _addInst('USD/TRY', 'US Dollar vs Turkish Lira', 'forex', 34.25, 34.30, 2, AppConstants.contractSizeForex, 0.85, 34.60, 33.95, 110000, false);
-    _addInst('USD/ZAR', 'US Dollar vs South African Rand', 'forex', 18.15, 18.18, 2, AppConstants.contractSizeForex, -0.45, 18.35, 17.98, 145000, false);
-    _addInst('USD/MXN', 'US Dollar vs Mexican Peso', 'forex', 19.85, 19.88, 2, AppConstants.contractSizeForex, 0.65, 20.10, 19.65, 170000, false);
-    _addInst('USD/SEK', 'US Dollar vs Swedish Krona', 'forex', 10.65, 10.68, 2, AppConstants.contractSizeForex, 0.15, 10.78, 10.55, 125000, false);
-    _addInst('USD/NOK', 'US Dollar vs Norwegian Krone', 'forex', 10.95, 10.98, 2, AppConstants.contractSizeForex, -0.10, 11.08, 10.85, 130000, false);
+    _addInst('USD/SGD', 'US Dollar vs Singapore Dollar', 'forex', 1.3280, 1.3284, 4, AppConstants.contractSizeForex, -0.05, 1.3320, 1.3240, 195000, false);
+    _addInst('USD/HKD', 'US Dollar vs Hong Kong Dollar', 'forex', 7.7780, 7.7785, 4, AppConstants.contractSizeForex, 0.02, 7.7810, 7.7750, 230000, false);
+    _addInst('USD/TRY', 'US Dollar vs Turkish Lira', 'forex', 48.51, 48.56, 2, AppConstants.contractSizeForex, 0.85, 48.90, 48.10, 110000, false);
+    _addInst('USD/ZAR', 'US Dollar vs South African Rand', 'forex', 18.25, 18.28, 2, AppConstants.contractSizeForex, -0.45, 18.45, 18.05, 145000, false);
+    _addInst('USD/MXN', 'US Dollar vs Mexican Peso', 'forex', 20.35, 20.38, 2, AppConstants.contractSizeForex, 0.65, 20.60, 20.10, 170000, false);
+    _addInst('USD/SEK', 'US Dollar vs Swedish Krona', 'forex', 10.45, 10.48, 2, AppConstants.contractSizeForex, 0.15, 10.58, 10.35, 125000, false);
+    _addInst('USD/NOK', 'US Dollar vs Norwegian Krone', 'forex', 10.75, 10.78, 2, AppConstants.contractSizeForex, -0.10, 10.88, 10.65, 130000, false);
     _addInst('USD/AED', 'US Dollar vs UAE Dirham', 'forex', 3.6725, 3.6730, 4, AppConstants.contractSizeForex, 0.01, 3.6735, 3.6720, 280000, false);
-    _addInst('USD/INR', 'US Dollar vs Indian Rupee', 'forex', 84.10, 84.15, 2, AppConstants.contractSizeForex, 0.08, 84.30, 83.95, 210000, false);
-    _addInst('USD/PKR', 'US Dollar vs Pakistani Rupee', 'forex', 278.50, 278.80, 2, AppConstants.contractSizeForex, 0.12, 279.20, 277.90, 350000, true);
+    _addInst('USD/INR', 'US Dollar vs Indian Rupee', 'forex', 95.12, 95.17, 2, AppConstants.contractSizeForex, 0.08, 95.40, 94.80, 210000, false);
+    _addInst('USD/PKR', 'US Dollar vs Pakistani Rupee', 'forex', 277.28, 277.58, 2, AppConstants.contractSizeForex, 0.12, 278.50, 276.80, 350000, true);
 
-    // ── 2. METALS ─────────────────────────────────────────────────────────────
-    _addInst('XAU/USD', 'Gold vs US Dollar', 'metals', 4479.50, 4479.90, 2, AppConstants.contractSizeGold, 1.45, 4517.76, 4351.92, 184200, true);
-    _addInst('XAG/USD', 'Silver vs US Dollar', 'metals', 32.40, 32.43, 2, AppConstants.contractSizeSilver, 2.15, 33.10, 31.80, 120400, true);
-    _addInst('XPT/USD', 'Platinum vs US Dollar', 'metals', 985.60, 986.20, 2, AppConstants.contractSizeGold, 0.85, 998.00, 974.50, 48000, false);
-
-    // ── 3. COMMODITIES (ENERGY) ───────────────────────────────────────────────
-    _addInst('WTI/USD', 'US Crude Oil Spot (WTI)', 'commodities', 72.85, 72.90, 2, AppConstants.contractSizeCommodity, 1.65, 74.20, 71.50, 215000, true);
-    _addInst('BRENT/USD', 'Brent Crude Oil Spot', 'commodities', 76.40, 76.45, 2, AppConstants.contractSizeCommodity, 1.42, 77.80, 75.10, 195000, false);
-    _addInst('NGAS/USD', 'Natural Gas Spot', 'commodities', 2.845, 2.852, 3, AppConstants.contractSizeCommodity, -2.10, 2.950, 2.780, 135000, false);
+    // ── 2. COMMODITIES (ENERGY) ───────────────────────────────────────────────
+    _addInst('WTI/USD', 'US Crude Oil Spot (WTI)', 'commodities', 102.00, 102.05, 2, AppConstants.contractSizeCommodity, 5.53, 104.50, 99.80, 315000, true);
+    _addInst('BRENT/USD', 'Brent Crude Oil Spot', 'commodities', 106.38, 106.43, 2, AppConstants.contractSizeCommodity, 5.10, 108.80, 104.10, 285000, false);
+    _addInst('NGAS/USD', 'Natural Gas Spot', 'commodities', 3.450, 3.458, 3, AppConstants.contractSizeCommodity, -2.10, 3.580, 3.380, 135000, false);
 
     // ── 4. CRYPTOCURRENCIES ───────────────────────────────────────────────────
     _addInst('BTC/USD', 'Bitcoin vs US Dollar', 'crypto', 96420.00, 96435.00, 2, AppConstants.contractSizeCrypto, 3.82, 98200.00, 94500.00, 54120, true);
@@ -199,7 +240,7 @@ class MarketFeedService {
       _candleHistory[sym] = _generateRealisticCandles(_instruments[sym]!.bid.toDouble());
     }
 
-    // 3. Connect real Binance feed
+    // 3. Connect real Binance feed & Live Forex feed
     _connectRealBinanceFeed();
 
     // 4. Start live micro-tick engine for continuous institutional market activity
@@ -254,6 +295,185 @@ class MarketFeedService {
     _binanceKlineSub = _binanceSource.klineStream.listen((entry) {
       _applyIncomingKline(entry.key, entry.value);
     });
+
+    // Initial Live Global Market Sync (Forex, Metals, Commodities, Stocks, Indices)
+    _syncAllLiveMarkets();
+
+    // Periodic Continuous Live Global Market Sync every 15 seconds
+    _liveMarketSyncTimer?.cancel();
+    _liveMarketSyncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _syncAllLiveMarkets();
+    });
+  }
+
+  Future<void> _syncAllLiveMarkets() async {
+    // 1. Live Forex Rates from Open Exchange API
+    _fetchLiveForexRates();
+
+    // 2. Live Precious Metals, Commodities, Stocks & Indices from Real Global Financial Feed
+    const priorityLiveSymbols = [
+      'XAU/USD', 'XAG/USD', 'XPT/USD',
+      'WTI/USD', 'BRENT/USD', 'NGAS/USD',
+      'US30/USD', 'NAS100/USD', 'SPX500/USD', 'GER40/EUR', 'JP225/USD',
+      'AAPL/USD', 'NVDA/USD', 'TSLA/USD', 'AMZN/USD', 'MSFT/USD', 'GOOGL/USD',
+    ];
+
+    for (final sym in priorityLiveSymbols) {
+      final yahooSym = _appToYahooSymbol[sym];
+      if (yahooSym != null) {
+        _fetchYahooLiveQuote(sym, yahooSym);
+      }
+    }
+  }
+
+  Future<void> _fetchLiveForexRates() async {
+    try {
+      final res = await _dio.get('https://open.er-api.com/v6/latest/USD');
+      if (res.statusCode == 200 && res.data != null && res.data['rates'] != null) {
+        final rates = res.data['rates'] as Map<String, dynamic>;
+
+        double? getRate(String code) {
+          final val = rates[code];
+          if (val is num) return val.toDouble();
+          return null;
+        }
+
+        final eur = getRate('EUR');
+        final gbp = getRate('GBP');
+        final jpy = getRate('JPY');
+        final chf = getRate('CHF');
+        final cad = getRate('CAD');
+        final aud = getRate('AUD');
+        final nzd = getRate('NZD');
+        final pkr = getRate('PKR');
+        final inr = getRate('INR');
+        final tryRate = getRate('TRY');
+        final sgd = getRate('SGD');
+        final hkd = getRate('HKD');
+        final zar = getRate('ZAR');
+        final mxn = getRate('MXN');
+        final sek = getRate('SEK');
+        final nok = getRate('NOK');
+        final aed = getRate('AED');
+
+        void updateFx(String sym, double? price, int decimals) {
+          if (price == null || price <= 0) return;
+          final inst = _instruments[sym];
+          if (inst == null) return;
+          final pipStep = pow(10, -decimals).toDouble();
+          final markup = _spreadMarkupMap[sym] ?? 12;
+          final bid = price;
+          final ask = price + (markup * pipStep);
+
+          final high = max(inst.high24h.toDouble(), ask);
+          final low = min(inst.low24h.toDouble(), bid);
+
+          final updated = inst.copyWith(
+            rawBid: MoneyMath.toDec(bid),
+            rawAsk: MoneyMath.toDec(ask),
+            high24h: MoneyMath.toDec(high),
+            low24h: MoneyMath.toDec(low),
+          );
+          _instruments[sym] = updated;
+          _tickController.add(updated);
+        }
+
+        // Direct USD Major & Exotic Pairs
+        if (eur != null) updateFx('EUR/USD', 1.0 / eur, 4);
+        if (gbp != null) updateFx('GBP/USD', 1.0 / gbp, 4);
+        if (aud != null) updateFx('AUD/USD', 1.0 / aud, 4);
+        if (nzd != null) updateFx('NZD/USD', 1.0 / nzd, 4);
+        if (jpy != null) updateFx('USD/JPY', jpy, 2);
+        if (chf != null) updateFx('USD/CHF', chf, 4);
+        if (cad != null) updateFx('USD/CAD', cad, 4);
+        if (pkr != null) updateFx('USD/PKR', pkr, 2);
+        if (inr != null) updateFx('USD/INR', inr, 2);
+        if (tryRate != null) updateFx('USD/TRY', tryRate, 2);
+        if (sgd != null) updateFx('USD/SGD', sgd, 4);
+        if (hkd != null) updateFx('USD/HKD', hkd, 4);
+        if (zar != null) updateFx('USD/ZAR', zar, 2);
+        if (mxn != null) updateFx('USD/MXN', mxn, 2);
+        if (sek != null) updateFx('USD/SEK', sek, 2);
+        if (nok != null) updateFx('USD/NOK', nok, 2);
+        if (aed != null) updateFx('USD/AED', aed, 4);
+
+        // Cross Currency Pairs
+        if (eur != null && gbp != null) updateFx('EUR/GBP', gbp / eur, 4);
+        if (eur != null && jpy != null) updateFx('EUR/JPY', jpy / eur, 2);
+        if (gbp != null && jpy != null) updateFx('GBP/JPY', jpy / gbp, 2);
+        if (aud != null && cad != null) updateFx('AUD/CAD', cad / aud, 4);
+        if (aud != null && chf != null) updateFx('AUD/CHF', chf / aud, 4);
+        if (aud != null && jpy != null) updateFx('AUD/JPY', jpy / aud, 2);
+        if (aud != null && nzd != null) updateFx('AUD/NZD', nzd / aud, 4);
+        if (cad != null && chf != null) updateFx('CAD/CHF', chf / cad, 4);
+        if (cad != null && jpy != null) updateFx('CAD/JPY', jpy / cad, 2);
+        if (chf != null && jpy != null) updateFx('CHF/JPY', jpy / chf, 2);
+        if (eur != null && aud != null) updateFx('EUR/AUD', aud / eur, 4);
+        if (eur != null && cad != null) updateFx('EUR/CAD', cad / eur, 4);
+        if (eur != null && chf != null) updateFx('EUR/CHF', chf / eur, 4);
+        if (eur != null && nzd != null) updateFx('EUR/NZD', nzd / eur, 4);
+        if (gbp != null && aud != null) updateFx('GBP/AUD', aud / gbp, 4);
+        if (gbp != null && cad != null) updateFx('GBP/CAD', cad / gbp, 4);
+        if (gbp != null && chf != null) updateFx('GBP/CHF', chf / gbp, 4);
+        if (gbp != null && nzd != null) updateFx('GBP/NZD', nzd / gbp, 4);
+        if (nzd != null && cad != null) updateFx('NZD/CAD', cad / nzd, 4);
+        if (nzd != null && chf != null) updateFx('NZD/CHF', chf / nzd, 4);
+        if (nzd != null && jpy != null) updateFx('NZD/JPY', jpy / nzd, 2);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _fetchYahooLiveQuote(String appSymbol, String yahooSymbol) async {
+    try {
+      final res = await _dio.get('https://query1.finance.yahoo.com/v8/finance/chart/$yahooSymbol?interval=1m&range=1d');
+      if (res.statusCode == 200 && res.data != null) {
+        final chart = res.data['chart'];
+        final result = chart?['result'] as List?;
+        if (result != null && result.isNotEmpty) {
+          final meta = result[0]['meta'] as Map<String, dynamic>?;
+          if (meta != null) {
+            final priceNum = meta['regularMarketPrice'] ?? meta['chartPreviousClose'];
+            if (priceNum is num && priceNum > 0) {
+              final inst = _instruments[appSymbol];
+              if (inst == null) return;
+
+              final curPrice = priceNum.toDouble();
+              final prevClose = (meta['previousClose'] ?? meta['chartPreviousClose'] ?? curPrice) as num;
+              final high24 = (meta['regularMarketDayHigh'] ?? curPrice) as num;
+              final low24 = (meta['regularMarketDayLow'] ?? curPrice) as num;
+              final change24h = prevClose > 0 ? ((curPrice - prevClose) / prevClose) * 100 : 0.0;
+
+              final pipStep = pow(10, -inst.decimals).toDouble();
+              final markup = _spreadMarkupMap[appSymbol] ?? 10;
+              final bid = curPrice;
+              final ask = curPrice + (markup * pipStep);
+
+              final updated = inst.copyWith(
+                rawBid: MoneyMath.toDec(bid),
+                rawAsk: MoneyMath.toDec(ask),
+                high24h: MoneyMath.toDec(high24.toDouble()),
+                low24h: MoneyMath.toDec(low24.toDouble()),
+                change24h: double.parse(change24h.toStringAsFixed(2)),
+              );
+
+              _instruments[appSymbol] = updated;
+              _tickController.add(updated);
+
+              // Update latest candle close for this symbol
+              final symCandles = _candleHistory[appSymbol];
+              if (symCandles != null && symCandles.isNotEmpty) {
+                final last = symCandles.last;
+                symCandles[symCandles.length - 1] = last.copyWith(
+                  close: curPrice,
+                  high: max(last.high, curPrice),
+                  low: min(last.low, curPrice),
+                );
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   void _startLiveTickSimulation() {
@@ -263,15 +483,26 @@ class MarketFeedService {
       final symbols = _instruments.keys.toList();
       if (symbols.isEmpty) return;
 
-      // Pick 2-4 random instruments per second to update live
+      // Ensure key institutional instruments (Gold, Silver, Majors) always tick live actively
+      final targetSymbols = <String>{'XAU/USD', 'XAG/USD', 'EUR/USD', 'GBP/USD'};
+      const extraPriority = ['BTC/USD', 'ETH/USD', 'USD/JPY', 'SOL/USD'];
+
+      // Add extra priority symbols per tick
+      for (int p = 0; p < 2; p++) {
+        targetSymbols.add(extraPriority[random.nextInt(extraPriority.length)]);
+      }
+      // Pick 2-4 random symbols across all other markets
       final count = 2 + random.nextInt(3);
       for (int k = 0; k < count; k++) {
-        final sym = symbols[random.nextInt(symbols.length)];
+        targetSymbols.add(symbols[random.nextInt(symbols.length)]);
+      }
+
+      for (final sym in targetSymbols) {
         final inst = _instruments[sym];
         if (inst == null) continue;
 
         final pipStep = pow(10, -inst.decimals).toDouble();
-        final delta = (random.nextDouble() - 0.495) * (pipStep * (inst.category == 'crypto' ? 4 : 2));
+        final delta = (random.nextDouble() - 0.495) * (pipStep * (inst.category == 'crypto' ? 4 : (inst.symbol.contains('XAG') ? 3 : 2)));
         final newBidNum = max(pipStep, inst.bid.toDouble() + delta);
         final spreadAmount = (inst.spreadMarkupPips * pipStep);
         final newAskNum = newBidNum + spreadAmount;
@@ -383,18 +614,37 @@ class MarketFeedService {
 
   InstrumentEntity? getInstrument(String symbol) => _instruments[symbol];
 
+  int getHistoryCountForTimeframe(ChartTimeframe tf) {
+    switch (tf) {
+      case ChartTimeframe.d1:
+        return 1095; // 3 full years of daily history (2023-2026)
+      case ChartTimeframe.h4:
+        return 1200; // ~7 months of 4-hour candles
+      case ChartTimeframe.h1:
+        return 1440; // 2 full months of 1-hour candles
+      case ChartTimeframe.m30:
+        return 960; // 20 days of 30-min candles
+      case ChartTimeframe.m15:
+        return 960; // 10 days of 15-min candles
+      case ChartTimeframe.m5:
+        return 864; // 3 days of 5-min candles
+      case ChartTimeframe.m1:
+        return 720; // 12 hours of 1-min candles
+    }
+  }
+
   List<CandleStickModel> getCandles(String symbol, [ChartTimeframe timeframe = ChartTimeframe.h1]) {
     final key = '${symbol}_${timeframe.name}';
     final inst = _instruments[symbol];
     final curPrice = inst != null ? inst.midPrice.toDouble() : 4480.0;
+    final requiredCount = getHistoryCountForTimeframe(timeframe);
 
     var list = _candleHistory[key];
     if (list == null ||
         list.isEmpty ||
-        list.length > 220 ||
-        (list.last.close - curPrice).abs() / curPrice > 0.015 ||
-        (list.first.close - list.last.close).abs() / curPrice > 0.05) {
-      list = _generateRealisticCandles(curPrice, timeframe, 180);
+        list.length < (requiredCount * 0.7).toInt() ||
+        (list.last.close - curPrice).abs() / curPrice > 0.025) {
+      list = _generateRealisticCandles(curPrice, timeframe, requiredCount);
       _candleHistory[key] = list;
       _candleHistory[symbol] = list;
       _fetchRealKlinesAsync(symbol, timeframe);
@@ -409,34 +659,134 @@ class MarketFeedService {
 
     final inst = _instruments[sym];
     final curPrice = inst != null ? inst.midPrice.toDouble() : 4480.0;
+    final requiredCount = getHistoryCountForTimeframe(tf);
 
-    // Fetch from real Binance source if available
-    final candles = await _binanceSource.fetchKlines(sym, tf, limit: 500);
-    if (candles.isNotEmpty) {
-      _candleHistory[key] = candles;
-      _candleHistory[sym] = candles;
-      return candles;
+    // 1. Fetch from real Binance source if crypto
+    final binanceCandles = await _binanceSource.fetchKlines(sym, tf, limit: 1000);
+    if (binanceCandles.isNotEmpty && binanceCandles.length >= 60) {
+      _candleHistory[key] = binanceCandles;
+      _candleHistory[sym] = binanceCandles;
+      return binanceCandles;
     }
 
-    // High quality continuous realistic candlestick generation anchored directly to current price
+    // 2. Fetch from real Yahoo Finance source for Metals, Commodities, Forex, Stocks, Indices
+    final yahooSym = _appToYahooSymbol[sym];
+    if (yahooSym != null) {
+      final yahooCandles = await _fetchYahooCandles(sym, yahooSym, tf);
+      if (yahooCandles.isNotEmpty && yahooCandles.length >= 20) {
+        _candleHistory[key] = yahooCandles;
+        _candleHistory[sym] = yahooCandles;
+        return yahooCandles;
+      }
+    }
+
+    // 3. High quality continuous realistic candlestick fallback anchored directly to current price
     var existing = _candleHistory[key];
     if (existing == null ||
         existing.isEmpty ||
-        existing.length > 220 ||
-        (existing.last.close - curPrice).abs() / curPrice > 0.015 ||
-        (existing.first.close - existing.last.close).abs() / curPrice > 0.05) {
-      existing = _generateRealisticCandles(curPrice, tf, 180);
+        existing.length < (requiredCount * 0.7).toInt() ||
+        (existing.last.close - curPrice).abs() / curPrice > 0.025) {
+      existing = _generateRealisticCandles(curPrice, tf, requiredCount);
       _candleHistory[key] = existing;
       _candleHistory[sym] = existing;
     }
     return existing;
   }
 
+  Future<List<CandleStickModel>> _fetchYahooCandles(String symbol, String yahooSymbol, ChartTimeframe timeframe) async {
+    try {
+      String interval;
+      String range;
+      switch (timeframe) {
+        case ChartTimeframe.m1:
+          interval = '1m';
+          range = '1d';
+          break;
+        case ChartTimeframe.m5:
+          interval = '5m';
+          range = '5d';
+          break;
+        case ChartTimeframe.m15:
+          interval = '15m';
+          range = '5d';
+          break;
+        case ChartTimeframe.m30:
+          interval = '30m';
+          range = '1mo';
+          break;
+        case ChartTimeframe.h1:
+          interval = '1h';
+          range = '1mo';
+          break;
+        case ChartTimeframe.h4:
+          interval = '1h';
+          range = '3mo';
+          break;
+        case ChartTimeframe.d1:
+          interval = '1d';
+          range = '1y';
+          break;
+      }
+
+      final res = await _dio.get('https://query1.finance.yahoo.com/v8/finance/chart/$yahooSymbol?interval=$interval&range=$range');
+      if (res.statusCode == 200 && res.data != null) {
+        final result = res.data['chart']?['result'] as List?;
+        if (result != null && result.isNotEmpty) {
+          final timestamps = result[0]['timestamp'] as List?;
+          final quote = result[0]['indicators']?['quote']?[0] as Map<String, dynamic>?;
+
+          if (timestamps != null && quote != null) {
+            final opens = quote['open'] as List?;
+            final highs = quote['high'] as List?;
+            final lows = quote['low'] as List?;
+            final closes = quote['close'] as List?;
+            final volumes = quote['volume'] as List?;
+
+            final List<CandleStickModel> list = [];
+            for (int i = 0; i < timestamps.length; i++) {
+              final o = opens != null && i < opens.length ? opens[i] : null;
+              final h = highs != null && i < highs.length ? highs[i] : null;
+              final l = lows != null && i < lows.length ? lows[i] : null;
+              final c = closes != null && i < closes.length ? closes[i] : null;
+              final v = volumes != null && i < volumes.length ? volumes[i] : null;
+
+              if (o is num && h is num && l is num && c is num) {
+                list.add(CandleStickModel(
+                  time: DateTime.fromMillisecondsSinceEpoch((timestamps[i] as int) * 1000),
+                  open: o.toDouble(),
+                  high: h.toDouble(),
+                  low: l.toDouble(),
+                  close: c.toDouble(),
+                  volume: (v is num) ? v.toDouble() : 1000.0,
+                ));
+              }
+            }
+
+            if (list.isNotEmpty) {
+              return list;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
   void _fetchRealKlinesAsync(String symbol, ChartTimeframe timeframe) async {
     try {
       final key = '${symbol}_${timeframe.name}';
-      final candles = await _binanceSource.fetchKlines(symbol, timeframe, limit: 500);
-      if (candles.isNotEmpty) {
+      final yahooSym = _appToYahooSymbol[symbol];
+      if (yahooSym != null) {
+        final yahooCandles = await _fetchYahooCandles(symbol, yahooSym, timeframe);
+        if (yahooCandles.isNotEmpty) {
+          _candleHistory[key] = yahooCandles;
+          _candleHistory[symbol] = yahooCandles;
+          return;
+        }
+      }
+
+      final candles = await _binanceSource.fetchKlines(symbol, timeframe, limit: 1000);
+      if (candles.isNotEmpty && candles.length >= 300) {
         _candleHistory[key] = candles;
         _candleHistory[symbol] = candles;
       }
@@ -489,6 +839,8 @@ class MarketFeedService {
     final n = max(60, count);
 
     // 1. Generate multi-frequency cyclical market swings + Gaussian shock series
+    final macroFreq = max(60.0, n / 7.0);
+    final macroPhase = random.nextDouble() * 2 * pi;
     final wave1Freq = 14.0 + (random.nextDouble() * 8.0);
     final wave2Freq = 32.0 + (random.nextDouble() * 16.0);
     final phase1 = random.nextDouble() * 2 * pi;
@@ -499,9 +851,10 @@ class MarketFeedService {
 
     for (int i = 0; i < n; i++) {
       final shock = (random.nextDouble() + random.nextDouble() + random.nextDouble() - 1.5) * 1.6;
-      final waveDeriv = (cos((i / wave1Freq) * 2 * pi + phase1) * 0.45 +
-                         cos((i / wave2Freq) * 2 * pi + phase2) * 0.35) * barVolatility;
-      accumulated += (shock * barVolatility) + waveDeriv;
+      final macroWave = sin((i / macroFreq) * 2 * pi + macroPhase) * 0.40 * barVolatility;
+      final waveDeriv = (cos((i / wave1Freq) * 2 * pi + phase1) * 0.35 +
+                         cos((i / wave2Freq) * 2 * pi + phase2) * 0.25) * barVolatility;
+      accumulated += (shock * barVolatility) + macroWave + waveDeriv;
       rawPath[i] = accumulated;
     }
 

@@ -187,10 +187,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
             physics: const NeverScrollableScrollPhysics(),
             childAspectRatio: 1.45,
             children: [
+              _kpiCard('Registered Traders', '${admin.totalUsersCount} Users', Icons.people_alt_rounded, const Color(0xFFFFD600)),
               _kpiCard('Total User Funds', '\$${admin.totalUserFunds.toStringAsFixed(2)}', Icons.account_balance_wallet_outlined, const Color(0xFF0ECB81)),
-              _kpiCard('Pending Approvals', '${admin.pendingDepositsCount + admin.pendingWithdrawalsCount + admin.pendingKycCount}', Icons.pending_actions_rounded, const Color(0xFFFFD600)),
+              _kpiCard('Pending Approvals', '${admin.pendingDepositsCount + admin.pendingWithdrawalsCount + admin.pendingKycCount}', Icons.pending_actions_rounded, const Color(0xFFFFB300)),
               _kpiCard('Total Approved In', '\$${admin.totalDeposited.toStringAsFixed(0)}', Icons.arrow_downward_rounded, const Color(0xFF0ECB81)),
-              _kpiCard('Total Approved Out', '\$${admin.totalWithdrawn.toStringAsFixed(0)}', Icons.arrow_upward_rounded, const Color(0xFFF6465D)),
             ],
           ),
 

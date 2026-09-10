@@ -53,14 +53,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (_) {}
   }
 
-  void _handleSupabaseUser(User supaUser) {
+  Future<void> _handleSupabaseUser(User supaUser) async {
     final email = supaUser.email!;
     final meta = supaUser.userMetadata ?? {};
     final isAdmin = email.toLowerCase() == 'admin@asianfx.com' || meta['role'] == 'admin';
     final name = meta['full_name'] as String? ?? (isAdmin ? 'AsianFX Admin' : email.split('@').first.toUpperCase());
     final phone = meta['phone'] as String? ?? '';
-
     final UserRole assignedRole = isAdmin ? UserRole.admin : UserRole.client;
+    final is2Fa = await SecureStorageService.instance.isTwoFactorEnabledForUser(email);
 
     final user = UserEntity(
       id: supaUser.id,
@@ -74,7 +74,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       kycStatus: KycStatus.approved,
       status: AccountStatus.active,
       role: assignedRole,
-      isTwoFactorEnabled: false,
+      isTwoFactorEnabled: is2Fa,
       isEmailVerified: supaUser.emailConfirmedAt != null,
       isPhoneVerified: true,
       createdAt: DateTime.tryParse(supaUser.createdAt) ?? DateTime.now(),
@@ -177,6 +177,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final userPhone = phone ?? savedData['phone'] ?? '+92 300 1234567';
     final userId = isAdmin ? 'usr_admin_asianfx' : 'usr_${normalizedEmail.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}';
 
+    final is2Fa = await SecureStorageService.instance.isTwoFactorEnabledForUser(normalizedEmail);
     final loggedInUser = UserEntity(
       id: userId,
       email: normalizedEmail,
@@ -189,7 +190,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       kycStatus: KycStatus.approved,
       status: AccountStatus.active,
       role: assignedRole,
-      isTwoFactorEnabled: false,
+      isTwoFactorEnabled: is2Fa,
       isEmailVerified: true,
       isPhoneVerified: true,
       createdAt: DateTime.now(),
@@ -563,6 +564,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await SecureStorageService.instance.clearCurrentSessionUser();
     } catch (_) {}
     state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  /// Toggle Two-Factor Authentication state
+  Future<void> toggleTwoFactor(bool enabled) async {
+    if (state.user == null) return;
+    final updated = state.user!.copyWith(isTwoFactorEnabled: enabled);
+    state = state.copyWith(user: updated);
+    await SecureStorageService.instance.saveCurrentSessionUser(updated);
+    await SecureStorageService.instance.setTwoFactorEnabledForUser(updated.email, enabled);
+  }
+
+  /// Reset Password functionality for forgot password flow
+  Future<bool> resetPassword({
+    required String email,
+    required String newPassword,
+  }) async {
+    state = state.copyWith(status: AuthStatus.loading, error: null);
+    final normalizedEmail = email.trim().toLowerCase();
+    try {
+      await SecureStorageService.instance.saveUserCredentials(normalizedEmail, newPassword);
+      try {
+        await Supabase.instance.client.auth.updateUser(
+          UserAttributes(password: newPassword),
+        );
+      } catch (_) {}
+      state = state.copyWith(status: AuthStatus.unauthenticated, error: null);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        status: AuthStatus.unauthenticated,
+        error: 'Failed to reset password. Please try again.',
+      );
+      return false;
+    }
   }
 
   void clearError() => state = state.copyWith(error: null);

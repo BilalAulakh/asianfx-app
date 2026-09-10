@@ -530,14 +530,14 @@ class _InstitutionalChartPainter extends CustomPainter {
         // Time mark on bottom axis
         if (x - lastTimeMarkX > timeMarkInterval && x > 20 && x < chartWidth - 30) {
           lastTimeMarkX = x.toInt();
-          final timeStr = DateFormat('HH:mm').format(c.time);
+          final timeStr = _formatAxisTime(c.time);
           final timeSpan = TextSpan(
             text: timeStr,
             style: const TextStyle(
               fontFamily: 'Inter',
-              color: Color(0xFF62758D),
+              color: Color(0xFF848E9C),
               fontSize: 9,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
             ),
           );
           final timePainter = TextPainter(text: timeSpan, textDirection: ui.TextDirection.ltr)..layout();
@@ -572,14 +572,14 @@ class _InstitutionalChartPainter extends CustomPainter {
 
         if (x - lastTimeMarkX > timeMarkInterval && x > 20 && x < chartWidth - 30) {
           lastTimeMarkX = x.toInt();
-          final timeStr = DateFormat('HH:mm').format(c.time);
+          final timeStr = _formatAxisTime(c.time);
           final timeSpan = TextSpan(
             text: timeStr,
             style: const TextStyle(
               fontFamily: 'Inter',
-              color: Color(0xFF62758D),
+              color: Color(0xFF848E9C),
               fontSize: 9,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
             ),
           );
           final timePainter = TextPainter(text: timeSpan, textDirection: ui.TextDirection.ltr)..layout();
@@ -663,6 +663,23 @@ class _InstitutionalChartPainter extends CustomPainter {
         chPaint,
       );
     }
+  }
+
+  String _formatAxisTime(DateTime time) {
+    if (candles.length > 1) {
+      final spanDays = candles.last.time.difference(candles.first.time).inDays.abs();
+      if (spanDays > 180) {
+        // Multi-month / Multi-year: e.g. "Aug '24", "Jan '25"
+        return DateFormat("MMM ''yy").format(time);
+      } else if (spanDays > 5) {
+        // Multi-day / Multi-week: e.g. "Sep 09", "Aug 24"
+        return DateFormat('MMM dd').format(time);
+      } else if (spanDays > 1) {
+        // Cross-day: e.g. "09/08 14:00"
+        return DateFormat('MM/dd HH:mm').format(time);
+      }
+    }
+    return DateFormat('HH:mm').format(time);
   }
 
   @override

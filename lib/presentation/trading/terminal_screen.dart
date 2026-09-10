@@ -4,9 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/router/app_router.dart';
 
-import '../../core/constants/app_constants.dart';
 import '../../core/math/money_math.dart';
-import '../../core/theme/app_colors.dart';
 import '../../domain/entities/chart_entities.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/user_entity.dart';
@@ -120,46 +118,6 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                         ),
                       ),
                     ],
-                  ),
-                  const Spacer(),
-
-                  // Status / Role Indicator (Secure, non-switchable for normal clients)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF162030),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: authUser?.role == UserRole.admin
-                            ? const Color(0xFFFFD600).withAlpha(150)
-                            : const Color(0xFF2B384E),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          authUser?.role == UserRole.admin
-                              ? Icons.admin_panel_settings_rounded
-                              : Icons.verified_user_rounded,
-                          size: 14,
-                          color: authUser?.role == UserRole.admin
-                              ? const Color(0xFFFFD600)
-                              : const Color(0xFF00D68F),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          authUser?.role == UserRole.admin ? 'ADMIN' : 'TRADER (LIVE)',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: authUser?.role == UserRole.admin
-                                ? const Color(0xFFFFD600)
-                                : const Color(0xFF00D68F),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -392,7 +350,27 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             ),
             const SizedBox(height: 8),
 
-            // ── Timeframe & Chart Zoom / Style Toolbar ───────────────────────
+            // ── Interactive Candlestick Chart Canvas ───────────────────────
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: CandlestickChartCanvas(
+                  candles: candles,
+                  style: _chartStyle,
+                  priceDecimals: live.decimals,
+                  currentPrice: live.midPrice.toDouble(),
+                  scale: _chartScale,
+                  onScaleChanged: (s) {
+                    setState(() {
+                      _chartScale = s;
+                    });
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            // ── Timeframe & Chart Zoom / Style Toolbar (Below Candles) ───────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -517,25 +495,6 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                     },
                   ),
                 ],
-              ),
-            ),
-
-            // ── Interactive Candlestick Chart Canvas ───────────────────────
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: CandlestickChartCanvas(
-                  candles: candles,
-                  style: _chartStyle,
-                  priceDecimals: live.decimals,
-                  currentPrice: live.midPrice.toDouble(),
-                  scale: _chartScale,
-                  onScaleChanged: (s) {
-                    setState(() {
-                      _chartScale = s;
-                    });
-                  },
-                ),
               ),
             ),
 
@@ -692,26 +651,14 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'SELL (SHORT)',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          Text(
-                            MoneyMath.formatDec(live.bid, live.decimals),
-                            style: const TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                      child: const Text(
+                        'SELL',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                        ),
                       ),
                     ),
                   ),
@@ -730,29 +677,17 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF00D68F),
                         foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'BUY (LONG)',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          Text(
-                            MoneyMath.formatDec(live.ask, live.decimals),
-                            style: const TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                      child: const Text(
+                        'BUY',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                        ),
                       ),
                     ),
                   ),
@@ -761,16 +696,6 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  PopupMenuItem<UserRole> _roleMenuItem(UserRole role, String title) {
-    return PopupMenuItem<UserRole>(
-      value: role,
-      child: Text(
-        title,
-        style: const TextStyle(fontFamily: 'Inter', color: Colors.white, fontSize: 13),
       ),
     );
   }

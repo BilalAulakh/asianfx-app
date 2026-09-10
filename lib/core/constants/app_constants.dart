@@ -5,7 +5,7 @@ class AppConstants {
   AppConstants._();
 
   // App Meta
-  static const String appName = 'FXAsian Institutional';
+  static const String appName = 'FXAsian';
   static const String appVersion = '2.4.0-Enterprise';
 
   // Precision contract sizes

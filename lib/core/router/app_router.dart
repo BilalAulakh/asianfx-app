@@ -50,7 +50,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAuthenticated = authState.status == AuthStatus.authenticated;
       final isAuthRoute = state.matchedLocation == AppRoutes.login ||
           state.matchedLocation == AppRoutes.register ||
-          state.matchedLocation == AppRoutes.onboarding;
+          state.matchedLocation == AppRoutes.onboarding ||
+          state.matchedLocation == AppRoutes.forgotPassword ||
+          state.matchedLocation == AppRoutes.otp;
       final isSplash = state.matchedLocation == AppRoutes.splash;
       final isAdminRoute = state.matchedLocation == AppRoutes.admin;
       final isAdmin = authState.user?.role == UserRole.admin;

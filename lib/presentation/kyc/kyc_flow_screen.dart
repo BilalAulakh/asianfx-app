@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_colors.dart';
+
 import '../../domain/entities/user_entity.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/kyc_compliance_provider.dart';
@@ -22,7 +22,7 @@ class _KycFlowScreenState extends ConsumerState<KycFlowScreen> {
     'Passport',
     'National ID / CNIC',
     'Driving License',
-    'Institutional Trade License',
+    'Trade License',
   ];
 
   @override
@@ -46,7 +46,7 @@ class _KycFlowScreenState extends ConsumerState<KycFlowScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
-          'Institutional KYC Verification',
+          'KYC Verification',
           style: TextStyle(
             fontFamily: 'Inter',
             fontSize: 16,

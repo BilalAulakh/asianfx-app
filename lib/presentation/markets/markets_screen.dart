@@ -23,7 +23,6 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
     'All',
     'Forex',
     'Crypto',
-    'Metals',
     'Commodities',
     'Indices',
     'Stocks',

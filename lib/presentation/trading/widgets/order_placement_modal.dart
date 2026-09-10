@@ -5,6 +5,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/math/money_math.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../domain/entities/trading_entities.dart';
+import '../../../providers/ledger_provider.dart';
 import '../../../providers/market_provider.dart';
 import '../../../providers/trading_engine_provider.dart';
 
@@ -46,7 +47,7 @@ class OrderPlacementModal extends ConsumerStatefulWidget {
 class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
   late OrderSide _side;
   OrderType _orderType = OrderType.market;
-  double _lots = 0.10;
+  double _lots = 0.01;
   int _leverage = 100;
   bool _enableSl = false;
   bool _enableTp = false;
@@ -61,6 +62,11 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
     super.initState();
     _side = widget.initialSide;
     _lotController = TextEditingController(text: _lots.toStringAsFixed(2));
+
+    // Refresh user balance immediately upon modal opening
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(tradingEngineProvider.notifier).refreshBalance();
+    });
 
     final currentExecPrice = _side == OrderSide.buy
         ? widget.instrument.ask.toDouble()
@@ -96,7 +102,7 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
 
   void _adjustLots(double delta) {
     setState(() {
-      _lots = (_lots + delta).clamp(0.01, 100.0);
+      _lots = double.parse(((_lots + delta).clamp(0.01, 100.0)).toStringAsFixed(2));
       _lotController.text = _lots.toStringAsFixed(2);
     });
   }
@@ -111,7 +117,17 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
     );
 
     final engineState = ref.watch(tradingEngineProvider);
+    final ledgerBal = ref.watch(clientLedgerBalanceProvider);
     final account = engineState.accountState;
+
+    final effectiveLedgerBal = account.ledgerBalance > Decimal.zero
+        ? account.ledgerBalance
+        : (ledgerBal > Decimal.zero ? ledgerBal : Decimal.zero);
+
+    final effectiveFreeMargin = MoneyMath.calcFreeMargin(
+      equity: effectiveLedgerBal + account.unrealizedPnl,
+      usedMargin: account.usedMargin,
+    );
 
     final execPrice = _side == OrderSide.buy ? live.ask : live.bid;
     final lotsDec = MoneyMath.toDec(_lots);
@@ -124,7 +140,7 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
       leverage: leverageDec,
     );
 
-    final isMarginSufficient = requiredMargin <= account.freeMargin;
+    final isMarginSufficient = requiredMargin <= effectiveFreeMargin && effectiveFreeMargin > Decimal.zero;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -238,7 +254,7 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      'BUY (LONG)\n${MoneyMath.formatDec(live.ask, live.decimals)}',
+                      'BUY\n${MoneyMath.formatDec(live.ask, live.decimals)}',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontFamily: 'Inter',
@@ -264,7 +280,7 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      'SELL (SHORT)\n${MoneyMath.formatDec(live.bid, live.decimals)}',
+                      'SELL\n${MoneyMath.formatDec(live.bid, live.decimals)}',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontFamily: 'Inter',
@@ -293,10 +309,10 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
                 ),
               ),
               const Spacer(),
-              _lotChip('-1.0', () => _adjustLots(-1.0)),
-              _lotChip('-0.1', () => _adjustLots(-0.1)),
-              _lotChip('+0.1', () => _adjustLots(0.1)),
-              _lotChip('+1.0', () => _adjustLots(1.0)),
+              _lotPresetChip(0.01),
+              _lotPresetChip(0.02),
+              _lotPresetChip(0.05),
+              _lotPresetChip(0.10),
             ],
           ),
           const SizedBox(height: 8),
@@ -312,20 +328,31 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.remove, color: Colors.white70, size: 20),
-                  onPressed: () => _adjustLots(-0.05),
+                  onPressed: () => _adjustLots(-0.01),
                 ),
                 Expanded(
                   child: TextField(
                     controller: _lotController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     textAlign: TextAlign.center,
+                    cursorColor: const Color(0xFFFFD600),
                     style: const TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
-                    decoration: const InputDecoration(border: InputBorder.none),
+                    decoration: const InputDecoration(
+                      filled: false,
+                      fillColor: Colors.transparent,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                      isDense: true,
+                    ),
                     onChanged: (val) {
                       final parsed = double.tryParse(val);
                       if (parsed != null && parsed > 0) {
@@ -336,7 +363,7 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.add, color: Colors.white70, size: 20),
-                  onPressed: () => _adjustLots(0.05),
+                  onPressed: () => _adjustLots(0.01),
                 ),
               ],
             ),
@@ -357,9 +384,49 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
               children: [
                 _metricRow('Required Margin', MoneyMath.formatCurrency(requiredMargin)),
                 const SizedBox(height: 6),
-                _metricRow('Available Free Margin', MoneyMath.formatCurrency(account.freeMargin)),
-                const SizedBox(height: 6),
-                _metricRow('Account Leverage', '1:$_leverage'),
+                _metricRow('Available Free Margin', MoneyMath.formatCurrency(effectiveFreeMargin)),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Account Leverage',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        color: Color(0xFF848E9C),
+                      ),
+                    ),
+                    Row(
+                      children: [50, 100, 200, 500].map((lev) {
+                        final isSelected = _leverage == lev;
+                        return GestureDetector(
+                          onTap: () => setState(() => _leverage = lev),
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF1E2838),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF2B384E),
+                              ),
+                            ),
+                            child: Text(
+                              '1:$lev',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isSelected ? Colors.black : Colors.white70,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -493,6 +560,39 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
               fontWeight: FontWeight.w600,
               color: Colors.white70,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _lotPresetChip(double lot) {
+    final isSelected = (_lots - lot).abs() < 0.001;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _lots = lot;
+          _lotController.text = _lots.toStringAsFixed(2);
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.only(left: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFFD600).withOpacity(0.2) : const Color(0xFF1E2838),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF2B384E),
+            width: 1,
+          ),
+        ),
+        child: Text(
+          lot.toStringAsFixed(2),
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? const Color(0xFFFFD600) : Colors.white70,
           ),
         ),
       ),

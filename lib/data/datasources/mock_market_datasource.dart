@@ -38,8 +38,8 @@ class MockMarketDataSource {
       _makeInstrument('EUR/USD', 'Euro / US Dollar', 'forex', 1.08532, 4, AppConstants.contractSizeForex),
       _makeInstrument('BTC/USD', 'Bitcoin / US Dollar', 'crypto', 96420.00, 2, AppConstants.contractSizeCrypto),
       _makeInstrument('ETH/USD', 'Ethereum / US Dollar', 'crypto', 2745.80, 2, AppConstants.contractSizeCrypto),
-      _makeInstrument('XAU/USD', 'Gold / US Dollar', 'metals', 2864.50, 2, AppConstants.contractSizeGold),
-      _makeInstrument('XAG/USD', 'Silver / US Dollar', 'metals', 32.40, 2, AppConstants.contractSizeSilver),
+      _makeInstrument('XAU/USD', 'Gold / US Dollar', 'forex', 2864.50, 2, AppConstants.contractSizeGold),
+      _makeInstrument('XAG/USD', 'Silver / US Dollar', 'forex', 32.40, 2, AppConstants.contractSizeSilver),
     ];
   }
 

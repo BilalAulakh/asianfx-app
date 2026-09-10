@@ -81,7 +81,7 @@ class UserEntity extends Equatable {
   String get roleDisplay {
     switch (role) {
       case UserRole.client:
-        return 'Institutional Trader';
+        return 'Trader';
       case UserRole.admin:
         return 'Super Administrator';
       case UserRole.compliance:

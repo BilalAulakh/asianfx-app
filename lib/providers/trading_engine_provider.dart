@@ -103,16 +103,22 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     // Save current user state to cache
     _syncUserCache(currentUserId);
 
+    final ledgerBal = _ref.read(clientLedgerBalanceProvider);
     // Retrieve or initialize target user state
     final userOpen = _userOpenPositionsCache[userId] ?? const [];
     final userClosed = _userClosedTradesCache[userId] ?? const [];
     final userPending = _userPendingOrdersCache[userId] ?? const [];
+
+    final fallbackBal = ledgerBal > Decimal.zero
+        ? ledgerBal
+        : (initialBalance ?? AppConstants.defaultClientInitialBalance);
+
     var userAccount = _userAccountCache[userId] ??
         TradingAccountState(
           accountId: 'ACT-${userId.toUpperCase().replaceAll('-', '').substring(0, min(8, userId.length))}',
           userId: userId,
           currency: 'USD',
-          ledgerBalance: initialBalance ?? AppConstants.defaultClientInitialBalance,
+          ledgerBalance: fallbackBal,
           unrealizedPnl: Decimal.zero,
           usedMargin: Decimal.zero,
           leverage: Decimal.fromInt(AppConstants.defaultLeverage),
@@ -120,7 +126,9 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
 
     if (userAccount.ledgerBalance == MoneyMath.toDec(10000.0) ||
         userAccount.ledgerBalance == MoneyMath.toDec(25000.0)) {
-      userAccount = userAccount.copyWith(ledgerBalance: Decimal.zero);
+      userAccount = userAccount.copyWith(ledgerBalance: fallbackBal);
+    } else if (userAccount.ledgerBalance <= Decimal.zero && ledgerBal > Decimal.zero) {
+      userAccount = userAccount.copyWith(ledgerBalance: ledgerBal);
     }
 
     final totalUsed = userOpen.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
@@ -156,14 +164,19 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
                 .eq('user_id', userId)
                 .catchError((_) {});
           }
-          final realBal = MoneyMath.toDec(balNum);
-          if (state.accountState.userId == userId) {
+          final supaBal = MoneyMath.toDec(balNum);
+          final currentLedger = _ref.read(clientLedgerBalanceProvider);
+          final effectiveBal = supaBal > Decimal.zero
+              ? supaBal
+              : (currentLedger > Decimal.zero ? currentLedger : state.accountState.ledgerBalance);
+
+          if (state.accountState.userId == userId && effectiveBal > Decimal.zero) {
             state = state.copyWith(
-              accountState: state.accountState.copyWith(ledgerBalance: realBal),
+              accountState: state.accountState.copyWith(ledgerBalance: effectiveBal),
             );
           }
-          if (_userAccountCache.containsKey(userId)) {
-            _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: realBal);
+          if (_userAccountCache.containsKey(userId) && effectiveBal > Decimal.zero) {
+            _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: effectiveBal);
           }
         }
       }).catchError((_) {});
@@ -183,6 +196,49 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     });
   }
 
+  /// Explicitly refresh balance from Supabase & Double-Entry Ledger
+  Future<void> refreshBalance() async {
+    final userId = state.accountState.userId;
+    final ledgerBal = _ref.read(clientLedgerBalanceProvider);
+    try {
+      final res = await Supabase.instance.client
+          .from('wallets')
+          .select('balance')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (res != null && res['balance'] != null) {
+        var balNum = (res['balance'] as num).toDouble();
+        if (balNum == 10000.0 || balNum == 25000.0) {
+          balNum = 0.0;
+        }
+        final supaBal = MoneyMath.toDec(balNum);
+        final effective = supaBal > Decimal.zero
+            ? supaBal
+            : (ledgerBal > Decimal.zero ? ledgerBal : state.accountState.ledgerBalance);
+
+        if (effective > Decimal.zero) {
+          state = state.copyWith(
+            accountState: state.accountState.copyWith(ledgerBalance: effective),
+          );
+          if (_userAccountCache.containsKey(userId)) {
+            _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: effective);
+          }
+          return;
+        }
+      }
+    } catch (_) {}
+
+    if (ledgerBal > Decimal.zero && state.accountState.ledgerBalance <= Decimal.zero) {
+      state = state.copyWith(
+        accountState: state.accountState.copyWith(ledgerBalance: ledgerBal),
+      );
+      if (_userAccountCache.containsKey(userId)) {
+        _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: ledgerBal);
+      }
+    }
+  }
+
   /// Explicitly set balance for a user (e.g. reset legacy demo balance)
   void setBalance(String userId, Decimal balance) {
     if (state.accountState.userId == userId) {
@@ -192,6 +248,16 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     }
     if (_userAccountCache.containsKey(userId)) {
       _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: balance);
+    } else {
+      _userAccountCache[userId] = TradingAccountState(
+        accountId: 'ACT-${userId.toUpperCase().replaceAll('-', '').substring(0, min(8, userId.length))}',
+        userId: userId,
+        currency: 'USD',
+        ledgerBalance: balance,
+        unrealizedPnl: Decimal.zero,
+        usedMargin: Decimal.zero,
+        leverage: Decimal.fromInt(AppConstants.defaultLeverage),
+      );
     }
   }
 
@@ -208,6 +274,16 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
       final cached = _userAccountCache[userId]!;
       _userAccountCache[userId] = cached.copyWith(
         ledgerBalance: cached.ledgerBalance + amount,
+      );
+    } else {
+      _userAccountCache[userId] = TradingAccountState(
+        accountId: 'ACT-${userId.toUpperCase().replaceAll('-', '').substring(0, min(8, userId.length))}',
+        userId: userId,
+        currency: 'USD',
+        ledgerBalance: amount,
+        unrealizedPnl: Decimal.zero,
+        usedMargin: Decimal.zero,
+        leverage: Decimal.fromInt(AppConstants.defaultLeverage),
       );
     }
   }
@@ -360,6 +436,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
 
     // Refresh cash balance from double-entry ledger
     final ledgerBalance = _ref.read(clientLedgerBalanceProvider);
+    final effectiveLedger = ledgerBalance > Decimal.zero ? ledgerBalance : state.accountState.ledgerBalance;
 
     final totalUnrealized =
         updatedPositions.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
@@ -367,7 +444,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
         updatedPositions.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
 
     var updatedAccountState = state.accountState.copyWith(
-      ledgerBalance: ledgerBalance,
+      ledgerBalance: effectiveLedger,
       unrealizedPnl: totalUnrealized,
       usedMargin: totalUsed,
     );
@@ -398,7 +475,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
       final postLedger = _ref.read(clientLedgerBalanceProvider);
 
       updatedAccountState = updatedAccountState.copyWith(
-        ledgerBalance: postLedger,
+        ledgerBalance: postLedger > Decimal.zero ? postLedger : updatedAccountState.ledgerBalance,
         usedMargin: postUsed,
         unrealizedPnl: postUnrealized,
       );
@@ -464,12 +541,20 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
       leverage: activeLev,
     );
 
+    // Synchronize balance if state is zero but double-entry ledger or Supabase has balance
+    final ledgerBal = _ref.read(clientLedgerBalanceProvider);
+    var currentAccount = state.accountState;
+    if (currentAccount.ledgerBalance <= Decimal.zero && ledgerBal > Decimal.zero) {
+      currentAccount = currentAccount.copyWith(ledgerBalance: ledgerBal);
+      state = state.copyWith(accountState: currentAccount);
+    }
+
     // Free margin validation
-    if (requiredMargin > state.accountState.freeMargin) {
+    if (requiredMargin > currentAccount.freeMargin) {
       state = state.copyWith(isSubmitting: false);
       throw Exception(
         'Insufficient Free Margin! Required: ${MoneyMath.formatCurrency(requiredMargin)}, '
-        'Available: ${MoneyMath.formatCurrency(state.accountState.freeMargin)}',
+        'Available: ${MoneyMath.formatCurrency(currentAccount.freeMargin)}',
       );
     }
 

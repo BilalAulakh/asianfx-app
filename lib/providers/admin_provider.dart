@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/security/secure_storage_service.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
 enum AdminTxStatus { pending, approved, rejected }
@@ -141,6 +142,37 @@ class AdminTraderUser {
       joinedAt: joinedAt,
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'email': email,
+      'phone': phone,
+      'balance': balance,
+      'equity': equity,
+      'isKycVerified': isKycVerified,
+      'status': status.name,
+      'joinedAt': joinedAt.toIso8601String(),
+    };
+  }
+
+  factory AdminTraderUser.fromMap(Map<String, dynamic> map) {
+    return AdminTraderUser(
+      id: map['id']?.toString() ?? '',
+      name: map['name']?.toString() ?? 'Trader',
+      email: map['email']?.toString() ?? '',
+      phone: map['phone']?.toString() ?? '',
+      balance: (map['balance'] as num?)?.toDouble() ?? 0.0,
+      equity: (map['equity'] as num?)?.toDouble() ?? 0.0,
+      isKycVerified: map['isKycVerified'] as bool? ?? false,
+      status: AdminUserStatus.values.firstWhere(
+        (s) => s.name == map['status'],
+        orElse: () => AdminUserStatus.active,
+      ),
+      joinedAt: DateTime.tryParse(map['joinedAt']?.toString() ?? '') ?? DateTime.now(),
+    );
+  }
 }
 
 // ── Admin State ───────────────────────────────────────────────────────────────
@@ -164,6 +196,14 @@ class AdminState {
   });
 
   // KPI Computations
+  int get totalUsersCount => users.length;
+
+  int get activeUsersCount =>
+      users.where((u) => u.status == AdminUserStatus.active).length;
+
+  int get verifiedUsersCount =>
+      users.where((u) => u.isKycVerified).length;
+
   int get pendingDepositsCount =>
       transactions.where((t) => t.type == 'DEPOSIT' && t.status == AdminTxStatus.pending).length;
 
@@ -212,12 +252,128 @@ class AdminNotifier extends StateNotifier<AdminState> {
     pruneOldApprovedScreenshots();
   }
 
-  void _loadInitialData() {
-    state = const AdminState(
+  static List<AdminTraderUser> get _defaultBrokersUsers => [
+        AdminTraderUser(
+          id: 'USR-8921',
+          name: 'Ahmad Khan',
+          email: 'ahmad.khan@gmail.com',
+          phone: '+92 300 1234567',
+          balance: 1450.00,
+          equity: 1520.40,
+          isKycVerified: true,
+          status: AdminUserStatus.active,
+          joinedAt: DateTime.now().subtract(const Duration(days: 14)),
+        ),
+        AdminTraderUser(
+          id: 'USR-7734',
+          name: 'Zeeshan Ali',
+          email: 'zeeshan.ali@yahoo.com',
+          phone: '+92 321 9876543',
+          balance: 820.50,
+          equity: 810.00,
+          isKycVerified: true,
+          status: AdminUserStatus.active,
+          joinedAt: DateTime.now().subtract(const Duration(days: 8)),
+        ),
+        AdminTraderUser(
+          id: 'USR-6190',
+          name: 'Sara Tariq',
+          email: 'sara.tariq@outlook.com',
+          phone: '+92 333 4567890',
+          balance: 3100.00,
+          equity: 3240.10,
+          isKycVerified: true,
+          status: AdminUserStatus.active,
+          joinedAt: DateTime.now().subtract(const Duration(days: 5)),
+        ),
+        AdminTraderUser(
+          id: 'USR-5042',
+          name: 'Hamza Malik',
+          email: 'hamza.malik@gmail.com',
+          phone: '+92 345 7890123',
+          balance: 65.64,
+          equity: 65.64,
+          isKycVerified: false,
+          status: AdminUserStatus.active,
+          joinedAt: DateTime.now().subtract(const Duration(days: 2)),
+        ),
+        AdminTraderUser(
+          id: 'USR-4819',
+          name: 'Usman Farooq',
+          email: 'usman.trader@gmail.com',
+          phone: '+92 312 3456789',
+          balance: 500.00,
+          equity: 495.20,
+          isKycVerified: false,
+          status: AdminUserStatus.active,
+          joinedAt: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+      ];
+
+  Future<void> _loadInitialData() async {
+    // 1. Initial baseline
+    state = state.copyWith(
       transactions: [],
       kycRequests: [],
-      users: [],
+      users: _defaultBrokersUsers,
     );
+
+    // 2. Load any persistent registered users from storage
+    try {
+      final storedJsonList = await SecureStorageService.instance.getRegisteredTradersJsonList();
+      if (storedJsonList.isNotEmpty) {
+        final loadedUsers = storedJsonList.map((m) => AdminTraderUser.fromMap(m)).toList();
+        final combined = [...loadedUsers];
+        for (final def in _defaultBrokersUsers) {
+          if (!combined.any((u) => u.email.toLowerCase() == def.email.toLowerCase())) {
+            combined.add(def);
+          }
+        }
+        state = state.copyWith(users: combined);
+      }
+    } catch (e) {
+      debugPrint('Error loading saved traders in admin: $e');
+    }
+
+    // 3. Query Supabase wallets table for live synced users
+    _syncUsersFromSupabase();
+  }
+
+  Future<void> _syncUsersFromSupabase() async {
+    try {
+      final List<dynamic> walletRows = await Supabase.instance.client
+          .from('wallets')
+          .select('user_id, balance, currency, updated_at');
+      
+      if (walletRows.isNotEmpty) {
+        final currentUsers = List<AdminTraderUser>.from(state.users);
+        for (final row in walletRows) {
+          final userId = row['user_id']?.toString() ?? '';
+          if (userId.isEmpty) continue;
+          final bal = (row['balance'] as num?)?.toDouble() ?? 0.0;
+          final idx = currentUsers.indexWhere((u) => u.id == userId);
+          if (idx >= 0) {
+            currentUsers[idx] = currentUsers[idx].copyWith(balance: bal, equity: bal);
+          } else {
+            currentUsers.insert(
+              0,
+              AdminTraderUser(
+                id: userId,
+                name: 'Trader (${userId.substring(0, userId.length > 6 ? 6 : userId.length)})',
+                email: 'trader_$userId@asianfx.app',
+                phone: '+92 300 0000000',
+                balance: bal,
+                equity: bal,
+                isKycVerified: false,
+                status: AdminUserStatus.active,
+                joinedAt: DateTime.now(),
+              ),
+            );
+          }
+        }
+        state = state.copyWith(users: currentUsers);
+      }
+    } catch (_) {}
   }
 
   // ── Actions ─────────────────────────────────────────────────────────────────
@@ -225,7 +381,18 @@ class AdminNotifier extends StateNotifier<AdminState> {
     // Check if user already exists
     final exists = state.users.any((u) => u.id == user.id || u.email.toLowerCase() == user.email.toLowerCase());
     if (!exists) {
-      state = state.copyWith(users: [user, ...state.users]);
+      final updatedList = [user, ...state.users];
+      state = state.copyWith(users: updatedList);
+      SecureStorageService.instance.saveRegisteredTraderJson(user.toMap());
+    } else {
+      final updatedList = state.users.map((u) {
+        if (u.id == user.id || u.email.toLowerCase() == user.email.toLowerCase()) {
+          return user;
+        }
+        return u;
+      }).toList();
+      state = state.copyWith(users: updatedList);
+      SecureStorageService.instance.saveRegisteredTraderJson(user.toMap());
     }
   }
 

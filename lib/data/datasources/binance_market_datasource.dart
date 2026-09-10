@@ -65,8 +65,6 @@ class BinanceMarketDataSource {
     'GBPUSD': 'GBPUSDT',
     'AUD/USD': 'AUDUSDT',
     'AUDUSD': 'AUDUSDT',
-    'XAG/USD': 'PAXGUSDT', // Silver proxy calculation
-    'XAGUSD': 'PAXGUSDT',
   };
 
   // Mapping from Binance pair string to standard app display symbol
@@ -412,7 +410,7 @@ class BinanceMarketDataSource {
 
       if (appSymbol == 'XAU/USD') {
         name = 'Gold vs US Dollar';
-        category = 'metals';
+        category = 'forex';
         contractSize = AppConstants.contractSizeGold;
         decimals = 2;
       } else if (appSymbol == 'BTC/USD') {

@@ -265,5 +265,109 @@ class SecureStorageService {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble('balance_$userId');
   }
+
+  // ── Security PIN Persistence ────────────────────────────────────────────────
+  Future<void> saveSecurityPin(String email, String pin) async {
+    final normalized = email.toLowerCase().trim();
+    await _storage.write(key: 'sec_pin_$normalized', value: pin);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('sec_pin_$normalized', pin);
+  }
+
+  Future<String?> getSecurityPin(String email) async {
+    final normalized = email.toLowerCase().trim();
+    final val = await _storage.read(key: 'sec_pin_$normalized');
+    if (val != null && val.isNotEmpty) return val;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('sec_pin_$normalized');
+  }
+
+  Future<bool> hasSecurityPin(String email) async {
+    final pin = await getSecurityPin(email);
+    return pin != null && pin.isNotEmpty;
+  }
+
+  Future<bool> verifySecurityPin(String email, String pin) async {
+    final saved = await getSecurityPin(email);
+    if (saved == null || saved.isEmpty) return false;
+    return saved == pin;
+  }
+
+  // ── Two-Factor Authentication (2FA) Persistence ────────────────────────────
+  Future<void> setTwoFactorEnabledForUser(String email, bool enabled) async {
+    final normalized = email.toLowerCase().trim();
+    await _storage.write(key: '2fa_enabled_$normalized', value: enabled.toString());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('2fa_enabled_$normalized', enabled);
+  }
+
+  Future<bool> isTwoFactorEnabledForUser(String email) async {
+    final normalized = email.toLowerCase().trim();
+    final val = await _storage.read(key: '2fa_enabled_$normalized');
+    if (val != null) return val == 'true';
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('2fa_enabled_$normalized') ?? false;
+  }
+
+  Future<String> getOrGenerateTwoFactorSecret(String email) async {
+    final normalized = email.toLowerCase().trim();
+    final prefs = await SharedPreferences.getInstance();
+    String? secret = await _storage.read(key: '2fa_secret_$normalized') ?? prefs.getString('2fa_secret_$normalized');
+    final generated = 'FXA-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}-${normalized.hashCode.abs().toString().padLeft(4, '0').substring(0, 4)}';
+    await _storage.write(key: '2fa_secret_$normalized', value: generated);
+    await prefs.setString('2fa_secret_$normalized', generated);
+    return generated;
+  }
+
+  // ── Registered Traders Persistence ─────────────────────────────────────────
+  static const String _keyRegisteredTradersList = 'registered_traders_list_json';
+
+  Future<void> saveRegisteredTraderJson(Map<String, dynamic> userMap) async {
+    try {
+      final list = await getRegisteredTradersJsonList();
+      final id = userMap['id']?.toString() ?? '';
+      final email = (userMap['email']?.toString() ?? '').toLowerCase().trim();
+
+      // Replace if exists, else append
+      final index = list.indexWhere((u) =>
+          (id.isNotEmpty && u['id']?.toString() == id) ||
+          (email.isNotEmpty && (u['email']?.toString() ?? '').toLowerCase().trim() == email));
+
+      if (index >= 0) {
+        list[index] = userMap;
+      } else {
+        list.insert(0, userMap);
+      }
+
+      final jsonStr = jsonEncode(list);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyRegisteredTradersList, jsonStr);
+      if (!kIsWeb) {
+        try {
+          await _storage.write(key: _keyRegisteredTradersList, value: jsonStr);
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('Error saving registered trader: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getRegisteredTradersJsonList() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? jsonStr = prefs.getString(_keyRegisteredTradersList);
+      if ((jsonStr == null || jsonStr.isEmpty) && !kIsWeb) {
+        try {
+          jsonStr = await _storage.read(key: _keyRegisteredTradersList);
+        } catch (_) {}
+      }
+      if (jsonStr == null || jsonStr.isEmpty) return [];
+      final list = jsonDecode(jsonStr) as List<dynamic>;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (e) {
+      debugPrint('Error loading registered traders: $e');
+      return [];
+    }
+  }
 }
 
