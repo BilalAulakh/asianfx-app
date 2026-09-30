@@ -1,6 +1,5 @@
 import 'package:decimal/decimal.dart';
 import 'package:equatable/equatable.dart';
-import '../../core/math/money_math.dart';
 import 'trading_entities.dart';
 
 /// Single Instrument Exposure Summary for Chief Dealer

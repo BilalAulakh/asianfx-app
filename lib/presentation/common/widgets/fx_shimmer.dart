@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import '../../../core/theme/app_colors.dart';
 
 /// Reusable shimmer placeholder loading skeleton for FXAsianApp
 class FxShimmer extends StatelessWidget {

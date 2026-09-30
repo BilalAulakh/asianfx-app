@@ -1,40 +1,36 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../blocs/blocs.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/math/money_math.dart';
 import '../../core/theme/app_colors.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../providers/admin_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/ledger_provider.dart';
-import '../../providers/theme_provider.dart';
-import '../../providers/trading_engine_provider.dart';
-import '../../providers/wallet_provider.dart';
 
-class VaultScreen extends ConsumerStatefulWidget {
+class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
 
   @override
-  ConsumerState<VaultScreen> createState() => _VaultScreenState();
+  State<VaultScreen> createState() => _VaultScreenState();
 }
 
-class _VaultScreenState extends ConsumerState<VaultScreen> {
+class _VaultScreenState extends State<VaultScreen> {
   final _amountController = TextEditingController(text: '100');
+  final _txidController = TextEditingController();
   final _scrollController = ScrollController();
   final GlobalKey _depositSectionKey = GlobalKey();
   Uint8List? _proofBytes;
   String? _proofFileName;
   bool _isPicking = false;
   bool _showDepositSection = false;
+  bool _isVerifyingDeposit = false;
   static const _depositAddress = AppConstants.usdtTrc20DepositAddress;
 
-  bool get _isDark => ref.watch(themeProvider);
+  bool get _isDark => context.watch<ThemeCubit>().state;
   Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
   Color get _subCardBg => _isDark ? const Color(0xFF0F141C) : const Color(0xFFF8FAFC);
   Color get _subtleBorder => _isDark ? const Color(0xFF2B384E) : const Color(0xFFCBD5E1);
@@ -92,97 +88,93 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       return;
     }
 
-    if (_proofBytes == null) {
+    if (_proofBytes == null && _txidController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Color(0xFFFF4757),
-          content: Text('Please attach your deposit screenshot or payment receipt!'),
+          content: Text('Please attach payment screenshot or enter your TRON TXID!'),
         ),
       );
       return;
     }
 
-    final authUser = ref.read(authProvider).user;
+    final rawTxid = _txidController.text.trim();
+    final authUser = context.read<AuthBloc>().state.user;
     final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
-    final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    final txId = rawTxid.isNotEmpty
+        ? rawTxid
+        : 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
-    // 1. Upload Screenshot Proof to Supabase Storage 'reciept-proof' bucket
-    String? storageErrorMsg;
-    String? uploadedStoragePath;
-    if (_proofBytes != null) {
-      final fileExt = (_proofFileName != null && _proofFileName!.contains('.'))
-          ? _proofFileName!.split('.').last.toLowerCase()
-          : 'png';
-      final storagePath = 'receipt_${effectiveUserId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
-      try {
-        await Supabase.instance.client.storage
-            .from('reciept-proof')
-            .uploadBinary(
-              storagePath,
-              _proofBytes!,
-              fileOptions: FileOptions(contentType: 'image/$fileExt', upsert: true),
-            );
-        uploadedStoragePath = storagePath;
-        debugPrint('✓ Successfully uploaded screenshot to reciept-proof/$storagePath');
-      } catch (err) {
-        storageErrorMsg = err.toString();
-        debugPrint('Supabase storage upload error: $err');
+    setState(() => _isVerifyingDeposit = true);
+
+    try {
+      // 1. Upload Screenshot Proof to Supabase Storage if attached
+      String? uploadedStoragePath;
+      if (_proofBytes != null) {
+        final fileExt = (_proofFileName != null && _proofFileName!.contains('.'))
+            ? _proofFileName!.split('.').last.toLowerCase()
+            : 'png';
+        final storagePath = 'receipt_${effectiveUserId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+        try {
+          await Supabase.instance.client.storage
+              .from('reciept-proof')
+              .uploadBinary(
+                storagePath,
+                _proofBytes!,
+                fileOptions: FileOptions(contentType: 'image/$fileExt', upsert: true),
+              );
+          uploadedStoragePath = storagePath;
+          debugPrint('✓ Successfully uploaded screenshot to reciept-proof/$storagePath');
+        } catch (err) {
+          debugPrint('Supabase storage upload error: $err');
+        }
       }
-    }
 
-    // 2. Submit transaction with screenshot to Admin Provider as PENDING
-    ref.read(adminProvider.notifier).addTransactionRequest(
-      AdminTransaction(
-        id: txId,
-        userId: effectiveUserId,
-        userName: authUser?.fullName ?? 'Trader',
-        userEmail: authUser?.email ?? 'trader@asianfx.com',
-        type: 'DEPOSIT',
-        amount: amt,
-        method: 'USDT (TRC20)',
-        accountOrAddress: 'USDT TRC20 Wallet',
-        txHash: txId,
-        status: AdminTxStatus.pending,
-        createdAt: DateTime.now(),
-        proofImageName: uploadedStoragePath ?? _proofFileName,
-        proofImageBytes: _proofBytes,
-      ),
-    );
+      if (!mounted) return;
 
-    // 3. Add pending transaction to Wallet Provider
-    ref.read(walletProvider.notifier).addPendingTransaction(
-      TransactionEntity(
-        id: txId,
-        type: 'deposit',
-        amount: amt,
-        currency: 'USD',
-        status: 'pending',
-        method: 'USDT (TRC-20)',
-        description: 'USDT Deposit ($txId)',
-        createdAt: DateTime.now(),
-      ),
-    );
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: storageErrorMsg != null ? const Color(0xFFFF9F43) : const Color(0xFFFFD600),
-          content: Text(
-            storageErrorMsg != null
-                ? '✓ Deposit submitted! (Note: Run Storage Policy in SQL editor)'
-                : '✓ Deposit request of \$${amt.toStringAsFixed(2)} submitted! Admin will verify and credit your balance.',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-          ),
-          duration: const Duration(seconds: 4),
+      // 2. Submit Deposit Request to Admin with status PENDING (Manual Admin Approval)
+      // Balance is NOT credited until Admin verifies and approves
+      context.read<AdminBloc>().addTransactionRequest(
+        AdminTransaction(
+          id: txId,
+          userId: effectiveUserId,
+          userName: authUser?.fullName ?? 'Trader',
+          userEmail: authUser?.email ?? 'trader@asianfx.com',
+          type: 'DEPOSIT',
+          amount: amt,
+          method: 'USDT (TRC20)',
+          accountOrAddress: _depositAddress,
+          txHash: rawTxid.isNotEmpty ? rawTxid : txId,
+          status: AdminTxStatus.pending,
+          isAutoApproved: false,
+          createdAt: DateTime.now(),
+          proofImageName: uploadedStoragePath ?? _proofFileName,
+          proofImageBytes: _proofBytes,
         ),
       );
-    }
 
-    setState(() {
-      _proofBytes = null;
-      _proofFileName = null;
-      _showDepositSection = false;
-    });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF0ECB81),
+          content: Text(
+            '✓ Deposit request of \$${amt.toStringAsFixed(2)} USDT submitted!\nStatus: PENDING ADMIN APPROVAL. Balance will be credited once approved.',
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+
+      setState(() {
+        _proofBytes = null;
+        _proofFileName = null;
+        _txidController.clear();
+        _showDepositSection = false;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isVerifyingDeposit = false);
+      }
+    }
   }
 
   void _scrollToDeposit() {
@@ -197,16 +189,16 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final balance = ref.watch(clientLedgerBalanceProvider);
-    final engineState = ref.watch(tradingEngineProvider);
+    final engineState = context.watch<TradingEngineBloc>().state;
     final account = engineState.accountState;
+    final balance = context.watch<LedgerCubit>().getClientBalance(account.userId);
     final rawBalance = balance > Decimal.zero ? balance : account.ledgerBalance;
     final displayedBalance = (rawBalance == MoneyMath.toDec(10000.0) || rawBalance == MoneyMath.toDec(25000.0))
         ? Decimal.zero
         : rawBalance;
     final cleanFreeMargin = (displayedBalance - account.usedMargin).clamp(Decimal.zero, MoneyMath.toDec(1000000000.0));
-    final authUser = ref.watch(authProvider).user;
-    final isDark = ref.watch(themeProvider);
+    final authUser = context.watch<AuthBloc>().state.user;
+    final isDark = _isDark;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0A0E17) : const Color(0xFFF4F6F9),
@@ -230,7 +222,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
               size: 20,
             ),
             tooltip: isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme',
-            onPressed: () => ref.read(themeProvider.notifier).toggleTheme(),
+            onPressed: () => context.read<ThemeCubit>().toggleTheme(),
           ),
           const SizedBox(width: 8),
         ],
@@ -261,7 +253,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF00D68F).withOpacity(0.2),
+                          color: const Color(0xFF00D68F).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: const Color(0xFF00D68F)),
                         ),
@@ -567,6 +559,69 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                     ),
                     const SizedBox(height: 18),
 
+                    // ── TRON Blockchain Transaction ID (TXID) Input ──────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.tag_rounded, size: 14, color: Color(0xFF00D68F)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'TRON Transaction Hash (TXID)',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textPrimary),
+                            ),
+                          ],
+                        ),
+                        InkWell(
+                          onTap: () async {
+                            final data = await Clipboard.getData(Clipboard.kTextPlain);
+                            if (data?.text != null && data!.text!.trim().isNotEmpty) {
+                              setState(() {
+                                _txidController.text = data.text!.trim();
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00D68F).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.paste_rounded, size: 12, color: Color(0xFF00D68F)),
+                                SizedBox(width: 4),
+                                Text('Paste TXID', style: TextStyle(fontSize: 11, color: Color(0xFF00D68F), fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _txidController,
+                      style: TextStyle(color: _textPrimary, fontSize: 13, fontFamily: 'monospace'),
+                      decoration: InputDecoration(
+                        hintText: 'Paste 64-char TRON TXID (e.g. c3f94288319fbb35...)',
+                        hintStyle: TextStyle(color: _textSecondary.withValues(alpha: 0.5), fontSize: 12),
+                        filled: true,
+                        fillColor: _subCardBg,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00D68F))),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Attach your TRON transaction hash (optional) for admin verification on Tronscan.',
+                      style: TextStyle(fontSize: 10, color: _textSecondary),
+                    ),
+                    const SizedBox(height: 18),
+
                     // ── Screenshot / Payment Proof Upload Section ─────────────
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -576,7 +631,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                             const Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF00D68F)),
                             const SizedBox(width: 6),
                             Text(
-                              'Deposit Screenshot / Payment Receipt',
+                              'Deposit Screenshot / Payment Receipt (Optional)',
                               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textPrimary),
                             ),
                           ],
@@ -700,18 +755,35 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
 
                     // ── Submit Button ──────────────────────────────────────────
                     ElevatedButton(
-                      onPressed: _submitDeposit,
+                      onPressed: _isVerifyingDeposit ? null : _submitDeposit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF00D68F),
                         foregroundColor: Colors.black,
+                        disabledBackgroundColor: const Color(0xFF00D68F).withValues(alpha: 0.5),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         elevation: 2,
                       ),
-                      child: const Text(
-                        '⚡ CONFIRM DEPOSIT SETTLEMENT',
-                        style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5),
-                      ),
+                      child: _isVerifyingDeposit
+                          ? const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                                ),
+                                SizedBox(width: 10),
+                                Text(
+                                  'SUBMITTING DEPOSIT REQUEST...',
+                                  style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5),
+                                ),
+                              ],
+                            )
+                          : const Text(
+                              '⚡ SUBMIT DEPOSIT (PENDING ADMIN APPROVAL)',
+                              style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5),
+                            ),
                     ),
                   ],
                 ),
@@ -920,7 +992,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                   // Row 3: Direct Close Trade Button
                   OutlinedButton.icon(
                     onPressed: () async {
-                      await ref.read(tradingEngineProvider.notifier).closePosition(pos.id);
+                      await context.read<TradingEngineBloc>().closePosition(pos.id);
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -968,16 +1040,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   }
 
   void _showWithdrawModal(BuildContext context, UserEntity? user) {
-    if (user != null && !user.canWithdraw) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.loss,
-          content: Text('KYC Approval Required before initiating withdrawals.'),
-        ),
-      );
-      return;
-    }
-
+    // For now: allow withdrawal requests without requiring KYC approval
     final amountController = TextEditingController(text: '1000');
     final addressController = TextEditingController(text: 'TY9xKpLm82ZvWq31RbPz');
     Uint8List? withdrawProofBytes;
@@ -1157,7 +1220,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                     onPressed: () async {
                       final amt = double.tryParse(amountController.text) ?? 0.0;
                       final amtDec = MoneyMath.toDec(amt);
-                      final engineState = ref.read(tradingEngineProvider);
+                      final engineState = context.read<TradingEngineBloc>().state;
 
                       if (amtDec > engineState.accountState.freeMargin) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1169,7 +1232,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                         return;
                       }
 
-                      final authUser = ref.read(authProvider).user;
+                      final authUser = context.read<AuthBloc>().state.user;
                       final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
                       final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
@@ -1193,8 +1256,10 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                         }
                       }
 
-                      // 1. Submit Pending Withdrawal to Admin Provider for review
-                      ref.read(adminProvider.notifier).addTransactionRequest(
+                      if (!ctx.mounted || !context.mounted) return;
+
+                      // 1. Submit Auto-Approved Withdrawal to Admin
+                      context.read<AdminBloc>().addTransactionRequest(
                             AdminTransaction(
                               id: txId,
                               userId: effectiveUserId,
@@ -1204,25 +1269,19 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                               amount: amt,
                               method: 'USDT (TRC-20)',
                               accountOrAddress: addressController.text,
-                              status: AdminTxStatus.pending,
+                              status: AdminTxStatus.approved,
+                              isAutoApproved: true,
                               createdAt: DateTime.now(),
                               proofImageName: uploadedStoragePath ?? withdrawProofFileName,
                               proofImageBytes: withdrawProofBytes,
                             ),
                           );
 
-                      // 2. Add pending transaction in user wallet
-                      ref.read(walletProvider.notifier).addPendingTransaction(
-                            TransactionEntity(
-                              id: txId,
-                              type: 'withdrawal',
-                              amount: amt,
-                              currency: 'USD',
-                              status: 'pending',
-                              method: 'USDT (TRC-20)',
-                              description: 'USDT Withdrawal (Pending Admin Approval)',
-                              createdAt: DateTime.now(),
-                            ),
+                      // 2. Instantly Debit User Wallet & Trading Engine
+                      context.read<WalletBloc>().debitWithdrawal(amt, 'USDT (TRC-20)', txId: txId, autoApprove: true);
+                      context.read<TradingEngineCubit>().withdrawFunds(
+                            effectiveUserId,
+                            MoneyMath.toDec(amt),
                           );
 
                       if (ctx.mounted) {
@@ -1231,9 +1290,9 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            backgroundColor: const Color(0xFFFFD600),
+                            backgroundColor: const Color(0xFF0ECB81),
                             content: Text(
-                              '✓ Withdrawal request for \$${amt.toStringAsFixed(2)} submitted to Admin Finance Desk for inspection & disbursement.',
+                              '✓ Instant Withdrawal of \$${amt.toStringAsFixed(2)} processed successfully!',
                               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
                             ),
                           ),

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'blocs/blocs.dart';
 import 'core/router/app_router.dart';
 import 'core/security/app_lock_gate.dart';
 import 'core/theme/app_theme.dart';
+import 'data/datasources/market_feed_service.dart';
 import 'presentation/common/widgets/network_status_overlay.dart';
-import 'providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,39 +34,73 @@ void main() async {
     ),
   );
 
+  final feedService = MarketFeedService();
+  final tradingEngineCubit = TradingEngineCubit();
+  final adminCubit = AdminCubit();
+  final authCubit = AuthCubit(
+    tradingEngineCubit: tradingEngineCubit,
+    adminCubit: adminCubit,
+  );
+  final themeCubit = ThemeCubit();
+  final connectivityCubit = ConnectivityCubit();
+  final marketBloc = MarketBloc(feedService: feedService);
+  final walletCubit = WalletCubit();
+  final ledgerCubit = LedgerCubit();
+  final kycCubit = KycCubit();
+  final dealingDeskCubit = DealingDeskCubit(
+    feedService: feedService,
+    tradingEngineCubit: tradingEngineCubit,
+  );
+
+  final router = createAppRouter(authCubit);
+
   runApp(
-    const ProviderScope(
-      child: FXAsianApp(),
+    MultiBlocProvider(
+      providers: [
+        BlocProvider<ThemeCubit>.value(value: themeCubit),
+        BlocProvider<ConnectivityCubit>.value(value: connectivityCubit),
+        BlocProvider<AuthCubit>.value(value: authCubit),
+        BlocProvider<TradingEngineCubit>.value(value: tradingEngineCubit),
+        BlocProvider<AdminCubit>.value(value: adminCubit),
+        BlocProvider<MarketBloc>.value(value: marketBloc),
+        BlocProvider<WalletCubit>.value(value: walletCubit),
+        BlocProvider<LedgerCubit>.value(value: ledgerCubit),
+        BlocProvider<KycCubit>.value(value: kycCubit),
+        BlocProvider<DealingDeskCubit>.value(value: dealingDeskCubit),
+      ],
+      child: FXAsianApp(router: router),
     ),
   );
 }
 
-class FXAsianApp extends ConsumerWidget {
-  const FXAsianApp({super.key});
+class FXAsianApp extends StatelessWidget {
+  final GoRouter router;
+  const FXAsianApp({super.key, required this.router});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = ref.watch(themeProvider);
-    final router = ref.watch(appRouterProvider);
-
-    return MaterialApp.router(
-      title: 'FXAsianApp',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
-      routerConfig: router,
-      builder: (context, child) {
-        return MediaQuery(
-          // Prevent text scaling above 1.2x for consistent layout
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(
-              MediaQuery.of(context).textScaler.scale(1.0).clamp(0.8, 1.2),
-            ),
-          ),
-          child: NetworkStatusOverlay(
-            child: AppLockGate(child: child!),
-          ),
+  Widget build(BuildContext context) {
+    return BlocBuilder<ThemeCubit, bool>(
+      builder: (context, isDark) {
+        return MaterialApp.router(
+          title: 'FXAsianApp',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
+          routerConfig: router,
+          builder: (context, child) {
+            return MediaQuery(
+              // Prevent text scaling above 1.2x for consistent layout
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(
+                  MediaQuery.of(context).textScaler.scale(1.0).clamp(0.8, 1.2),
+                ),
+              ),
+              child: NetworkStatusOverlay(
+                child: AppLockGate(child: child!),
+              ),
+            );
+          },
         );
       },
     );

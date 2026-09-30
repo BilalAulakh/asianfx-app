@@ -1,25 +1,24 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../blocs/blocs.dart';
 import '../../core/math/money_math.dart';
 import '../../core/theme/app_colors.dart';
 import '../../domain/entities/trading_entities.dart';
-import '../../providers/trading_engine_provider.dart';
-import '../../providers/theme_provider.dart';
 
-class PositionsScreen extends ConsumerStatefulWidget {
+class PositionsScreen extends StatefulWidget {
   const PositionsScreen({super.key});
 
   @override
-  ConsumerState<PositionsScreen> createState() => _PositionsScreenState();
+  State<PositionsScreen> createState() => _PositionsScreenState();
 }
 
-class _PositionsScreenState extends ConsumerState<PositionsScreen>
+class _PositionsScreenState extends State<PositionsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  bool get _isDark => ref.watch(themeProvider);
+  bool get _isDark => context.watch<ThemeCubit>().state;
   Color get _bg => _isDark ? const Color(0xFF0A0E17) : const Color(0xFFF1F5F9);
   Color get _appBarBg => _isDark ? const Color(0xFF151D28) : Colors.white;
   Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
@@ -41,7 +40,7 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final engineState = ref.watch(tradingEngineProvider);
+    final engineState = context.watch<TradingEngineBloc>().state;
     final account = engineState.accountState;
     final isDark = _isDark;
 
@@ -68,7 +67,7 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
               size: 20,
             ),
             tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-            onPressed: () => ref.read(themeProvider.notifier).toggleTheme(),
+            onPressed: () => context.read<ThemeCubit>().toggleTheme(),
           ),
         ],
         bottom: TabBar(
@@ -329,7 +328,7 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
               // Close Position Button
               OutlinedButton(
                 onPressed: () async {
-                  await ref.read(tradingEngineProvider.notifier).closePosition(pos.id);
+                  await context.read<TradingEngineBloc>().closePosition(pos.id);
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -422,7 +421,7 @@ class _PositionsScreenState extends ConsumerState<PositionsScreen>
               IconButton(
                 icon: const Icon(Icons.cancel_outlined, color: Color(0xFFFF4757)),
                 onPressed: () {
-                  ref.read(tradingEngineProvider.notifier).cancelPendingOrder(ord.id);
+                  context.read<TradingEngineBloc>().cancelPendingOrder(ord.id);
                 },
               ),
             ],

@@ -1,9 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/security/secure_storage_service.dart';
 import '../domain/entities/user_entity.dart';
-import 'admin_provider.dart';
-import 'trading_engine_provider.dart';
+import 'admin_bloc.dart';
+import 'trading_engine_bloc.dart';
 
 enum AuthStatus { loading, authenticated, unauthenticated }
 
@@ -27,11 +28,26 @@ class AuthState {
   }
 }
 
-class AuthNotifier extends StateNotifier<AuthState> {
-  final Ref _ref;
+class AuthCubit extends Cubit<AuthState> {
+  TradingEngineCubit? _tradingEngineCubit;
+  AdminCubit? _adminCubit;
+  StreamSubscription? _subaAuthSub;
 
-  AuthNotifier(this._ref) : super(const AuthState()) {
+  AuthCubit({
+    TradingEngineCubit? tradingEngineCubit,
+    AdminCubit? adminCubit,
+  })  : _tradingEngineCubit = tradingEngineCubit,
+        _adminCubit = adminCubit,
+        super(const AuthState()) {
     _initAuth();
+  }
+
+  void updateDependencies({
+    TradingEngineCubit? tradingEngineCubit,
+    AdminCubit? adminCubit,
+  }) {
+    if (tradingEngineCubit != null) _tradingEngineCubit = tradingEngineCubit;
+    if (adminCubit != null) _adminCubit = adminCubit;
   }
 
   Future<void> _initAuth() async {
@@ -41,7 +57,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void _listenAuthChanges() {
     try {
-      Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      _subaAuthSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
         final session = data.session;
         final supaUser = session?.user;
         if (session != null && supaUser != null && supaUser.email != null) {
@@ -71,22 +87,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
       nationality: 'Pakistani',
       preferredCurrency: 'USD',
       preferredLanguage: 'en',
-      kycStatus: KycStatus.approved,
+      kycStatus: assignedRole == UserRole.admin ? KycStatus.approved : KycStatus.notSubmitted,
       status: AccountStatus.active,
       role: assignedRole,
       isTwoFactorEnabled: is2Fa,
       isEmailVerified: supaUser.emailConfirmedAt != null,
       isPhoneVerified: true,
+      kycTier: assignedRole == UserRole.admin ? 2 : 0,
       createdAt: DateTime.tryParse(supaUser.createdAt) ?? DateTime.now(),
     );
 
     SecureStorageService.instance.saveCurrentSessionUser(user);
-    state = AuthState(
+    emit(AuthState(
       status: AuthStatus.authenticated,
       user: user,
-    );
+    ));
 
-    _ref.read(tradingEngineProvider.notifier).switchUser(supaUser.id);
+    _tradingEngineCubit?.switchUser(supaUser.id);
     _syncUserWalletToSupabase(supaUser.id);
   }
 
@@ -108,37 +125,42 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (_) {}
   }
 
-  /// Check active Supabase session or cached session on app startup / browser reload
   Future<void> _checkSession() async {
-    // 1. Check live Supabase session
     try {
       final session = Supabase.instance.client.auth.currentSession;
       final supaUser = Supabase.instance.client.auth.currentUser;
 
       if (session != null && supaUser != null && supaUser.email != null) {
-        _handleSupabaseUser(supaUser);
+        await _handleSupabaseUser(supaUser);
         return;
       }
     } catch (_) {}
 
-    // 2. Check local secure session cache
     try {
       final cachedUser = await SecureStorageService.instance.getCurrentSessionUser();
       if (cachedUser != null) {
-        state = AuthState(
+        var userToEmit = cachedUser;
+        // If regular user was previously auto-approved without actually submitting KYC docs, reset to unverified
+        if (cachedUser.email != 'admin@asianfx.com' &&
+            cachedUser.kycDocumentNumber == null &&
+            cachedUser.kycSubmittedAt == null) {
+          userToEmit = cachedUser.resetKyc();
+          await SecureStorageService.instance.saveCurrentSessionUser(userToEmit);
+        }
+
+        emit(AuthState(
           status: AuthStatus.authenticated,
-          user: cachedUser,
-        );
-        _ref.read(tradingEngineProvider.notifier).switchUser(cachedUser.id);
-        _syncUserWalletToSupabase(cachedUser.id);
+          user: userToEmit,
+        ));
+        _tradingEngineCubit?.switchUser(userToEmit.id);
+        _syncUserWalletToSupabase(userToEmit.id);
         return;
       }
     } catch (_) {}
 
-    state = const AuthState(status: AuthStatus.unauthenticated);
+    emit(const AuthState(status: AuthStatus.unauthenticated));
   }
 
-  /// Seamless Enterprise Fallback for when Supabase has exceeded egress quota (HTTP 402) or is offline
   Future<bool> _loginFallback({
     required String email,
     required String password,
@@ -147,26 +169,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
 
-    // Check if there is an already saved password for this user
     final savedPwd = await SecureStorageService.instance.getUserPassword(normalizedEmail);
     if (savedPwd != null && savedPwd.isNotEmpty && savedPwd != password) {
-      state = const AuthState(
+      emit(const AuthState(
         status: AuthStatus.unauthenticated,
         error: 'Incorrect email or password. Please check your credentials.',
-      );
+      ));
       return false;
     }
 
-    // Admin email strict password guard
     if (normalizedEmail == 'admin@asianfx.com' && password != 'Admin@123' && savedPwd != password) {
-      state = const AuthState(
+      emit(const AuthState(
         status: AuthStatus.unauthenticated,
         error: 'Incorrect email or password. Please check your credentials.',
-      );
+      ));
       return false;
     }
 
-    // Save password for subsequent logins
     await SecureStorageService.instance.saveUserCredentials(normalizedEmail, password);
 
     final isAdmin = normalizedEmail == 'admin@asianfx.com';
@@ -178,6 +197,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final userId = isAdmin ? 'usr_admin_asianfx' : 'usr_${normalizedEmail.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}';
 
     final is2Fa = await SecureStorageService.instance.isTwoFactorEnabledForUser(normalizedEmail);
+
+    KycStatus initialKyc = KycStatus.notSubmitted;
+    int initialTier = 0;
+    if (isAdmin) {
+      initialKyc = KycStatus.approved;
+      initialTier = 2;
+    } else if (savedData['kycDocumentNumber'] != null && savedData['kycSubmittedAt'] != null) {
+      if (savedData['kycStatus'] != null) {
+        initialKyc = KycStatus.values.firstWhere(
+          (k) => k.name == savedData['kycStatus'],
+          orElse: () => KycStatus.notSubmitted,
+        );
+      }
+      initialTier = (savedData['kycTier'] as int?) ?? (initialKyc == KycStatus.approved ? 2 : 0);
+    }
+
     final loggedInUser = UserEntity(
       id: userId,
       email: normalizedEmail,
@@ -187,16 +222,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       nationality: 'Pakistani',
       preferredCurrency: 'USD',
       preferredLanguage: 'en',
-      kycStatus: KycStatus.approved,
+      kycStatus: initialKyc,
       status: AccountStatus.active,
       role: assignedRole,
       isTwoFactorEnabled: is2Fa,
       isEmailVerified: true,
       isPhoneVerified: true,
+      kycTier: initialTier,
       createdAt: DateTime.now(),
     );
 
-    // Persist session to local storage
     await SecureStorageService.instance.saveCurrentSessionUser(loggedInUser);
     await SecureStorageService.instance.saveUserProfile(
       id: userId,
@@ -206,18 +241,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       phone: userPhone,
     );
 
-    state = AuthState(
+    emit(AuthState(
       status: AuthStatus.authenticated,
       user: loggedInUser,
-    );
+    ));
 
-    // Switch trading engine to this user & sync wallet
-    _ref.read(tradingEngineProvider.notifier).switchUser(userId);
+    _tradingEngineCubit?.switchUser(userId);
     _syncUserWalletToSupabase(userId);
 
-    // Add to Admin panel user list if client
-    if (!isAdmin) {
-      _ref.read(adminProvider.notifier).addTraderUser(
+    if (!isAdmin && _adminCubit != null) {
+      _adminCubit!.addTraderUser(
         AdminTraderUser(
           id: userId,
           name: name,
@@ -235,34 +268,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return true;
   }
 
-  /// Login strictly using Supabase Auth with automatic resilient fallback
   Future<bool> login({required String email, required String password}) async {
-    state = state.copyWith(status: AuthStatus.loading, error: null);
+    emit(state.copyWith(status: AuthStatus.loading, error: null));
     final normalizedEmail = email.trim().toLowerCase();
     if (normalizedEmail.isEmpty || password.isEmpty) {
-      state = const AuthState(
+      emit(const AuthState(
         status: AuthStatus.unauthenticated,
         error: 'Please enter both email and password',
-      );
+      ));
       return false;
     }
 
     final isMasterAdmin = normalizedEmail == 'admin@asianfx.com';
 
-    // If master admin with wrong password
     if (isMasterAdmin && password != 'Admin@123') {
       final savedPwd = await SecureStorageService.instance.getUserPassword(normalizedEmail);
       if (savedPwd != null && savedPwd != password) {
-        state = const AuthState(
+        emit(const AuthState(
           status: AuthStatus.unauthenticated,
           error: 'Incorrect email or password. Please check your credentials.',
-        );
+        ));
         return false;
       }
     }
 
     try {
-      // 1. Attempt Supabase Auth Login
       AuthResponse? authResponse;
       try {
         authResponse = await Supabase.instance.client.auth.signInWithPassword(
@@ -270,7 +300,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
           password: password,
         );
       } catch (e) {
-        // If master admin does not exist yet in Supabase project, auto-register & sign in
         if (isMasterAdmin && password == 'Admin@123') {
           try {
             await Supabase.instance.client.auth.signUp(
@@ -308,31 +337,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
           nationality: 'Pakistani',
           preferredCurrency: 'USD',
           preferredLanguage: 'en',
-          kycStatus: KycStatus.approved,
+          kycStatus: isAdmin ? KycStatus.approved : KycStatus.notSubmitted,
           status: AccountStatus.active,
           role: assignedRole,
           isTwoFactorEnabled: false,
           isEmailVerified: supaUser.emailConfirmedAt != null,
           isPhoneVerified: true,
+          kycTier: isAdmin ? 2 : 0,
           createdAt: DateTime.tryParse(supaUser.createdAt) ?? DateTime.now(),
         );
 
-        // Persist user session to LocalStorage
         await SecureStorageService.instance.saveCurrentSessionUser(loggedInUser);
         await SecureStorageService.instance.saveUserCredentials(normalizedEmail, password);
 
-        state = AuthState(
+        emit(AuthState(
           status: AuthStatus.authenticated,
           user: loggedInUser,
-        );
+        ));
 
-        // Switch trading engine to this user & sync wallet
-        _ref.read(tradingEngineProvider.notifier).switchUser(supaUser.id);
+        _tradingEngineCubit?.switchUser(supaUser.id);
         await _syncUserWalletToSupabase(supaUser.id);
 
-        // Add regular traders to Admin panel user list
-        if (!isAdmin) {
-          _ref.read(adminProvider.notifier).addTraderUser(
+        if (!isAdmin && _adminCubit != null) {
+          _adminCubit!.addTraderUser(
             AdminTraderUser(
               id: supaUser.id,
               name: name,
@@ -351,7 +378,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
-      // If user explicitly gave incorrect credentials
       if (msg.contains('invalid login credentials') || msg.contains('invalid_grant')) {
         if (isMasterAdmin && password == 'Admin@123') {
           return _loginFallback(
@@ -364,10 +390,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         if (savedPwd != null && savedPwd == password) {
           return _loginFallback(email: normalizedEmail, password: password);
         }
-        state = const AuthState(
+        emit(const AuthState(
           status: AuthStatus.unauthenticated,
           error: 'Incorrect email or password. Please check your credentials.',
-        );
+        ));
         return false;
       }
 
@@ -379,7 +405,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
       }
 
-      // If Supabase quota exceeded (402) or project restricted, seamless fallback
       return _loginFallback(email: normalizedEmail, password: password);
     } catch (_) {
       if (isMasterAdmin && password == 'Admin@123') {
@@ -402,61 +427,90 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return _loginFallback(email: normalizedEmail, password: password);
   }
 
-  /// Switch role between Admin and Client
   void switchRole(UserRole role) {
     if (state.user == null) return;
     final updated = state.user!.copyWith(role: role);
-    state = state.copyWith(user: updated);
+    emit(state.copyWith(user: updated));
     SecureStorageService.instance.saveCurrentSessionUser(updated);
   }
 
-  /// Update KYC Status
-  void updateUserKyc(KycStatus kycStatus) {
+  void updateUserKyc(
+    KycStatus kycStatus, {
+    int? kycTier,
+    String? documentType,
+    String? documentNumber,
+    String? employmentStatus,
+    String? tradingExperience,
+    String? annualIncome,
+    String? streetAddress,
+    String? city,
+    String? postalCode,
+    String? rejectionReason,
+  }) {
     if (state.user == null) return;
-    final updated = state.user!.copyWith(kycStatus: kycStatus);
-    state = state.copyWith(user: updated);
+    final updated = state.user!.copyWith(
+      kycStatus: kycStatus,
+      kycTier: kycTier ?? (kycStatus == KycStatus.approved ? 2 : state.user!.kycTier),
+      kycDocumentType: documentType ?? state.user!.kycDocumentType,
+      kycDocumentNumber: documentNumber ?? state.user!.kycDocumentNumber,
+      employmentStatus: employmentStatus ?? state.user!.employmentStatus,
+      tradingExperience: tradingExperience ?? state.user!.tradingExperience,
+      annualIncome: annualIncome ?? state.user!.annualIncome,
+      streetAddress: streetAddress ?? state.user!.streetAddress,
+      city: city ?? state.user!.city,
+      postalCode: postalCode ?? state.user!.postalCode,
+      kycRejectionReason: rejectionReason ?? state.user!.kycRejectionReason,
+      kycSubmittedAt: DateTime.now(),
+    );
+    emit(state.copyWith(user: updated));
     SecureStorageService.instance.saveCurrentSessionUser(updated);
+    if (_adminCubit != null) {
+      _adminCubit!.setTraderKycVerified(updated.id, kycStatus == KycStatus.approved);
+    }
   }
 
-  /// Update Account Status
   void updateUserAccountStatus(AccountStatus status) {
     if (state.user == null) return;
     final updated = state.user!.copyWith(status: status);
-    state = state.copyWith(user: updated);
+    emit(state.copyWith(user: updated));
     SecureStorageService.instance.saveCurrentSessionUser(updated);
   }
 
-  /// Register via Supabase Auth with automatic resilient fallback
+  void resetKycForTesting() {
+    if (state.user == null) return;
+    final updated = state.user!.resetKyc();
+    emit(state.copyWith(user: updated));
+    SecureStorageService.instance.saveCurrentSessionUser(updated);
+  }
+
   Future<bool> register({
     required String fullName,
     required String email,
     required String password,
     String? phone,
   }) async {
-    state = state.copyWith(status: AuthStatus.loading, error: null);
+    emit(state.copyWith(status: AuthStatus.loading, error: null));
     final normalizedEmail = email.trim().toLowerCase();
 
     if (normalizedEmail.isEmpty || password.isEmpty) {
-      state = const AuthState(
+      emit(const AuthState(
         status: AuthStatus.unauthenticated,
         error: 'Please enter all required fields.',
-      );
+      ));
       return false;
     }
 
-    // Reserved admin email
     if (normalizedEmail == 'admin@asianfx.com') {
-      state = const AuthState(
+      emit(const AuthState(
         status: AuthStatus.unauthenticated,
         error: 'This email is reserved for Admin. Please login with your credentials.',
-      );
+      ));
       return false;
     }
 
     try {
       const roleString = 'client';
 
-      // Direct Supabase Auth Sign Up
       final authRes = await Supabase.instance.client.auth.signUp(
         email: normalizedEmail,
         password: password,
@@ -480,56 +534,59 @@ class AuthNotifier extends StateNotifier<AuthState> {
           nationality: 'Pakistani',
           preferredCurrency: 'USD',
           preferredLanguage: 'en',
-          kycStatus: KycStatus.approved,
+          kycStatus: KycStatus.notSubmitted,
           status: AccountStatus.active,
           role: assignedRole,
           isTwoFactorEnabled: false,
           isEmailVerified: supaUser.emailConfirmedAt != null,
           isPhoneVerified: true,
+          kycTier: 0,
           createdAt: DateTime.now(),
         );
 
         await SecureStorageService.instance.saveCurrentSessionUser(newUser);
         await SecureStorageService.instance.saveUserCredentials(normalizedEmail, password);
 
-        state = AuthState(
+        emit(AuthState(
           status: AuthStatus.authenticated,
           user: newUser,
-        );
+        ));
 
-        _ref.read(tradingEngineProvider.notifier).switchUser(supaUser.id);
+        _tradingEngineCubit?.switchUser(supaUser.id);
         await _syncUserWalletToSupabase(supaUser.id);
 
-        _ref.read(adminProvider.notifier).addTraderUser(
-          AdminTraderUser(
-            id: supaUser.id,
-            name: fullName,
-            email: normalizedEmail,
-            phone: phone ?? '+92 300 1234567',
-            balance: 0.00,
-            equity: 0.00,
-            isKycVerified: false,
-            status: AdminUserStatus.active,
-            joinedAt: DateTime.now(),
-          ),
-        );
+        if (_adminCubit != null) {
+          _adminCubit!.addTraderUser(
+            AdminTraderUser(
+              id: supaUser.id,
+              name: fullName,
+              email: normalizedEmail,
+              phone: phone ?? '+92 300 1234567',
+              balance: 0.00,
+              equity: 0.00,
+              isKycVerified: false,
+              status: AdminUserStatus.active,
+              joinedAt: DateTime.now(),
+            ),
+          );
+        }
 
         return true;
       }
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       if (msg.contains('already registered') || msg.contains('user already exists')) {
-        state = const AuthState(
+        emit(const AuthState(
           status: AuthStatus.unauthenticated,
           error: 'An account with this email already exists. Please log in.',
-        );
+        ));
         return false;
       }
       if (msg.contains('weak') || msg.contains('password should be at least')) {
-        state = AuthState(
+        emit(AuthState(
           status: AuthStatus.unauthenticated,
           error: e.message,
-        );
+        ));
         return false;
       }
       return _loginFallback(
@@ -555,7 +612,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
-  /// Sign out strictly via Supabase Auth and clear persistent session
   Future<void> logout() async {
     try {
       await Supabase.instance.client.auth.signOut();
@@ -563,24 +619,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await SecureStorageService.instance.clearCurrentSessionUser();
     } catch (_) {}
-    state = const AuthState(status: AuthStatus.unauthenticated);
+    emit(const AuthState(status: AuthStatus.unauthenticated));
   }
 
-  /// Toggle Two-Factor Authentication state
   Future<void> toggleTwoFactor(bool enabled) async {
     if (state.user == null) return;
     final updated = state.user!.copyWith(isTwoFactorEnabled: enabled);
-    state = state.copyWith(user: updated);
+    emit(state.copyWith(user: updated));
     await SecureStorageService.instance.saveCurrentSessionUser(updated);
     await SecureStorageService.instance.setTwoFactorEnabledForUser(updated.email, enabled);
   }
 
-  /// Reset Password functionality for forgot password flow
   Future<bool> resetPassword({
     required String email,
     required String newPassword,
   }) async {
-    state = state.copyWith(status: AuthStatus.loading, error: null);
+    emit(state.copyWith(status: AuthStatus.loading, error: null));
     final normalizedEmail = email.trim().toLowerCase();
     try {
       await SecureStorageService.instance.saveUserCredentials(normalizedEmail, newPassword);
@@ -589,20 +643,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
           UserAttributes(password: newPassword),
         );
       } catch (_) {}
-      state = state.copyWith(status: AuthStatus.unauthenticated, error: null);
+      emit(state.copyWith(status: AuthStatus.unauthenticated, error: null));
       return true;
     } catch (e) {
-      state = state.copyWith(
+      emit(state.copyWith(
         status: AuthStatus.unauthenticated,
         error: 'Failed to reset password. Please try again.',
-      );
+      ));
       return false;
     }
   }
 
-  void clearError() => state = state.copyWith(error: null);
+  void clearError() => emit(state.copyWith(error: null));
+
+  @override
+  Future<void> close() {
+    _subaAuthSub?.cancel();
+    return super.close();
+  }
 }
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref);
-});
+typedef AuthBloc = AuthCubit;

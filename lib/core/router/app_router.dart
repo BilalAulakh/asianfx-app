@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../blocs/auth_bloc.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../providers/auth_provider.dart';
 import '../../presentation/splash/splash_screen.dart';
 import '../../presentation/onboarding/onboarding_screen.dart';
 import '../../presentation/auth/login_screen.dart';
@@ -40,13 +40,29 @@ abstract class AppRoutes {
   static const admin = '/app/admin';
 }
 
-final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+/// Stream-backed ChangeNotifier for reactive GoRouter route guards
+class GoRouterRefreshStream extends ChangeNotifier {
+  late final StreamSubscription<dynamic> _subscription;
 
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    notifyListeners();
+    _subscription = stream.asBroadcastStream().listen((_) => notifyListeners());
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
+
+GoRouter createAppRouter(AuthBloc authBloc) {
   return GoRouter(
     initialLocation: AppRoutes.splash,
+    refreshListenable: GoRouterRefreshStream(authBloc.stream),
     debugLogDiagnostics: false,
     redirect: (context, state) {
+      final authState = authBloc.state;
       final isAuthenticated = authState.status == AuthStatus.authenticated;
       final isAuthRoute = state.matchedLocation == AppRoutes.login ||
           state.matchedLocation == AppRoutes.register ||
@@ -201,7 +217,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ),
   );
-});
+}
 
 Widget _fadeSlideTransition(
   BuildContext context,

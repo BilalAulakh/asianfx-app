@@ -6,10 +6,13 @@ import '../../domain/entities/ledger_entities.dart';
 
 /// In-Memory & Supabase-Ready High-Precision Double-Entry Financial Ledger Repository
 class LedgerRepository {
+  static final LedgerRepository instance = LedgerRepository._internal();
+  factory LedgerRepository() => instance;
+
   final List<LedgerTransaction> _transactions = [];
   final _uuid = const Uuid();
 
-  LedgerRepository() {
+  LedgerRepository._internal() {
     _seedInitialLedgerState();
   }
 
@@ -421,6 +424,30 @@ class LedgerRepository {
     return _transactions.first;
   }
 
+  LedgerTransaction recordRealizedPnl({
+    required String userId,
+    required String tradeId,
+    required Decimal realizedPnl,
+    required String symbol,
+  }) => recordTradePnl(
+    userId: userId,
+    tradeId: tradeId,
+    pnlAmount: realizedPnl,
+    symbol: symbol,
+  );
+
+  LedgerTransaction recordFeeRevenue({
+    required String userId,
+    required String tradeId,
+    required Decimal feeAmount,
+    required String feeDescription,
+  }) => recordFee(
+    userId: userId,
+    tradeId: tradeId,
+    feeAmount: feeAmount,
+    feeDescription: feeDescription,
+  );
+
   /// Get all ledger transactions (sorted descending by timestamp)
   List<LedgerTransaction> getTransactions({String? userId}) {
     if (userId == null) return List.unmodifiable(_transactions);
@@ -434,7 +461,7 @@ class LedgerRepository {
     for (final tx in _transactions) {
       for (final entry in tx.entries) {
         if (entry.accountCode == AppConstants.acctClientDepositsPayable &&
-            (entry.userId == userId || entry.userId == null || entry.userId == 'usr_institutional_01')) {
+            (entry.userId == userId || (userId == 'usr_institutional_01' && entry.userId == null))) {
           balance += (entry.credit - entry.debit);
         }
       }

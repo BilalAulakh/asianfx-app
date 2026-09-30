@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../providers/connectivity_provider.dart';
+import '../../../blocs/connectivity_cubit.dart';
 
 /// Global overlay that monitors network connectivity and displays
 /// a sleek, non-intrusive animated status banner whenever the internet drops
 /// or reconnects.
-class NetworkStatusOverlay extends ConsumerStatefulWidget {
+class NetworkStatusOverlay extends StatefulWidget {
   final Widget child;
 
   const NetworkStatusOverlay({
@@ -16,19 +16,14 @@ class NetworkStatusOverlay extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<NetworkStatusOverlay> createState() => _NetworkStatusOverlayState();
+  State<NetworkStatusOverlay> createState() => _NetworkStatusOverlayState();
 }
 
-class _NetworkStatusOverlayState extends ConsumerState<NetworkStatusOverlay>
+class _NetworkStatusOverlayState extends State<NetworkStatusOverlay>
     with SingleTickerProviderStateMixin {
   bool _showBanner = false;
   bool _isBackOnline = false;
   Timer? _autoDismissTimer;
-
-  @override
-  void initState() {
-    super.initState();
-  }
 
   @override
   void dispose() {
@@ -38,37 +33,38 @@ class _NetworkStatusOverlayState extends ConsumerState<NetworkStatusOverlay>
 
   @override
   Widget build(BuildContext context) {
-    // Listen to network state changes
-    ref.listen<ConnectivityState>(connectivityProvider, (previous, next) {
-      if (!next.isConnected) {
-        // Disconnected
-        _autoDismissTimer?.cancel();
-        setState(() {
-          _showBanner = true;
-          _isBackOnline = false;
-        });
-      } else if (next.isConnected && (previous?.isConnected == false || next.wasDisconnected)) {
-        // Just reconnected
-        _autoDismissTimer?.cancel();
-        setState(() {
-          _showBanner = true;
-          _isBackOnline = true;
-        });
+    return BlocConsumer<ConnectivityCubit, ConnectivityState>(
+      listenWhen: (previous, current) =>
+          previous.isConnected != current.isConnected ||
+          previous.wasDisconnected != current.wasDisconnected,
+      listener: (context, next) {
+        if (!next.isConnected) {
+          // Disconnected
+          _autoDismissTimer?.cancel();
+          setState(() {
+            _showBanner = true;
+            _isBackOnline = false;
+          });
+        } else if (next.isConnected && next.wasDisconnected) {
+          // Just reconnected
+          _autoDismissTimer?.cancel();
+          setState(() {
+            _showBanner = true;
+            _isBackOnline = true;
+          });
 
-        // Auto-dismiss the "Back Online" success notification after 2.5 seconds
-        _autoDismissTimer = Timer(const Duration(milliseconds: 2500), () {
-          if (mounted) {
-            setState(() {
-              _showBanner = false;
-              _isBackOnline = false;
-            });
-            ref.read(connectivityProvider.notifier).markOnlineAcknowledged();
-          }
-        });
-      }
-    });
-
-    final connectivity = ref.watch(connectivityProvider);
+          _autoDismissTimer = Timer(const Duration(milliseconds: 2500), () {
+            if (mounted) {
+              setState(() {
+                _showBanner = false;
+                _isBackOnline = false;
+              });
+              context.read<ConnectivityCubit>().markOnlineAcknowledged();
+            }
+          });
+        }
+      },
+      builder: (context, connectivity) {
 
     return Stack(
       children: [
@@ -181,8 +177,8 @@ class _NetworkStatusOverlayState extends ConsumerState<NetworkStatusOverlay>
                               onTap: connectivity.isChecking
                                   ? null
                                   : () {
-                                      ref
-                                          .read(connectivityProvider.notifier)
+                                      context
+                                          .read<ConnectivityCubit>()
                                           .checkConnection();
                                     },
                               borderRadius: BorderRadius.circular(8),
@@ -238,11 +234,13 @@ class _NetworkStatusOverlayState extends ConsumerState<NetworkStatusOverlay>
         ),
       ],
     );
+      },
+    );
   }
 }
 
 /// Standalone Fullscreen or In-line Network Error Card
-class NetworkErrorView extends ConsumerWidget {
+class NetworkErrorView extends StatelessWidget {
   final VoidCallback? onRetry;
   final String? customMessage;
 
@@ -253,86 +251,88 @@ class NetworkErrorView extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final connectivity = ref.watch(connectivityProvider);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.loss.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.loss.withValues(alpha: 0.3),
-                  width: 2,
+  Widget build(BuildContext context) {
+    return BlocBuilder<ConnectivityCubit, ConnectivityState>(
+      builder: (context, connectivity) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.loss.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.loss.withValues(alpha: 0.3),
+                      width: 2,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.wifi_off_rounded,
+                    size: 48,
+                    color: AppColors.loss,
+                  ),
                 ),
-              ),
-              child: const Icon(
-                Icons.wifi_off_rounded,
-                size: 48,
-                color: AppColors.loss,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Network Error',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              customMessage ??
-                  'Unable to connect to FXAsian servers. Please check your internet connection and try again.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 13,
-                color: Colors.white.withValues(alpha: 0.65),
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: connectivity.isChecking
-                  ? null
-                  : (onRetry ??
-                      () => ref
-                          .read(connectivityProvider.notifier)
-                          .checkConnection()),
-              icon: connectivity.isChecking
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.refresh_rounded, size: 18),
-              label: Text(
-                connectivity.isChecking ? 'Connecting...' : 'Retry Connection',
-                style: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandPrimary,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                const SizedBox(height: 20),
+                const Text(
+                  'Network Error',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Text(
+                  customMessage ??
+                      'Unable to connect to FXAsian servers. Please check your internet connection and try again.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    color: Colors.white.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: connectivity.isChecking
+                      ? null
+                      : (onRetry ??
+                          () => context
+                              .read<ConnectivityCubit>()
+                              .checkConnection()),
+                  icon: connectivity.isChecking
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.refresh_rounded, size: 18),
+                  label: Text(
+                    connectivity.isChecking ? 'Connecting...' : 'Retry Connection',
+                    style: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimary,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

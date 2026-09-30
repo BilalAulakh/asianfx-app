@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../blocs/auth_bloc.dart';
 import '../../../core/security/secure_storage_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../providers/auth_provider.dart';
 
-class TwoFactorAuthSheet extends ConsumerStatefulWidget {
+class TwoFactorAuthSheet extends StatefulWidget {
   final String userEmail;
   final bool isCurrentlyEnabled;
 
@@ -33,10 +33,10 @@ class TwoFactorAuthSheet extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<TwoFactorAuthSheet> createState() => _TwoFactorAuthSheetState();
+  State<TwoFactorAuthSheet> createState() => _TwoFactorAuthSheetState();
 }
 
-class _TwoFactorAuthSheetState extends ConsumerState<TwoFactorAuthSheet> {
+class _TwoFactorAuthSheetState extends State<TwoFactorAuthSheet> {
   final TextEditingController _otpController = TextEditingController();
   final SecureStorageService _storage = SecureStorageService.instance;
 
@@ -90,7 +90,8 @@ class _TwoFactorAuthSheetState extends ConsumerState<TwoFactorAuthSheet> {
     });
 
     await Future.delayed(const Duration(milliseconds: 600));
-    await ref.read(authProvider.notifier).toggleTwoFactor(true);
+    if (!mounted) return;
+    await context.read<AuthBloc>().toggleTwoFactor(true);
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
@@ -111,7 +112,8 @@ class _TwoFactorAuthSheetState extends ConsumerState<TwoFactorAuthSheet> {
     });
 
     await Future.delayed(const Duration(milliseconds: 500));
-    await ref.read(authProvider.notifier).toggleTwoFactor(false);
+    if (!mounted) return;
+    await context.read<AuthBloc>().toggleTwoFactor(false);
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);

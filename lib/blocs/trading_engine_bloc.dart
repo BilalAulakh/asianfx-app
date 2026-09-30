@@ -1,17 +1,16 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:decimal/decimal.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../core/constants/app_constants.dart';
-import '../../core/math/money_math.dart';
-import '../../data/datasources/market_feed_service.dart';
-import '../../data/datasources/supabase_trade_service.dart';
-import '../../domain/entities/trading_entities.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'auth_provider.dart';
-import 'ledger_provider.dart';
+import '../core/constants/app_constants.dart';
+import '../core/math/money_math.dart';
+import '../data/datasources/market_feed_service.dart';
+import '../data/datasources/supabase_trade_service.dart';
+import '../data/repositories/ledger_repository.dart';
+import '../domain/entities/trading_entities.dart';
 
 /// Full Trading Engine State containing positions, orders, account risk & alerts
 class TradingEngineState {
@@ -62,9 +61,9 @@ class TradingEngineState {
   }
 }
 
-class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
-  final Ref _ref;
+class TradingEngineCubit extends Cubit<TradingEngineState> {
   final _uuid = const Uuid();
+  final LedgerRepository _ledgerRepo = LedgerRepository.instance;
   StreamSubscription<InstrumentEntity>? _feedSub;
 
   // In-memory per-user persistence cache
@@ -73,7 +72,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
   final Map<String, List<TradeEntity>> _userPendingOrdersCache = {};
   final Map<String, TradingAccountState> _userAccountCache = {};
 
-  TradingEngineNotifier(this._ref)
+  TradingEngineCubit()
       : super(
           TradingEngineState(
             accountState: TradingAccountState(
@@ -100,11 +99,9 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
   /// Switch active trading engine to the authenticated user's portfolio
   void switchUser(String userId, {Decimal? initialBalance}) {
     final currentUserId = state.accountState.userId;
-    // Save current user state to cache
     _syncUserCache(currentUserId);
 
-    final ledgerBal = _ref.read(clientLedgerBalanceProvider);
-    // Retrieve or initialize target user state
+    final ledgerBal = _ledgerRepo.getClientLedgerBalance(userId);
     final userOpen = _userOpenPositionsCache[userId] ?? const [];
     final userClosed = _userClosedTradesCache[userId] ?? const [];
     final userPending = _userPendingOrdersCache[userId] ?? const [];
@@ -134,7 +131,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     final totalUsed = userOpen.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
     final totalUnrealized = userOpen.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
 
-    state = state.copyWith(
+    emit(state.copyWith(
       openPositions: userOpen,
       closedTrades: userClosed,
       pendingOrders: userPending,
@@ -142,7 +139,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
         usedMargin: totalUsed,
         unrealizedPnl: totalUnrealized,
       ),
-    );
+    ));
 
     _syncUserCache(userId);
 
@@ -165,15 +162,15 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
                 .catchError((_) {});
           }
           final supaBal = MoneyMath.toDec(balNum);
-          final currentLedger = _ref.read(clientLedgerBalanceProvider);
+          final currentLedger = _ledgerRepo.getClientLedgerBalance(userId);
           final effectiveBal = supaBal > Decimal.zero
               ? supaBal
               : (currentLedger > Decimal.zero ? currentLedger : state.accountState.ledgerBalance);
 
           if (state.accountState.userId == userId && effectiveBal > Decimal.zero) {
-            state = state.copyWith(
+            emit(state.copyWith(
               accountState: state.accountState.copyWith(ledgerBalance: effectiveBal),
-            );
+            ));
           }
           if (_userAccountCache.containsKey(userId) && effectiveBal > Decimal.zero) {
             _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: effectiveBal);
@@ -187,10 +184,10 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
       if (supabaseTrades.isNotEmpty && state.accountState.userId == userId) {
         final remoteOpens = supabaseTrades.where((t) => t.isOpen).toList();
         final remoteClosed = supabaseTrades.where((t) => t.isClosed).toList();
-        state = state.copyWith(
+        emit(state.copyWith(
           openPositions: remoteOpens.isNotEmpty ? remoteOpens : state.openPositions,
           closedTrades: remoteClosed.isNotEmpty ? remoteClosed : state.closedTrades,
-        );
+        ));
         _syncUserCache(userId);
       }
     });
@@ -199,7 +196,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
   /// Explicitly refresh balance from Supabase & Double-Entry Ledger
   Future<void> refreshBalance() async {
     final userId = state.accountState.userId;
-    final ledgerBal = _ref.read(clientLedgerBalanceProvider);
+    final ledgerBal = _ledgerRepo.getClientLedgerBalance(userId);
     try {
       final res = await Supabase.instance.client
           .from('wallets')
@@ -218,9 +215,9 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
             : (ledgerBal > Decimal.zero ? ledgerBal : state.accountState.ledgerBalance);
 
         if (effective > Decimal.zero) {
-          state = state.copyWith(
+          emit(state.copyWith(
             accountState: state.accountState.copyWith(ledgerBalance: effective),
-          );
+          ));
           if (_userAccountCache.containsKey(userId)) {
             _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: effective);
           }
@@ -230,21 +227,21 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     } catch (_) {}
 
     if (ledgerBal > Decimal.zero && state.accountState.ledgerBalance <= Decimal.zero) {
-      state = state.copyWith(
+      emit(state.copyWith(
         accountState: state.accountState.copyWith(ledgerBalance: ledgerBal),
-      );
+      ));
       if (_userAccountCache.containsKey(userId)) {
         _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: ledgerBal);
       }
     }
   }
 
-  /// Explicitly set balance for a user (e.g. reset legacy demo balance)
+  /// Explicitly set balance for a user
   void setBalance(String userId, Decimal balance) {
     if (state.accountState.userId == userId) {
-      state = state.copyWith(
+      emit(state.copyWith(
         accountState: state.accountState.copyWith(ledgerBalance: balance),
-      );
+      ));
     }
     if (_userAccountCache.containsKey(userId)) {
       _userAccountCache[userId] = _userAccountCache[userId]!.copyWith(ledgerBalance: balance);
@@ -265,11 +262,10 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
   void depositFunds(String userId, Decimal amount) {
     if (state.accountState.userId == userId) {
       final newBalance = state.accountState.ledgerBalance + amount;
-      state = state.copyWith(
+      emit(state.copyWith(
         accountState: state.accountState.copyWith(ledgerBalance: newBalance),
-      );
+      ));
     }
-    // Update cache as well
     if (_userAccountCache.containsKey(userId)) {
       final cached = _userAccountCache[userId]!;
       _userAccountCache[userId] = cached.copyWith(
@@ -291,20 +287,20 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
   /// Withdraw funds from a trader's account
   void withdrawFunds(String userId, Decimal amount) {
     if (state.accountState.userId == userId) {
-      final newBalance = (state.accountState.ledgerBalance - amount).clamp(Decimal.zero, MoneyMath.toDec(1000000000.0));
-      state = state.copyWith(
+      final newBalance = (state.accountState.ledgerBalance - amount)
+          .clamp(Decimal.zero, MoneyMath.toDec(1000000000.0));
+      emit(state.copyWith(
         accountState: state.accountState.copyWith(ledgerBalance: newBalance),
-      );
+      ));
     }
-    // Update cache as well
     if (_userAccountCache.containsKey(userId)) {
       final cached = _userAccountCache[userId]!;
       _userAccountCache[userId] = cached.copyWith(
-        ledgerBalance: (cached.ledgerBalance - amount).clamp(Decimal.zero, MoneyMath.toDec(1000000000.0)),
+        ledgerBalance: (cached.ledgerBalance - amount)
+            .clamp(Decimal.zero, MoneyMath.toDec(1000000000.0)),
       );
     }
   }
-
 
   void _listenToMarketTicks() {
     _feedSub?.cancel();
@@ -422,21 +418,21 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
           currentPrice: fillPrice,
         );
         updatedPositions.add(filledTrade);
-        // Lock margin in ledger
-        _ref.read(ledgerProvider.notifier).lockMargin(
-              userId: state.accountState.userId,
-              tradeId: filledTrade.id,
-              marginAmount: filledTrade.requiredMargin,
-              symbol: filledTrade.symbol,
-            );
+        _ledgerRepo.recordMarginLock(
+          userId: state.accountState.userId,
+          tradeId: filledTrade.id,
+          marginAmount: filledTrade.requiredMargin,
+          symbol: filledTrade.symbol,
+        );
       } else {
         remainingPending.add(order);
       }
     }
 
-    // Refresh cash balance from double-entry ledger
-    final ledgerBalance = _ref.read(clientLedgerBalanceProvider);
-    final effectiveLedger = ledgerBalance > Decimal.zero ? ledgerBalance : state.accountState.ledgerBalance;
+    final ledgerBalance = _ledgerRepo.getClientLedgerBalance(state.accountState.userId);
+    final effectiveLedger = ledgerBalance > Decimal.zero
+        ? ledgerBalance
+        : state.accountState.ledgerBalance;
 
     final totalUnrealized =
         updatedPositions.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
@@ -451,7 +447,6 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
 
     // Stop-Out Auto-Liquidation Check (Equity / Used Margin <= 50%)
     if (updatedPositions.isNotEmpty && updatedAccountState.isStopOutLiquidation) {
-      // Find position with highest loss to liquidate
       updatedPositions.sort((a, b) => a.unrealizedPnl.compareTo(b.unrealizedPnl));
       final liquidatedPos = updatedPositions.removeAt(0);
 
@@ -467,12 +462,11 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
       closedByTrigger.add(closedLiquidated);
       _settleClosedPositionLedger(closedLiquidated);
 
-      // Recalculate margins after liquidation
       final postUsed =
           updatedPositions.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
       final postUnrealized =
           updatedPositions.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
-      final postLedger = _ref.read(clientLedgerBalanceProvider);
+      final postLedger = _ledgerRepo.getClientLedgerBalance(state.accountState.userId);
 
       updatedAccountState = updatedAccountState.copyWith(
         ledgerBalance: postLedger > Decimal.zero ? postLedger : updatedAccountState.ledgerBalance,
@@ -480,7 +474,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
         unrealizedPnl: postUnrealized,
       );
 
-      state = state.copyWith(
+      emit(state.copyWith(
         openPositions: updatedPositions,
         closedTrades: [...closedByTrigger, ...state.closedTrades],
         pendingOrders: remainingPending,
@@ -488,11 +482,11 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
         lastAlertMessage:
             '⚠️ STOP-OUT LIQUIDATION: ${liquidatedPos.symbol} auto-liquidated to protect equity!',
         lastAlertTime: DateTime.now(),
-      );
+      ));
       return;
     }
 
-    state = state.copyWith(
+    emit(state.copyWith(
       openPositions: updatedPositions,
       closedTrades: [...closedByTrigger, ...state.closedTrades],
       pendingOrders: remainingPending,
@@ -501,7 +495,7 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
           ? '⚠️ MARGIN CALL WARNING: Margin level below 100%! Deposit funds or close trades.'
           : null,
       lastAlertTime: updatedAccountState.isMarginCall ? DateTime.now() : null,
-    );
+    ));
 
     if (closedByTrigger.isNotEmpty) {
       _syncUserCache(state.accountState.userId);
@@ -521,13 +515,13 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     Decimal? stopLoss,
     Decimal? takeProfit,
     Decimal? leverage,
+    bool canTrade = true,
   }) async {
-    final authUser = _ref.read(authProvider).user;
-    if (authUser != null && !authUser.canTrade) {
+    if (!canTrade) {
       throw Exception('KYC Verification required to open live positions.');
     }
 
-    state = state.copyWith(isSubmitting: true);
+    emit(state.copyWith(isSubmitting: true));
     await Future.delayed(const Duration(milliseconds: 300));
 
     final activeLev = leverage ?? state.accountState.leverage;
@@ -541,17 +535,15 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
       leverage: activeLev,
     );
 
-    // Synchronize balance if state is zero but double-entry ledger or Supabase has balance
-    final ledgerBal = _ref.read(clientLedgerBalanceProvider);
+    final ledgerBal = _ledgerRepo.getClientLedgerBalance(state.accountState.userId);
     var currentAccount = state.accountState;
     if (currentAccount.ledgerBalance <= Decimal.zero && ledgerBal > Decimal.zero) {
       currentAccount = currentAccount.copyWith(ledgerBalance: ledgerBal);
-      state = state.copyWith(accountState: currentAccount);
+      emit(state.copyWith(accountState: currentAccount));
     }
 
-    // Free margin validation
     if (requiredMargin > currentAccount.freeMargin) {
-      state = state.copyWith(isSubmitting: false);
+      emit(state.copyWith(isSubmitting: false));
       throw Exception(
         'Insufficient Free Margin! Required: ${MoneyMath.formatCurrency(requiredMargin)}, '
         'Available: ${MoneyMath.formatCurrency(currentAccount.freeMargin)}',
@@ -560,7 +552,6 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
 
     final tradeId = 'POS-${_uuid.v4().substring(0, 8).toUpperCase()}';
     final orderId = 'ORD-${_uuid.v4().substring(0, 8).toUpperCase()}';
-
     final isMarket = type == OrderType.market;
 
     final newTrade = TradeEntity(
@@ -584,38 +575,35 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     );
 
     if (isMarket) {
-      // 1. Lock Margin in Double-Entry Ledger
-      _ref.read(ledgerProvider.notifier).lockMargin(
-            userId: state.accountState.userId,
-            tradeId: tradeId,
-            marginAmount: requiredMargin,
-            symbol: instrument.symbol,
-          );
+      _ledgerRepo.recordMarginLock(
+        userId: state.accountState.userId,
+        tradeId: tradeId,
+        marginAmount: requiredMargin,
+        symbol: instrument.symbol,
+      );
 
-      // 2. Book Spread Markup Fee in Ledger
       final spreadFee = MoneyMath.toDec(instrument.spread.toDouble() * lots.toDouble() * 0.5);
-      _ref.read(ledgerProvider.notifier).recordFee(
-            userId: state.accountState.userId,
-            tradeId: tradeId,
-            feeAmount: spreadFee,
-            feeDescription: 'Spread Markup (${instrument.symbol})',
-          );
+      _ledgerRepo.recordFeeRevenue(
+        userId: state.accountState.userId,
+        tradeId: tradeId,
+        feeAmount: spreadFee,
+        feeDescription: 'Spread Markup (${instrument.symbol})',
+      );
 
       final updatedPositions = [newTrade, ...state.openPositions];
       final totalUsed = updatedPositions.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
       final totalUnrealized = updatedPositions.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
 
-      state = state.copyWith(
+      emit(state.copyWith(
         openPositions: updatedPositions,
         accountState: state.accountState.copyWith(
           usedMargin: totalUsed,
           unrealizedPnl: totalUnrealized,
         ),
         isSubmitting: false,
-      );
+      ));
       _syncUserCache(state.accountState.userId);
 
-      // Attempt Atomic Backend Execution via Supabase RPC, falling back to direct table sync
       SupabaseTradeService.instance.openTradeRpc(trade: newTrade).then((rpcResult) {
         if (rpcResult == null) {
           SupabaseTradeService.instance.insertTrade(
@@ -625,17 +613,17 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
         }
       });
     } else {
-      state = state.copyWith(
+      emit(state.copyWith(
         pendingOrders: [newTrade, ...state.pendingOrders],
         isSubmitting: false,
-      );
+      ));
       _syncUserCache(state.accountState.userId);
     }
 
     return true;
   }
 
-  /// Close an open position manually (Full or Partial)
+  /// Close an open position manually
   Future<void> closePosition(String tradeId) async {
     final idx = state.openPositions.indexWhere((t) => t.id == tradeId);
     if (idx == -1) return;
@@ -655,20 +643,21 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
     final updatedOpen = List<TradeEntity>.from(state.openPositions)..removeAt(idx);
     final totalUsed = updatedOpen.fold(Decimal.zero, (s, p) => s + p.requiredMargin);
     final totalUnrealized = updatedOpen.fold(Decimal.zero, (s, p) => s + p.unrealizedPnl);
-    final postLedger = _ref.read(clientLedgerBalanceProvider);
+    final postLedger = _ledgerRepo.getClientLedgerBalance(state.accountState.userId);
 
-    state = state.copyWith(
+    emit(state.copyWith(
       openPositions: updatedOpen,
       closedTrades: [closed, ...state.closedTrades],
       accountState: state.accountState.copyWith(
-        ledgerBalance: postLedger > Decimal.zero ? postLedger : state.accountState.ledgerBalance + pos.unrealizedPnl,
+        ledgerBalance: postLedger > Decimal.zero
+            ? postLedger
+            : state.accountState.ledgerBalance + pos.unrealizedPnl,
         usedMargin: totalUsed,
         unrealizedPnl: totalUnrealized,
       ),
-    );
+    ));
     _syncUserCache(state.accountState.userId);
 
-    // Settle in Supabase via RPC or table update
     final closePriceNum = closed.closePrice?.toDouble() ?? closed.currentPrice.toDouble();
     SupabaseTradeService.instance.closeTradeRpc(
       tradeId: tradeId,
@@ -684,36 +673,31 @@ class TradingEngineNotifier extends StateNotifier<TradingEngineState> {
   void cancelPendingOrder(String orderId) {
     final updatedPending =
         state.pendingOrders.where((o) => o.id != orderId && o.orderId != orderId).toList();
-    state = state.copyWith(pendingOrders: updatedPending);
+    emit(state.copyWith(pendingOrders: updatedPending));
   }
 
   /// Double-Entry Ledger Settlement for closed position
   void _settleClosedPositionLedger(TradeEntity closed) {
-    // 1. Release Margin Lock
-    _ref.read(ledgerProvider.notifier).releaseMargin(
-          userId: state.accountState.userId,
-          tradeId: closed.id,
-          marginAmount: closed.requiredMargin,
-          symbol: closed.symbol,
-        );
+    _ledgerRepo.recordMarginRelease(
+      userId: state.accountState.userId,
+      tradeId: closed.id,
+      marginAmount: closed.requiredMargin,
+      symbol: closed.symbol,
+    );
 
-    // 2. Book Realized PnL in Double-Entry Ledger
-    _ref.read(ledgerProvider.notifier).recordTradePnl(
-          userId: state.accountState.userId,
-          tradeId: closed.id,
-          pnlAmount: closed.realizedPnl,
-          symbol: closed.symbol,
-        );
+    _ledgerRepo.recordRealizedPnl(
+      userId: state.accountState.userId,
+      tradeId: closed.id,
+      realizedPnl: closed.realizedPnl,
+      symbol: closed.symbol,
+    );
   }
 
   @override
-  void dispose() {
+  Future<void> close() {
     _feedSub?.cancel();
-    super.dispose();
+    return super.close();
   }
 }
 
-final tradingEngineProvider =
-    StateNotifierProvider<TradingEngineNotifier, TradingEngineState>((ref) {
-  return TradingEngineNotifier(ref);
-});
+typedef TradingEngineBloc = TradingEngineCubit;

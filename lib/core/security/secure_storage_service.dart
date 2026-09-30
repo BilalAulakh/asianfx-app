@@ -312,7 +312,8 @@ class SecureStorageService {
   Future<String> getOrGenerateTwoFactorSecret(String email) async {
     final normalized = email.toLowerCase().trim();
     final prefs = await SharedPreferences.getInstance();
-    String? secret = await _storage.read(key: '2fa_secret_$normalized') ?? prefs.getString('2fa_secret_$normalized');
+    final secret = await _storage.read(key: '2fa_secret_$normalized') ?? prefs.getString('2fa_secret_$normalized');
+    if (secret != null && secret.isNotEmpty) return secret;
     final generated = 'FXA-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}-${normalized.hashCode.abs().toString().padLeft(4, '0').substring(0, 4)}';
     await _storage.write(key: '2fa_secret_$normalized', value: generated);
     await prefs.setString('2fa_secret_$normalized', generated);

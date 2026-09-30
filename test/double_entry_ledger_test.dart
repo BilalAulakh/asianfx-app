@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:asianfxapp/core/constants/app_constants.dart';
 import 'package:asianfxapp/core/math/money_math.dart';
 import 'package:asianfxapp/data/repositories/ledger_repository.dart';
-import 'package:asianfxapp/domain/entities/ledger_entities.dart';
 
 void main() {
   group('1. MoneyMath Precision & Risk Calculations', () {

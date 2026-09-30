@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../domain/entities/trading_entities.dart';
 
 class WalletState {
@@ -37,11 +37,11 @@ class WalletState {
   }
 }
 
-class WalletNotifier extends StateNotifier<WalletState> {
-  WalletNotifier()
+class WalletCubit extends Cubit<WalletState> {
+  WalletCubit()
       : super(
-          WalletState(
-            wallet: const WalletEntity(
+          const WalletState(
+            wallet: WalletEntity(
               id: 'wlt_001',
               userId: 'usr_001',
               currency: 'USD',
@@ -53,74 +53,80 @@ class WalletNotifier extends StateNotifier<WalletState> {
               marginLevel: 0.0,
               floatingPl: 0.0,
             ),
-            transactions: const [],
+            transactions: [],
           ),
         );
 
   void addPendingTransaction(TransactionEntity tx) {
-    state = state.copyWith(
+    emit(state.copyWith(
       transactions: [tx, ...state.transactions],
-    );
+    ));
   }
 
-  void creditDeposit(double amount, String method) {
+  void creditDeposit(double amount, String method, {String? txId}) {
     final newBal = state.balance + amount;
     final newEquity = state.equity + amount;
     final newFree = state.freeMargin + amount;
 
     final tx = TransactionEntity(
-      id: 'tx_${DateTime.now().millisecondsSinceEpoch}',
+      id: txId ?? 'tx_${DateTime.now().millisecondsSinceEpoch}',
       type: 'deposit',
       amount: amount,
       currency: 'USD',
       status: 'completed',
       method: method,
-      description: 'Deposit via $method',
+      description: 'Instant Deposit via $method',
       createdAt: DateTime.now(),
     );
 
-    state = state.copyWith(
+    emit(state.copyWith(
       wallet: state.wallet.copyWith(
         balance: newBal,
         equity: newEquity,
         freeMargin: newFree,
       ),
       transactions: [tx, ...state.transactions],
-    );
+    ));
   }
 
-  void debitWithdrawal(double amount, String method) {
+  void debitWithdrawal(double amount, String method, {String? txId, bool autoApprove = true}) {
     final newBal = (state.balance - amount).clamp(0.0, 1000000000.0);
     final newEquity = (state.equity - amount).clamp(0.0, 1000000000.0);
     final newFree = (state.freeMargin - amount).clamp(0.0, 1000000000.0);
 
     final tx = TransactionEntity(
-      id: 'tx_${DateTime.now().millisecondsSinceEpoch}',
+      id: txId ?? 'tx_${DateTime.now().millisecondsSinceEpoch}',
       type: 'withdrawal',
       amount: amount,
       currency: 'USD',
-      status: 'completed',
+      status: autoApprove ? 'completed' : 'pending',
       method: method,
-      description: 'Withdrawal to $method',
+      description: autoApprove
+          ? 'Instant Withdrawal via $method'
+          : 'Withdrawal via $method',
       createdAt: DateTime.now(),
     );
 
-    state = state.copyWith(
+    emit(state.copyWith(
       wallet: state.wallet.copyWith(
         balance: newBal,
         equity: newEquity,
         freeMargin: newFree,
       ),
       transactions: [tx, ...state.transactions],
-    );
+    ));
+  }
+
+  void updateWalletBalance(double balance, {double? equity, double? margin, double? freeMargin}) {
+    emit(state.copyWith(
+      wallet: state.wallet.copyWith(
+        balance: balance,
+        equity: equity ?? balance,
+        margin: margin ?? state.margin,
+        freeMargin: freeMargin ?? balance,
+      ),
+    ));
   }
 }
 
-final walletProvider = StateNotifierProvider<WalletNotifier, WalletState>((ref) {
-  return WalletNotifier();
-});
-
-final transactionsProvider = Provider<List<TransactionEntity>>((ref) {
-  return ref.watch(walletProvider).transactions;
-});
-
+typedef WalletBloc = WalletCubit;

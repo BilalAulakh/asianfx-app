@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../blocs/blocs.dart';
 import '../../core/router/app_router.dart';
 import '../../domain/entities/trading_entities.dart';
-import '../../providers/market_provider.dart';
-import '../../providers/theme_provider.dart';
 
-class MarketsScreen extends ConsumerStatefulWidget {
+class MarketsScreen extends StatefulWidget {
   const MarketsScreen({super.key});
 
   @override
-  ConsumerState<MarketsScreen> createState() => _MarketsScreenState();
+  State<MarketsScreen> createState() => _MarketsScreenState();
 }
 
-class _MarketsScreenState extends ConsumerState<MarketsScreen> {
+class _MarketsScreenState extends State<MarketsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedCategory = 'All';
   String _searchQuery = '';
@@ -28,7 +27,7 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
     'Stocks',
   ];
 
-  bool get _isDark => ref.watch(themeProvider);
+  bool get _isDark => context.watch<ThemeCubit>().state;
   Color get _bg => _isDark ? const Color(0xFF0A0E17) : const Color(0xFFF1F5F9);
   Color get _appBarBg => _isDark ? const Color(0xFF151D28) : Colors.white;
   Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
@@ -44,7 +43,7 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final instruments = ref.watch(instrumentsProvider);
+    final instruments = context.watch<MarketBloc>().state.instruments;
     final isDark = _isDark;
 
     // Filter by category and search query
@@ -157,7 +156,7 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
               isDark ? Icons.wb_sunny_outlined : Icons.nightlight_round,
               color: isDark ? const Color(0xFFFFD600) : const Color(0xFF475569),
             ),
-            onPressed: () => ref.read(themeProvider.notifier).toggleTheme(),
+            onPressed: () => context.read<ThemeCubit>().toggleTheme(),
           ),
           const SizedBox(width: 4),
         ],
@@ -463,7 +462,7 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
                         textSecondary: _textSecondary,
                         onTap: () {
                           // Select symbol and jump to trading terminal
-                          ref.read(activeSymbolProvider.notifier).state = instrument.symbol;
+                          context.read<MarketBloc>().add(MarketSelectSymbolEvent(instrument.symbol));
                           context.go(AppRoutes.terminal);
                         },
                       );
@@ -476,7 +475,7 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
   }
 }
 
-class _MarketCard extends ConsumerWidget {
+class _MarketCard extends StatelessWidget {
   final InstrumentEntity instrument;
   final bool isDark;
   final Color cardBg;
@@ -515,15 +514,9 @@ class _MarketCard extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Watch real-time live price stream for this symbol
-    final priceAsync = ref.watch(priceStreamProvider(instrument.symbol));
-    final live = priceAsync.when(
-      data: (d) => d,
-      loading: () => instrument,
-      error: (_, _) => instrument,
-    );
-
+  Widget build(BuildContext context) {
+    // Watch real-time live price from MarketBloc
+    final live = context.watch<MarketBloc>().state.getInstrument(instrument.symbol);
     final isPositive = live.isPositiveChange;
     final catColor = _getCategoryColor(instrument.category);
 

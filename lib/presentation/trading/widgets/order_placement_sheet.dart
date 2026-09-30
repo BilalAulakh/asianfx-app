@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../blocs/blocs.dart';
+import '../../../core/math/money_math.dart';
 import '../../../domain/entities/trading_entities.dart';
-import '../../../providers/trading_provider.dart';
-import '../../../providers/market_provider.dart';
-import '../../../providers/wallet_provider.dart';
 
-class OrderPlacementSheet extends ConsumerStatefulWidget {
+class OrderPlacementSheet extends StatefulWidget {
   final InstrumentEntity instrument;
   final OrderSide initialSide;
 
@@ -37,10 +34,10 @@ class OrderPlacementSheet extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<OrderPlacementSheet> createState() => _OrderPlacementSheetState();
+  State<OrderPlacementSheet> createState() => _OrderPlacementSheetState();
 }
 
-class _OrderPlacementSheetState extends ConsumerState<OrderPlacementSheet> {
+class _OrderPlacementSheetState extends State<OrderPlacementSheet> {
   late OrderSide _selectedSide;
   double _lotSize = 0.10;
   bool _enableSl = false;
@@ -81,20 +78,14 @@ class _OrderPlacementSheetState extends ConsumerState<OrderPlacementSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final liveAsync = ref.watch(priceStreamProvider(widget.instrument.symbol));
-    final live = liveAsync.when(
-      data: (d) => d,
-      loading: () => widget.instrument,
-      error: (_, __) => widget.instrument,
-    );
-
-    final wallet = ref.watch(walletProvider);
+    final live = context.watch<MarketBloc>().state.getInstrument(widget.instrument.symbol);
+    final wallet = context.watch<WalletBloc>().state;
     final execPrice = _selectedSide == OrderSide.buy ? live.ask.toDouble() : live.bid.toDouble();
     final isBuy = _selectedSide == OrderSide.buy;
 
     // Margin Calculation (Exness standard: 1:100 leverage)
-    final contractSize = widget.instrument.symbol.contains('BTC') ? 1.0 : (widget.instrument.symbol.contains('XAU') ? 100.0 : 100000.0);
-    final requiredMargin = (execPrice * _lotSize * (widget.instrument.symbol.contains('BTC') ? 1.0 : 1.0)) / 100.0;
+    final contractSize = live.contractSize.toDouble();
+    final requiredMargin = (execPrice * _lotSize * contractSize) / 100.0;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -460,15 +451,13 @@ class _OrderPlacementSheetState extends ConsumerState<OrderPlacementSheet> {
                         final sl = _enableSl ? double.tryParse(_slController.text) : null;
                         final tp = _enableTp ? double.tryParse(_tpController.text) : null;
 
-                        final success = await ref.read(tradingProvider.notifier).executeOrder(
-                              symbol: widget.instrument.symbol,
+                        final success = await context.read<TradingEngineBloc>().placeOrder(
+                              instrument: live,
                               side: _selectedSide,
                               type: OrderType.market,
-                              lotSize: _lotSize,
-                              price: execPrice,
-                              stopLoss: sl,
-                              takeProfit: tp,
-                              leverage: 100.0,
+                              lots: MoneyMath.toDec(_lotSize),
+                              stopLoss: sl != null ? MoneyMath.toDec(sl) : null,
+                              takeProfit: tp != null ? MoneyMath.toDec(tp) : null,
                             );
 
                         if (!mounted) return;

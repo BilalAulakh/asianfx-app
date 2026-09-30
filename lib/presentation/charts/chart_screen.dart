@@ -1,57 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../blocs/blocs.dart';
 import '../../core/math/money_math.dart';
-import '../../core/theme/app_colors.dart';
 import '../../domain/entities/chart_entities.dart';
 import '../../domain/entities/trading_entities.dart';
-import '../../providers/market_provider.dart';
 import 'candlestick_chart_canvas.dart';
 import '../trading/widgets/order_placement_modal.dart';
 
-class ChartScreen extends ConsumerStatefulWidget {
+class ChartScreen extends StatefulWidget {
   final String symbol;
   const ChartScreen({super.key, required this.symbol});
 
   @override
-  ConsumerState<ChartScreen> createState() => _ChartScreenState();
+  State<ChartScreen> createState() => _ChartScreenState();
 }
 
-class _ChartScreenState extends ConsumerState<ChartScreen> {
+class _ChartScreenState extends State<ChartScreen> {
   ChartStyle _chartStyle = ChartStyle.candlestick;
   double _chartScale = 1.0;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadCandles();
-    });
-  }
-
-  void _loadCandles() {
-    final tf = ref.read(selectedTimeframeProvider);
-    ref.read(marketFeedServiceProvider).fetchCandlesAsync(widget.symbol, tf).then((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final instruments = ref.watch(instrumentsProvider);
-    final instrument = instruments.firstWhere(
-      (i) => i.symbol == widget.symbol || i.symbol.replaceAll('/', '') == widget.symbol,
-      orElse: () => instruments.first,
-    );
-
-    final priceAsync = ref.watch(priceStreamProvider(instrument.symbol));
-    final currentTf = ref.watch(selectedTimeframeProvider);
-    final candles = ref.watch(ohlcProvider(instrument.symbol));
-
-    final live = priceAsync.when(
-      data: (d) => d,
-      loading: () => instrument,
-      error: (_, __) => instrument,
-    );
+    final marketState = context.watch<MarketBloc>().state;
+    final instrument = marketState.getInstrument(widget.symbol);
+    final currentTf = marketState.selectedTimeframe;
+    final candles = marketState.candles;
+    final live = instrument;
 
     final isPositive = live.isPositiveChange;
 
@@ -150,8 +123,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
                     final isSel = tf == currentTf;
                     return GestureDetector(
                       onTap: () {
-                        ref.read(selectedTimeframeProvider.notifier).state = tf;
-                        _loadCandles();
+                        context.read<MarketBloc>().add(MarketSelectTimeframeEvent(tf));
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

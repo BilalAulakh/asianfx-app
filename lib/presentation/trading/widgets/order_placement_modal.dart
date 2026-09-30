@@ -1,16 +1,14 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../blocs/blocs.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/math/money_math.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../domain/entities/trading_entities.dart';
-import '../../../providers/ledger_provider.dart';
-import '../../../providers/market_provider.dart';
-import '../../../providers/trading_engine_provider.dart';
 
 /// Institutional Order Ticket Modal
-class OrderPlacementModal extends ConsumerStatefulWidget {
+class OrderPlacementModal extends StatefulWidget {
   final InstrumentEntity instrument;
   final OrderSide initialSide;
 
@@ -41,10 +39,10 @@ class OrderPlacementModal extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<OrderPlacementModal> createState() => _OrderPlacementModalState();
+  State<OrderPlacementModal> createState() => _OrderPlacementModalState();
 }
 
-class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
+class _OrderPlacementModalState extends State<OrderPlacementModal> {
   late OrderSide _side;
   OrderType _orderType = OrderType.market;
   double _lots = 0.01;
@@ -65,7 +63,7 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
 
     // Refresh user balance immediately upon modal opening
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(tradingEngineProvider.notifier).refreshBalance();
+      context.read<TradingEngineBloc>().refreshBalance();
     });
 
     final currentExecPrice = _side == OrderSide.buy
@@ -109,16 +107,10 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
 
   @override
   Widget build(BuildContext context) {
-    final liveStream = ref.watch(priceStreamProvider(widget.instrument.symbol));
-    final live = liveStream.when(
-      data: (inst) => inst,
-      loading: () => widget.instrument,
-      error: (_, __) => widget.instrument,
-    );
-
-    final engineState = ref.watch(tradingEngineProvider);
-    final ledgerBal = ref.watch(clientLedgerBalanceProvider);
+    final live = context.watch<MarketBloc>().state.getInstrument(widget.instrument.symbol);
+    final engineState = context.watch<TradingEngineBloc>().state;
     final account = engineState.accountState;
+    final ledgerBal = context.watch<LedgerCubit>().getClientBalance(account.userId);
 
     final effectiveLedgerBal = account.ledgerBalance > Decimal.zero
         ? account.ledgerBalance
@@ -438,8 +430,8 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
                 ? null
                 : () async {
                     try {
-                      final success = await ref
-                          .read(tradingEngineProvider.notifier)
+                      final success = await context
+                          .read<TradingEngineBloc>()
                           .placeOrder(
                             instrument: live,
                             side: _side,
@@ -540,31 +532,6 @@ class _OrderPlacementModalState extends ConsumerState<OrderPlacementModal> {
     );
   }
 
-  Widget _lotChip(String label, VoidCallback onTap) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 6),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E2838),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFF2B384E)),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.white70,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _lotPresetChip(double lot) {
     final isSelected = (_lots - lot).abs() < 0.001;

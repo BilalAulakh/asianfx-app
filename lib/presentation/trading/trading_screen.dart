@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../providers/market_provider.dart';
-import '../../providers/wallet_provider.dart';
+import '../../blocs/blocs.dart';
 
-class TradingScreen extends ConsumerStatefulWidget {
+class TradingScreen extends StatefulWidget {
   const TradingScreen({super.key});
 
   @override
-  ConsumerState<TradingScreen> createState() => _TradingScreenState();
+  State<TradingScreen> createState() => _TradingScreenState();
 }
 
-class _TradingScreenState extends ConsumerState<TradingScreen> {
+class _TradingScreenState extends State<TradingScreen> {
   int _selectedCategoryIndex = 0;
   final List<String> _categories = [
     'Favorites',
@@ -24,8 +23,8 @@ class _TradingScreenState extends ConsumerState<TradingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final instruments = ref.watch(instrumentsProvider);
-    final wallet = ref.watch(walletProvider);
+    final instruments = context.watch<MarketBloc>().state.instruments;
+    final wallet = context.watch<WalletBloc>().state;
 
     // Filter instruments based on selected category
     final filtered = instruments.where((inst) {

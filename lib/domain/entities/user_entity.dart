@@ -47,6 +47,13 @@ class UserEntity extends Equatable {
   final String? kycDocumentNumber;
   final String? kycRejectionReason;
   final DateTime? kycSubmittedAt;
+  final int kycTier;
+  final String? employmentStatus;
+  final String? tradingExperience;
+  final String? annualIncome;
+  final String? streetAddress;
+  final String? city;
+  final String? postalCode;
   final DateTime createdAt;
 
   const UserEntity({
@@ -60,7 +67,7 @@ class UserEntity extends Equatable {
     this.dateOfBirth,
     this.preferredCurrency = 'USD',
     this.preferredLanguage = 'en',
-    this.kycStatus = KycStatus.approved,
+    this.kycStatus = KycStatus.notSubmitted,
     this.status = AccountStatus.active,
     this.role = UserRole.client,
     this.isTwoFactorEnabled = false,
@@ -70,13 +77,55 @@ class UserEntity extends Equatable {
     this.kycDocumentNumber,
     this.kycRejectionReason,
     this.kycSubmittedAt,
+    this.kycTier = 0,
+    this.employmentStatus,
+    this.tradingExperience,
+    this.annualIncome,
+    this.streetAddress,
+    this.city,
+    this.postalCode,
     required this.createdAt,
   });
 
   bool get isKycVerified => kycStatus == KycStatus.approved;
   bool get isActive => status == AccountStatus.active;
   bool get canTrade => isKycVerified && status == AccountStatus.active;
-  bool get canWithdraw => isKycVerified && status == AccountStatus.active;
+  bool get canWithdraw => status == AccountStatus.active;
+
+  int get effectiveKycTier => kycTier > 0 ? kycTier : (isKycVerified ? 2 : 0);
+
+  String get kycTierDisplay {
+    switch (effectiveKycTier) {
+      case 2:
+        return 'Level 2 (Fully Verified)';
+      case 1:
+        return 'Level 1 (Identity Verified)';
+      default:
+        return 'Unverified';
+    }
+  }
+
+  String get depositLimitDisplay {
+    switch (effectiveKycTier) {
+      case 2:
+        return 'Unlimited';
+      case 1:
+        return '\$10,000 / day';
+      default:
+        return '\$2,000 / day';
+    }
+  }
+
+  String get withdrawalLimitDisplay {
+    switch (effectiveKycTier) {
+      case 2:
+        return 'Unlimited';
+      case 1:
+        return '\$5,000 / day';
+      default:
+        return 'KYC Required';
+    }
+  }
 
   String get roleDisplay {
     switch (role) {
@@ -131,6 +180,13 @@ class UserEntity extends Equatable {
     String? kycDocumentNumber,
     String? kycRejectionReason,
     DateTime? kycSubmittedAt,
+    int? kycTier,
+    String? employmentStatus,
+    String? tradingExperience,
+    String? annualIncome,
+    String? streetAddress,
+    String? city,
+    String? postalCode,
     DateTime? createdAt,
   }) {
     return UserEntity(
@@ -154,7 +210,47 @@ class UserEntity extends Equatable {
       kycDocumentNumber: kycDocumentNumber ?? this.kycDocumentNumber,
       kycRejectionReason: kycRejectionReason ?? this.kycRejectionReason,
       kycSubmittedAt: kycSubmittedAt ?? this.kycSubmittedAt,
+      kycTier: kycTier ?? this.kycTier,
+      employmentStatus: employmentStatus ?? this.employmentStatus,
+      tradingExperience: tradingExperience ?? this.tradingExperience,
+      annualIncome: annualIncome ?? this.annualIncome,
+      streetAddress: streetAddress ?? this.streetAddress,
+      city: city ?? this.city,
+      postalCode: postalCode ?? this.postalCode,
       createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  UserEntity resetKyc() {
+    return UserEntity(
+      id: id,
+      email: email,
+      phone: phone,
+      fullName: fullName,
+      avatarUrl: avatarUrl,
+      country: country,
+      nationality: nationality,
+      dateOfBirth: dateOfBirth,
+      preferredCurrency: preferredCurrency,
+      preferredLanguage: preferredLanguage,
+      kycStatus: KycStatus.notSubmitted,
+      status: status,
+      role: role,
+      isTwoFactorEnabled: isTwoFactorEnabled,
+      isEmailVerified: isEmailVerified,
+      isPhoneVerified: isPhoneVerified,
+      kycDocumentType: null,
+      kycDocumentNumber: null,
+      kycRejectionReason: null,
+      kycSubmittedAt: null,
+      kycTier: 0,
+      employmentStatus: null,
+      tradingExperience: null,
+      annualIncome: null,
+      streetAddress: null,
+      city: null,
+      postalCode: null,
+      createdAt: createdAt,
     );
   }
 
@@ -180,6 +276,13 @@ class UserEntity extends Equatable {
       'kycDocumentNumber': kycDocumentNumber,
       'kycRejectionReason': kycRejectionReason,
       'kycSubmittedAt': kycSubmittedAt?.toIso8601String(),
+      'kycTier': kycTier,
+      'employmentStatus': employmentStatus,
+      'tradingExperience': tradingExperience,
+      'annualIncome': annualIncome,
+      'streetAddress': streetAddress,
+      'city': city,
+      'postalCode': postalCode,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -198,7 +301,7 @@ class UserEntity extends Equatable {
       preferredLanguage: map['preferredLanguage'] as String? ?? 'en',
       kycStatus: KycStatus.values.firstWhere(
         (k) => k.name == map['kycStatus'],
-        orElse: () => KycStatus.approved,
+        orElse: () => KycStatus.notSubmitted,
       ),
       status: AccountStatus.values.firstWhere(
         (s) => s.name == map['status'],
@@ -215,6 +318,13 @@ class UserEntity extends Equatable {
       kycDocumentNumber: map['kycDocumentNumber'] as String?,
       kycRejectionReason: map['kycRejectionReason'] as String?,
       kycSubmittedAt: map['kycSubmittedAt'] != null ? DateTime.tryParse(map['kycSubmittedAt'] as String) : null,
+      kycTier: map['kycTier'] as int? ?? 0,
+      employmentStatus: map['employmentStatus'] as String?,
+      tradingExperience: map['tradingExperience'] as String?,
+      annualIncome: map['annualIncome'] as String?,
+      streetAddress: map['streetAddress'] as String?,
+      city: map['city'] as String?,
+      postalCode: map['postalCode'] as String?,
       createdAt: map['createdAt'] != null ? DateTime.tryParse(map['createdAt'] as String) ?? DateTime.now() : DateTime.now(),
     );
   }
@@ -225,6 +335,7 @@ class UserEntity extends Equatable {
         dateOfBirth, preferredCurrency, preferredLanguage, kycStatus,
         status, role, isTwoFactorEnabled, isEmailVerified, isPhoneVerified,
         kycDocumentType, kycDocumentNumber, kycRejectionReason, kycSubmittedAt,
+        kycTier, employmentStatus, tradingExperience, annualIncome, streetAddress, city, postalCode,
         createdAt,
       ];
 }

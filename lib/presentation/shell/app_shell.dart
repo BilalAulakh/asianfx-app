@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../blocs/blocs.dart';
 import '../../core/router/app_router.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/theme_provider.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
   const AppShell({super.key, required this.navigationShell});
 
@@ -18,11 +17,11 @@ class AppShell extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final currentIndex = navigationShell.currentIndex;
-    final authUser = ref.watch(authProvider).user;
+    final authUser = context.watch<AuthBloc>().state.user;
     final isAdmin = authUser?.role == UserRole.admin;
-    final isDark = ref.watch(themeProvider);
+    final isDark = context.watch<ThemeCubit>().state;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0A0E17) : const Color(0xFFF4F6F9),

@@ -272,3 +272,340 @@ BEGIN
         NULL;
     END;
 END $$;
+
+-- ------------------------------------------------------------------------------
+-- 8. INSTITUTIONAL KYC & AML VERIFICATION MODULE (SUPABASE SCHEMA)
+-- ------------------------------------------------------------------------------
+
+-- 8.1 KYC Profiles Table (Primary User Verification Lifecycle)
+CREATE TABLE IF NOT EXISTS public.kyc_profiles (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE,
+    first_name TEXT NOT NULL,
+    middle_name TEXT,
+    last_name TEXT NOT NULL,
+    date_of_birth TIMESTAMP WITH TIME ZONE,
+    nationality TEXT NOT NULL DEFAULT 'Pakistan',
+    country_of_residence TEXT NOT NULL DEFAULT 'Pakistan',
+    address TEXT NOT NULL,
+    city TEXT NOT NULL,
+    state TEXT NOT NULL,
+    postal_code TEXT NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'NOT_STARTED', -- NOT_STARTED, IN_PROGRESS, PENDING_REVIEW, MANUAL_REVIEW, APPROVED, REJECTED, RESUBMISSION_REQUIRED
+    rejection_reason TEXT,
+    resubmission_notes TEXT,
+    document_number TEXT,
+    identity_doc_type VARCHAR(32) DEFAULT 'CNIC',
+    address_doc_type VARCHAR(32) DEFAULT 'UTILITY_BILL',
+    submitted_at TIMESTAMP WITH TIME ZONE,
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    reviewed_by TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_kyc_profiles_user_id ON public.kyc_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_kyc_profiles_status ON public.kyc_profiles(status);
+
+-- 8.2 KYC Documents Table (Government ID, Selfie/Liveness, Proof of Address)
+CREATE TABLE IF NOT EXISTS public.kyc_documents (
+    id TEXT PRIMARY KEY,
+    kyc_id TEXT NOT NULL REFERENCES public.kyc_profiles(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    document_category VARCHAR(32) NOT NULL, -- IDENTITY, ADDRESS
+    document_type VARCHAR(32) NOT NULL,     -- CNIC, PASSPORT, DRIVERS_LICENSE, UTILITY_BILL, BANK_STATEMENT
+    storage_path TEXT,
+    original_file_name TEXT NOT NULL,
+    mime_type VARCHAR(64) NOT NULL DEFAULT 'image/jpeg',
+    file_size BIGINT NOT NULL DEFAULT 0,
+    document_side VARCHAR(16) DEFAULT 'SINGLE', -- FRONT, BACK, SINGLE
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING_REVIEW',
+    rejection_reason TEXT,
+    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    reviewed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kyc_documents_kyc_id ON public.kyc_documents(kyc_id);
+CREATE INDEX IF NOT EXISTS idx_kyc_documents_user_id ON public.kyc_documents(user_id);
+
+-- 8.3 KYC Audit Logs Table (Append-Only Immutable Compliance History)
+CREATE TABLE IF NOT EXISTS public.kyc_audit_logs (
+    id TEXT PRIMARY KEY,
+    kyc_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    action VARCHAR(64) NOT NULL, -- SUBMITTED, DOCUMENT_UPLOADED, APPROVED, REJECTED, RESUBMISSION_REQUESTED
+    performed_by TEXT NOT NULL DEFAULT 'SYSTEM',
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_kyc_audit_logs_kyc_id ON public.kyc_audit_logs(kyc_id);
+CREATE INDEX IF NOT EXISTS idx_kyc_audit_logs_user_id ON public.kyc_audit_logs(user_id);
+
+-- 8.4 Row Level Security (RLS) for KYC Tables
+ALTER TABLE public.kyc_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kyc_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kyc_audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Profiles: Users can view their own profile; admins can view all
+DROP POLICY IF EXISTS "Users can view own kyc profile" ON public.kyc_profiles;
+CREATE POLICY "Users can view own kyc profile" ON public.kyc_profiles
+    FOR SELECT USING (auth.uid()::text = user_id::text OR auth.jwt() ->> 'role' = 'admin' OR auth.jwt() ->> 'role' = 'superadmin');
+
+-- Profiles: Users can insert/upsert their own profile
+DROP POLICY IF EXISTS "Users can insert own kyc profile" ON public.kyc_profiles;
+CREATE POLICY "Users can insert own kyc profile" ON public.kyc_profiles
+    FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
+
+-- Profiles: Users can update their own profile; compliance officers/admins can update all
+DROP POLICY IF EXISTS "Users and admins can update kyc profile" ON public.kyc_profiles;
+CREATE POLICY "Users and admins can update kyc profile" ON public.kyc_profiles
+    FOR UPDATE USING (
+        auth.uid()::text = user_id::text OR 
+        auth.jwt() ->> 'role' = 'admin' OR 
+        auth.jwt() ->> 'role' = 'superadmin'
+    );
+
+-- Documents: Users can view and upload their own documents; admins view all
+DROP POLICY IF EXISTS "Users can view own kyc documents" ON public.kyc_documents;
+CREATE POLICY "Users can view own kyc documents" ON public.kyc_documents
+    FOR SELECT USING (auth.uid()::text = user_id::text OR auth.jwt() ->> 'role' = 'admin');
+
+DROP POLICY IF EXISTS "Users can insert own kyc documents" ON public.kyc_documents;
+CREATE POLICY "Users can insert own kyc documents" ON public.kyc_documents
+    FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
+
+DROP POLICY IF EXISTS "Admins can update kyc documents" ON public.kyc_documents;
+CREATE POLICY "Admins can update kyc documents" ON public.kyc_documents
+    FOR UPDATE USING (auth.jwt() ->> 'role' = 'admin');
+
+-- Audit Logs: Append-only for users & admins
+DROP POLICY IF EXISTS "Users and system can view audit logs" ON public.kyc_audit_logs;
+CREATE POLICY "Users and system can view audit logs" ON public.kyc_audit_logs
+    FOR SELECT USING (auth.uid()::text = user_id::text OR auth.jwt() ->> 'role' = 'admin');
+
+DROP POLICY IF EXISTS "Users and system can insert audit logs" ON public.kyc_audit_logs;
+CREATE POLICY "Users and system can insert audit logs" ON public.kyc_audit_logs
+    FOR INSERT WITH CHECK (auth.uid()::text = user_id::text OR auth.jwt() ->> 'role' = 'admin');
+
+-- 8.5 Storage Bucket Configuration for kyc-documents (Private Bucket)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('kyc-documents', 'kyc-documents', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage RLS: Users can upload and read their own documents in kyc-documents bucket
+DROP POLICY IF EXISTS "Users can upload their own KYC docs" ON storage.objects;
+CREATE POLICY "Users can upload their own KYC docs" ON storage.objects
+    FOR INSERT WITH CHECK (
+        bucket_id = 'kyc-documents' AND (
+            (storage.foldername(name))[1] = auth.uid()::text OR
+            auth.uid() IS NOT NULL
+        )
+    );
+
+DROP POLICY IF EXISTS "Users and admins can view KYC docs" ON storage.objects;
+CREATE POLICY "Users and admins can view KYC docs" ON storage.objects
+    FOR SELECT USING (
+        bucket_id = 'kyc-documents' AND (
+            (storage.foldername(name))[1] = auth.uid()::text OR
+            auth.jwt() ->> 'role' = 'admin'
+        )
+    );
+
+-- 8.6 Enable Realtime for kyc_profiles
+DO $$
+BEGIN
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.kyc_profiles;
+    EXCEPTION WHEN duplicate_object THEN
+        NULL;
+    END;
+END $$;
+
+-- ------------------------------------------------------------------------------
+-- 9. DEPOSITS TABLE & ATOMIC SETTLEMENT FOR USDT TRC-20
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.deposits (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+    txid VARCHAR(128) NOT NULL,
+    amount NUMERIC(18, 4) NOT NULL CHECK (amount > 0),
+    token VARCHAR(20) NOT NULL DEFAULT 'USDT',
+    network VARCHAR(20) NOT NULL DEFAULT 'TRC20',
+    deposit_address TEXT NOT NULL,
+    from_address TEXT,
+    block_number BIGINT,
+    status VARCHAR(30) NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('PENDING', 'CONFIRMED', 'REJECTED')),
+    raw_tx_data JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT unique_deposit_txid UNIQUE (txid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_deposits_user_id ON public.deposits(user_id);
+CREATE INDEX IF NOT EXISTS idx_deposits_txid ON public.deposits(txid);
+CREATE INDEX IF NOT EXISTS idx_deposits_status ON public.deposits(status);
+
+ALTER TABLE public.deposits ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own deposits" ON public.deposits;
+CREATE POLICY "Users can view own deposits" ON public.deposits
+    FOR SELECT USING (auth.uid()::text = user_id::text);
+
+DROP POLICY IF EXISTS "Service role manages deposits" ON public.deposits;
+CREATE POLICY "Service role manages deposits" ON public.deposits
+    FOR ALL USING (auth.role() = 'service_role');
+
+-- Atomic double-credit prevention & wallet balance update procedure
+CREATE OR REPLACE FUNCTION public.credit_verified_deposit(
+    p_user_id TEXT,
+    p_txid VARCHAR,
+    p_amount NUMERIC,
+    p_token VARCHAR DEFAULT 'USDT',
+    p_network VARCHAR DEFAULT 'TRC20',
+    p_deposit_address TEXT DEFAULT '',
+    p_from_address TEXT DEFAULT NULL,
+    p_block_number BIGINT DEFAULT NULL,
+    p_raw_tx JSONB DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_clean_txid VARCHAR(128);
+    v_current_balance NUMERIC(18, 4);
+    v_new_balance NUMERIC(18, 4);
+    v_deposit_id UUID;
+BEGIN
+    v_clean_txid := LOWER(TRIM(p_txid));
+
+    -- 1. Check if TXID has already been credited
+    IF EXISTS (SELECT 1 FROM public.deposits WHERE txid = v_clean_txid) THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'verified', false,
+            'already_credited', true,
+            'message', 'This transaction ID has already been credited to an account.'
+        );
+    END IF;
+
+    -- 2. Validate Amount
+    IF p_amount <= 0 THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'verified', false,
+            'already_credited', false,
+            'message', 'Deposit amount must be strictly greater than zero.'
+        );
+    END IF;
+
+    -- 3. Insert Deposit Record with unique constraint protection
+    BEGIN
+        INSERT INTO public.deposits (
+            user_id,
+            txid,
+            amount,
+            token,
+            network,
+            deposit_address,
+            from_address,
+            block_number,
+            status,
+            raw_tx_data,
+            created_at,
+            updated_at
+        ) VALUES (
+            p_user_id,
+            v_clean_txid,
+            p_amount,
+            UPPER(p_token),
+            UPPER(p_network),
+            p_deposit_address,
+            p_from_address,
+            p_block_number,
+            'CONFIRMED',
+            p_raw_tx,
+            NOW(),
+            NOW()
+        )
+        RETURNING id INTO v_deposit_id;
+    EXCEPTION
+        WHEN unique_violation THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'verified', false,
+                'already_credited', true,
+                'message', 'This transaction ID has already been credited to an account.'
+            );
+    END;
+
+    -- 4. Ensure User Wallet Exists
+    INSERT INTO public.wallets (
+        user_id,
+        currency,
+        balance,
+        held_margin,
+        created_at,
+        updated_at
+    ) VALUES (
+        p_user_id,
+        'USD',
+        0.0000,
+        0.0000,
+        NOW(),
+        NOW()
+    )
+    ON CONFLICT (user_id, currency) DO NOTHING;
+
+    -- 5. Lock Wallet Row (FOR UPDATE)
+    SELECT balance INTO v_current_balance
+    FROM public.wallets
+    WHERE user_id = p_user_id AND currency = 'USD'
+    FOR UPDATE;
+
+    v_new_balance := v_current_balance + p_amount;
+
+    -- 6. Update Realized Liquid Balance
+    UPDATE public.wallets
+    SET balance = v_new_balance,
+        updated_at = NOW()
+    WHERE user_id = p_user_id AND currency = 'USD';
+
+    -- 7. Record Immutable Ledger Audit Entry
+    INSERT INTO public.ledger_entries (
+        user_id,
+        type,
+        amount,
+        balance_after,
+        reference_id,
+        description,
+        created_at
+    ) VALUES (
+        p_user_id,
+        'deposit',
+        p_amount,
+        v_new_balance,
+        v_clean_txid,
+        format('USDT TRC20 Deposit verified via Tatum Mainnet API (Block #%s)', COALESCE(p_block_number::text, 'N/A')),
+        NOW()
+    );
+
+    -- 8. Return Atomic Success Result
+    RETURN jsonb_build_object(
+        'success', true,
+        'verified', true,
+        'already_credited', false,
+        'deposit_id', v_deposit_id,
+        'txid', v_clean_txid,
+        'amount_credited', p_amount,
+        'previous_balance', v_current_balance,
+        'new_balance', v_new_balance,
+        'message', 'Deposit verified and balance credited successfully'
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.credit_verified_deposit FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.credit_verified_deposit TO service_role;

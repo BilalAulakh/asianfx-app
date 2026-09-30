@@ -237,7 +237,14 @@ class MarketFeedService {
 
     // 2. Pre-generate realistic Candlesticks matching exact initial prices
     for (final sym in _instruments.keys) {
-      _candleHistory[sym] = _generateRealisticCandles(_instruments[sym]!.bid.toDouble());
+      final initialCandles = _generateRealisticCandles(
+        _instruments[sym]!.bid.toDouble(),
+        timeframe: ChartTimeframe.h1,
+        count: 180,
+        symbol: sym,
+      );
+      _candleHistory[sym] = initialCandles;
+      _candleHistory['${sym}_h1'] = initialCandles;
     }
 
     // 3. Connect real Binance feed & Live Forex feed
@@ -459,16 +466,7 @@ class MarketFeedService {
               _instruments[appSymbol] = updated;
               _tickController.add(updated);
 
-              // Update latest candle close for this symbol
-              final symCandles = _candleHistory[appSymbol];
-              if (symCandles != null && symCandles.isNotEmpty) {
-                final last = symCandles.last;
-                symCandles[symCandles.length - 1] = last.copyWith(
-                  close: curPrice,
-                  high: max(last.high, curPrice),
-                  low: min(last.low, curPrice),
-                );
-              }
+              _updateLiveCandlesAcrossTimeframes(appSymbol, updated.midPrice.toDouble());
             }
           }
         }
@@ -476,42 +474,130 @@ class MarketFeedService {
     } catch (_) {}
   }
 
+  DateTime _getCandlePeriodStart(DateTime time, ChartTimeframe tf) {
+    switch (tf) {
+      case ChartTimeframe.m1:
+        return DateTime(time.year, time.month, time.day, time.hour, time.minute);
+      case ChartTimeframe.m5:
+        final m = (time.minute ~/ 5) * 5;
+        return DateTime(time.year, time.month, time.day, time.hour, m);
+      case ChartTimeframe.m15:
+        final m = (time.minute ~/ 15) * 15;
+        return DateTime(time.year, time.month, time.day, time.hour, m);
+      case ChartTimeframe.m30:
+        final m = (time.minute ~/ 30) * 30;
+        return DateTime(time.year, time.month, time.day, time.hour, m);
+      case ChartTimeframe.h1:
+        return DateTime(time.year, time.month, time.day, time.hour);
+      case ChartTimeframe.h4:
+        final h = (time.hour ~/ 4) * 4;
+        return DateTime(time.year, time.month, time.day, h);
+      case ChartTimeframe.d1:
+        return DateTime(time.year, time.month, time.day);
+    }
+  }
+
+  void _updateLiveCandlesAcrossTimeframes(String symbol, double price) {
+    final now = DateTime.now();
+    for (final tf in ChartTimeframe.values) {
+      final key = '${symbol}_${tf.name}';
+      final candles = _candleHistory[key];
+      if (candles != null && candles.isNotEmpty) {
+        final last = candles.last;
+        final currentPeriod = _getCandlePeriodStart(now, tf);
+        final lastPeriod = _getCandlePeriodStart(last.time, tf);
+
+        if (currentPeriod.isAfter(lastPeriod)) {
+          // Exness: Period boundary reached, start new candle!
+          candles.add(CandleStickModel(
+            time: currentPeriod,
+            open: last.close,
+            high: max(last.close, price),
+            low: min(last.close, price),
+            close: price,
+            volume: 1.0,
+          ));
+          if (candles.length > 1500) {
+            candles.removeAt(0);
+          }
+        } else {
+          // Exness: Dynamically stretch candle body and extend wicks live with price
+          candles[candles.length - 1] = last.copyWith(
+            close: price,
+            high: max(last.high, price),
+            low: min(last.low, price),
+            volume: last.volume + 1.0,
+          );
+        }
+      }
+    }
+    final symCandles = _candleHistory[symbol];
+    if (symCandles != null && symCandles.isNotEmpty) {
+      final last = symCandles.last;
+      final currentPeriod = _getCandlePeriodStart(now, ChartTimeframe.h1);
+      final lastPeriod = _getCandlePeriodStart(last.time, ChartTimeframe.h1);
+
+      if (currentPeriod.isAfter(lastPeriod)) {
+        symCandles.add(CandleStickModel(
+          time: currentPeriod,
+          open: last.close,
+          high: max(last.close, price),
+          low: min(last.close, price),
+          close: price,
+          volume: 1.0,
+        ));
+        if (symCandles.length > 1500) {
+          symCandles.removeAt(0);
+        }
+      } else {
+        symCandles[symCandles.length - 1] = last.copyWith(
+          close: price,
+          high: max(last.high, price),
+          low: min(last.low, price),
+          volume: last.volume + 1.0,
+        );
+      }
+    }
+  }
+
   void _startLiveTickSimulation() {
     _liveTickTimer?.cancel();
     final random = Random();
-    _liveTickTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
+    // Exness-grade high frequency market tick engine (every 350ms)
+    _liveTickTimer = Timer.periodic(const Duration(milliseconds: 350), (_) {
       final symbols = _instruments.keys.toList();
       if (symbols.isEmpty) return;
 
-      // Ensure key institutional instruments (Gold, Silver, Majors) always tick live actively
-      final targetSymbols = <String>{'XAU/USD', 'XAG/USD', 'EUR/USD', 'GBP/USD'};
-      const extraPriority = ['BTC/USD', 'ETH/USD', 'USD/JPY', 'SOL/USD'];
+      // Always ensure Gold (XAU/USD) ticks with Exness-style continuous price action
+      final targetSymbols = <String>{'XAU/USD'};
 
-      // Add extra priority symbols per tick
-      for (int p = 0; p < 2; p++) {
-        targetSymbols.add(extraPriority[random.nextInt(extraPriority.length)]);
-      }
-      // Pick 2-4 random symbols across all other markets
-      final count = 2 + random.nextInt(3);
-      for (int k = 0; k < count; k++) {
-        targetSymbols.add(symbols[random.nextInt(symbols.length)]);
-      }
+      // Add 1 priority pair per cycle (Forex or Crypto)
+      const extraPriority = ['EUR/USD', 'GBP/USD', 'BTC/USD', 'USD/JPY', 'XAG/USD', 'ETH/USD'];
+      targetSymbols.add(extraPriority[random.nextInt(extraPriority.length)]);
+
+      // Add 1 random asset across all 68 markets
+      targetSymbols.add(symbols[random.nextInt(symbols.length)]);
 
       for (final sym in targetSymbols) {
         final inst = _instruments[sym];
         if (inst == null) continue;
 
         final pipStep = pow(10, -inst.decimals).toDouble();
-        final delta = (random.nextDouble() - 0.495) * (pipStep * (inst.category == 'crypto' ? 4 : (inst.symbol.contains('XAG') ? 3 : 2)));
-        final newBidNum = max(pipStep, inst.bid.toDouble() + delta);
-        final spreadAmount = (inst.spreadMarkupPips * pipStep);
-        final newAskNum = newBidNum + spreadAmount;
+        // Authentic micro-pip delta: Gold moves ~0.04-0.16 per tick like Exness
+        final multiplier = sym.contains('XAU') ? 7 : (inst.category == 'crypto' ? 4 : (sym.contains('XAG') ? 3 : 1.5));
+        final delta = (random.nextDouble() - 0.495) * (pipStep * multiplier);
+        
+        // Preserve raw liquidity spread so spread markup does not compound
+        final baseSpread = (inst.rawAsk - inst.rawBid).toDouble();
+        final rawSpread = baseSpread > 0 ? baseSpread : (pipStep * 2);
+        final newRawBidNum = max(pipStep, inst.rawBid.toDouble() + delta);
+        final newRawAskNum = newRawBidNum + rawSpread;
 
-        final newBid = MoneyMath.toDec(newBidNum);
-        final newAsk = MoneyMath.toDec(newAskNum);
-        final newHigh = MoneyMath.toDec(max(inst.high24h.toDouble(), newAskNum));
-        final newLow = MoneyMath.toDec(min(inst.low24h.toDouble(), newBidNum));
-        final changeDelta = (random.nextDouble() - 0.5) * 0.02;
+        final newBid = MoneyMath.toDec(newRawBidNum);
+        final newAsk = MoneyMath.toDec(newRawAskNum);
+        final newHigh = MoneyMath.toDec(max(inst.high24h.toDouble(), newRawAskNum));
+        final newLow = MoneyMath.toDec(min(inst.low24h.toDouble(), newRawBidNum));
+        final changeDelta = (random.nextDouble() - 0.5) * 0.015;
         final newChange = double.parse((inst.change24h + changeDelta).clamp(-15.0, 25.0).toStringAsFixed(2));
 
         final updated = inst.copyWith(
@@ -525,16 +611,8 @@ class MarketFeedService {
         _instruments[sym] = updated;
         _tickController.add(updated);
 
-        // Update latest candle close
-        final symCandles = _candleHistory[sym];
-        if (symCandles != null && symCandles.isNotEmpty) {
-          final last = symCandles.last;
-          symCandles[symCandles.length - 1] = last.copyWith(
-            close: newBidNum,
-            high: max(last.high, newBidNum),
-            low: min(last.low, newBidNum),
-          );
-        }
+        // Update latest candle and form new candles in real time
+        _updateLiveCandlesAcrossTimeframes(sym, updated.midPrice.toDouble());
       }
     });
   }
@@ -556,28 +634,7 @@ class MarketFeedService {
     _tickController.add(updated);
 
     // Dynamically update latest candle across all cached timeframes for this symbol
-    for (final tf in ChartTimeframe.values) {
-      final key = '${symbol}_${tf.name}';
-      final candles = _candleHistory[key];
-      if (candles != null && candles.isNotEmpty) {
-        final last = candles.last;
-        candles[candles.length - 1] = last.copyWith(
-          close: mid,
-          high: max(last.high, mid),
-          low: min(last.low, mid),
-        );
-      }
-    }
-
-    final symCandles = _candleHistory[symbol];
-    if (symCandles != null && symCandles.isNotEmpty) {
-      final last = symCandles.last;
-      symCandles[symCandles.length - 1] = last.copyWith(
-        close: mid,
-        high: max(last.high, mid),
-        low: min(last.low, mid),
-      );
-    }
+    _updateLiveCandlesAcrossTimeframes(symbol, mid);
   }
 
   void _applyIncomingKline(String symbol, CandleStickModel liveCandle) {
@@ -614,6 +671,13 @@ class MarketFeedService {
 
   InstrumentEntity? getInstrument(String symbol) => _instruments[symbol];
 
+  /// Emit a custom or simulated tick into the live market feed stream (useful for tests & simulation)
+  void emitTick(InstrumentEntity instrument) {
+    _instruments[instrument.symbol] = instrument;
+    _tickController.add(instrument);
+    _updateLiveCandlesAcrossTimeframes(instrument.symbol, instrument.midPrice.toDouble());
+  }
+
   int getHistoryCountForTimeframe(ChartTimeframe tf) {
     switch (tf) {
       case ChartTimeframe.d1:
@@ -639,17 +703,27 @@ class MarketFeedService {
     final curPrice = inst != null ? inst.midPrice.toDouble() : 4480.0;
     final requiredCount = getHistoryCountForTimeframe(timeframe);
 
-    var list = _candleHistory[key];
-    if (list == null ||
-        list.isEmpty ||
-        list.length < (requiredCount * 0.7).toInt() ||
-        (list.last.close - curPrice).abs() / curPrice > 0.025) {
-      list = _generateRealisticCandles(curPrice, timeframe, requiredCount);
-      _candleHistory[key] = list;
-      _candleHistory[symbol] = list;
-      _fetchRealKlinesAsync(symbol, timeframe);
+    final list = _candleHistory[key];
+    if (list == null || list.isEmpty) {
+      final generated = _generateRealisticCandles(
+        curPrice,
+        timeframe: timeframe,
+        count: requiredCount,
+        symbol: symbol,
+      );
+      _candleHistory[key] = generated;
+      _candleHistory[symbol] = generated;
+      return generated;
+    } else {
+      // Anchoring the latest candle to current mid price ensures the chart connects seamlessly to live ticker
+      final last = list.last;
+      list[list.length - 1] = last.copyWith(
+        close: curPrice,
+        high: max(last.high, curPrice),
+        low: min(last.low, curPrice),
+      );
+      return list;
     }
-    return list;
   }
 
   Future<List<CandleStickModel>> fetchCandlesAsync([String? symbol, ChartTimeframe? timeframe]) async {
@@ -674,21 +748,38 @@ class MarketFeedService {
     if (yahooSym != null) {
       final yahooCandles = await _fetchYahooCandles(sym, yahooSym, tf);
       if (yahooCandles.isNotEmpty && yahooCandles.length >= 20) {
+        // Anchor and scale Yahoo series cleanly to current live price so there is zero disjointed jump
+        final lastClose = yahooCandles.last.close;
+        if (lastClose > 0 && curPrice > 0 && (lastClose - curPrice).abs() / curPrice > 0.01) {
+          final scale = curPrice / lastClose;
+          for (int i = 0; i < yahooCandles.length; i++) {
+            final c = yahooCandles[i];
+            yahooCandles[i] = c.copyWith(
+              open: c.open * scale,
+              high: c.high * scale,
+              low: c.low * scale,
+              close: c.close * scale,
+            );
+          }
+        }
         _candleHistory[key] = yahooCandles;
         _candleHistory[sym] = yahooCandles;
         return yahooCandles;
       }
     }
 
-    // 3. High quality continuous realistic candlestick fallback anchored directly to current price
-    var existing = _candleHistory[key];
-    if (existing == null ||
-        existing.isEmpty ||
-        existing.length < (requiredCount * 0.7).toInt() ||
-        (existing.last.close - curPrice).abs() / curPrice > 0.025) {
-      existing = _generateRealisticCandles(curPrice, tf, requiredCount);
-      _candleHistory[key] = existing;
-      _candleHistory[sym] = existing;
+    // 3. Fallback: High quality deterministic realistic candlestick series
+    final existing = _candleHistory[key];
+    if (existing == null || existing.isEmpty) {
+      final fallback = _generateRealisticCandles(
+        curPrice,
+        timeframe: tf,
+        count: requiredCount,
+        symbol: sym,
+      );
+      _candleHistory[key] = fallback;
+      _candleHistory[sym] = fallback;
+      return fallback;
     }
     return existing;
   }
@@ -772,35 +863,17 @@ class MarketFeedService {
     return [];
   }
 
-  void _fetchRealKlinesAsync(String symbol, ChartTimeframe timeframe) async {
-    try {
-      final key = '${symbol}_${timeframe.name}';
-      final yahooSym = _appToYahooSymbol[symbol];
-      if (yahooSym != null) {
-        final yahooCandles = await _fetchYahooCandles(symbol, yahooSym, timeframe);
-        if (yahooCandles.isNotEmpty) {
-          _candleHistory[key] = yahooCandles;
-          _candleHistory[symbol] = yahooCandles;
-          return;
-        }
-      }
-
-      final candles = await _binanceSource.fetchKlines(symbol, timeframe, limit: 1000);
-      if (candles.isNotEmpty && candles.length >= 300) {
-        _candleHistory[key] = candles;
-        _candleHistory[symbol] = candles;
-      }
-    } catch (_) {}
-  }
 
   List<CandleStickModel> _generateRealisticCandles(
-    double basePrice, [
+    double basePrice, {
     ChartTimeframe timeframe = ChartTimeframe.h1,
     int count = 180,
-  ]) {
+    String? symbol,
+  }) {
     final now = DateTime.now();
-    // Deterministic yet asset/timeframe-unique seed for consistent rendering
-    final seed = (basePrice * 100).toInt() ^ (timeframe.index * 1337) ^ 0x5A5A;
+    // Deterministic asset and timeframe seed: never jumps or inverts on price ticks
+    final symbolHash = (symbol ?? 'ASSET').hashCode.abs() % 100000;
+    final seed = symbolHash ^ (timeframe.index * 1337) ^ 0x5A5A;
     final random = Random(seed);
 
     Duration stepDuration;

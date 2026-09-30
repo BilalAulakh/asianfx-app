@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../blocs/auth_bloc.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../providers/auth_provider.dart';
 import '../common/widgets/fx_button.dart';
 import '../common/widgets/fx_text_field.dart';
 
-class RegisterScreen extends ConsumerStatefulWidget {
+class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends ConsumerState<RegisterScreen>
+class _RegisterScreenState extends State<RegisterScreen>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -58,7 +58,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       return;
     }
     setState(() => _isLoading = true);
-    final success = await ref.read(authProvider.notifier).register(
+    final authBloc = context.read<AuthBloc>();
+    final success = await authBloc.register(
       fullName: _nameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
@@ -67,14 +68,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     if (!mounted) return;
     setState(() => _isLoading = false);
     if (success) {
-      final user = ref.read(authProvider).user;
+      final user = authBloc.state.user;
       if (user?.role == UserRole.admin) {
         context.go(AppRoutes.admin);
       } else {
         context.go(AppRoutes.vault);
       }
     } else {
-      final error = ref.read(authProvider).error;
+      final error = authBloc.state.error;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error ?? 'Registration failed. Please check your details.'),

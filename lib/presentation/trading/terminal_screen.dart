@@ -1,68 +1,43 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../blocs/blocs.dart';
 import '../../core/router/app_router.dart';
 
 import '../../core/math/money_math.dart';
 import '../../domain/entities/chart_entities.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/market_provider.dart';
-import '../../providers/trading_engine_provider.dart';
 import '../charts/candlestick_chart_canvas.dart';
 import 'widgets/order_placement_modal.dart';
 
-class TerminalScreen extends ConsumerStatefulWidget {
+class TerminalScreen extends StatefulWidget {
   const TerminalScreen({super.key});
 
   @override
-  ConsumerState<TerminalScreen> createState() => _TerminalScreenState();
+  State<TerminalScreen> createState() => _TerminalScreenState();
 }
 
-class _TerminalScreenState extends ConsumerState<TerminalScreen> {
+class _TerminalScreenState extends State<TerminalScreen> {
   ChartStyle _chartStyle = ChartStyle.candlestick;
 
   double _chartScale = 1.0;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadCandles();
-    });
-  }
-
-  void _loadCandles([String? customSymbol, ChartTimeframe? customTf]) {
-    final sym = customSymbol ?? ref.read(activeSymbolProvider);
-    final tf = customTf ?? ref.read(selectedTimeframeProvider);
-    ref.read(marketFeedServiceProvider).fetchCandlesAsync(sym, tf).then((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final activeSymbol = ref.watch(activeSymbolProvider);
-    final instruments = ref.watch(instrumentsProvider);
-    final selectedInstrument = instruments.firstWhere(
-      (i) => i.symbol == activeSymbol,
-      orElse: () => instruments.first,
-    );
+    final marketState = context.watch<MarketBloc>().state;
+    final activeSymbol = marketState.activeSymbol;
+    final instruments = marketState.instruments;
+    final selectedInstrument = marketState.selectedInstrument ??
+        (instruments.isNotEmpty ? instruments.first : marketState.getInstrument('XAU/USD'));
 
-    final liveStream = ref.watch(priceStreamProvider(selectedInstrument.symbol));
-    final live = liveStream.when(
-      data: (i) => i,
-      loading: () => selectedInstrument,
-      error: (_, __) => selectedInstrument,
-    );
-
-    final candles = ref.watch(ohlcProvider(selectedInstrument.symbol));
-    final currentTf = ref.watch(selectedTimeframeProvider);
-    final engineState = ref.watch(tradingEngineProvider);
+    final live = selectedInstrument;
+    final candles = marketState.candles;
+    final currentTf = marketState.selectedTimeframe;
+    final engineState = context.watch<TradingEngineBloc>().state;
     final account = engineState.accountState;
-    final authUser = ref.watch(authProvider).user;
+    final authUser = context.watch<AuthBloc>().state.user;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E17),
@@ -219,8 +194,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: GestureDetector(
                       onTap: () {
-                        ref.read(activeSymbolProvider.notifier).state = inst.symbol;
-                        _loadCandles(inst.symbol);
+                        context.read<MarketBloc>().add(MarketSelectSymbolEvent(inst.symbol));
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -371,130 +345,142 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
             const SizedBox(height: 6),
 
             // ── Timeframe & Chart Zoom / Style Toolbar (Below Candles) ───────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  ...ChartTimeframe.values.map((tf) {
-                    final isSel = tf == currentTf;
-                    return GestureDetector(
-                      onTap: () {
-                        ref.read(selectedTimeframeProvider.notifier).state = tf;
-                        _loadCandles(null, tf);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        margin: const EdgeInsets.only(right: 6),
-                        decoration: BoxDecoration(
-                          color: isSel ? const Color(0xFFFFD600) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          tf.label,
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 11,
-                            fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                            color: isSel ? Colors.black : const Color(0xFF848E9C),
+            SizedBox(
+              height: 34,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    ...ChartTimeframe.values.map((tf) {
+                      final isSel = tf == currentTf;
+                      return GestureDetector(
+                        onTap: () {
+                          context.read<MarketBloc>().add(MarketSelectTimeframeEvent(tf));
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          margin: const EdgeInsets.only(right: 6),
+                          decoration: BoxDecoration(
+                            color: isSel ? const Color(0xFFFFD600) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            tf.label,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 11,
+                              fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                              color: isSel ? Colors.black : const Color(0xFF848E9C),
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  }),
-                  const Spacer(),
+                      );
+                    }),
+                    const SizedBox(width: 8),
 
-                  // Dedicated Toolbar Zoom In (+) Button
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        _chartScale = (_chartScale * 1.3).clamp(0.25, 6.0);
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF162030),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF2B384E)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.zoom_in_rounded, color: Color(0xFFFFD600), size: 14),
-                          SizedBox(width: 2),
-                          Text('+', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                        ],
+                    // Dedicated Toolbar Zoom In (+) Button
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _chartScale = (_chartScale * 1.3).clamp(0.25, 6.0);
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                        margin: const EdgeInsets.only(right: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF162030),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF2B384E)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.zoom_in_rounded, color: Color(0xFFFFD600), size: 14),
+                            SizedBox(width: 2),
+                            Text('+', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
 
-                  // Dedicated Toolbar Zoom Out (-) Button
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        _chartScale = (_chartScale / 1.3).clamp(0.25, 6.0);
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF162030),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF2B384E)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.zoom_out_rounded, color: Color(0xFFFFD600), size: 14),
-                          SizedBox(width: 2),
-                          Text('-', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                        ],
+                    // Dedicated Toolbar Zoom Out (-) Button
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _chartScale = (_chartScale / 1.3).clamp(0.25, 6.0);
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                        margin: const EdgeInsets.only(right: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF162030),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF2B384E)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.zoom_out_rounded, color: Color(0xFFFFD600), size: 14),
+                            SizedBox(width: 2),
+                            Text('-', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
 
-                  // Dedicated Toolbar Reset Zoom (↺) Button
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        _chartScale = 1.0;
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF162030),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF2B384E)),
+                    // Dedicated Toolbar Reset Zoom (↺) Button
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _chartScale = 1.0;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        margin: const EdgeInsets.only(right: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF162030),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF2B384E)),
+                        ),
+                        child: const Icon(Icons.fit_screen_rounded, color: Colors.white70, size: 14),
                       ),
-                      child: const Icon(Icons.fit_screen_rounded, color: Colors.white70, size: 14),
                     ),
-                  ),
 
-                  // Chart Style Toggle Button
-                  IconButton(
-                    icon: Icon(
-                      _chartStyle == ChartStyle.candlestick
-                          ? Icons.candlestick_chart_rounded
-                          : Icons.show_chart_rounded,
-                      color: const Color(0xFFFFD600),
-                      size: 20,
+                    // Chart Style Toggle Button
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _chartStyle = _chartStyle == ChartStyle.candlestick
+                              ? ChartStyle.line
+                              : ChartStyle.candlestick;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF162030),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFF2B384E)),
+                        ),
+                        child: Icon(
+                          _chartStyle == ChartStyle.candlestick
+                              ? Icons.candlestick_chart_rounded
+                              : Icons.show_chart_rounded,
+                          color: const Color(0xFFFFD600),
+                          size: 14,
+                        ),
+                      ),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _chartStyle = _chartStyle == ChartStyle.candlestick
-                            ? ChartStyle.line
-                            : ChartStyle.candlestick;
-                      });
-                    },
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
 
@@ -598,7 +584,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                             ),
                             const SizedBox(width: 8),
                             InkWell(
-                              onTap: () => ref.read(tradingEngineProvider.notifier).closePosition(trade.id),
+                              onTap: () => context.read<TradingEngineBloc>().closePosition(trade.id),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(

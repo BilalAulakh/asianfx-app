@@ -589,6 +589,7 @@ class _InstitutionalChartPainter extends CustomPainter {
 
       if (!first) {
         areaPath.lineTo(lastX, chartHeight);
+        areaPath.lineTo(firstX, chartHeight);
         areaPath.close();
 
         final areaGradient = LinearGradient(

@@ -1,23 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../blocs/blocs.dart';
+import '../../core/policy/kyc_policy.dart';
 import '../../core/theme/app_theme.dart';
+import '../../domain/entities/kyc_entities.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/theme_provider.dart';
 import '../admin/admin_portal_screen.dart';
 import '../kyc/kyc_flow_screen.dart';
 import 'widgets/change_security_pin_sheet.dart';
 import 'widgets/two_factor_auth_sheet.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider).user;
-    final isDark = ref.watch(themeProvider);
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthBloc>().state.user;
+    final isDark = context.watch<ThemeCubit>().state;
+    final kycState = context.watch<KycCubit>().state;
+    final kycStatus = kycState.activeProfile?.status ?? KycPolicy.mapFromUser(user);
+    final kycColor = KycPolicy.getStatusColor(kycStatus);
 
     return Scaffold(
       backgroundColor: context.scaffoldBg,
@@ -41,7 +44,7 @@ class ProfileScreen extends ConsumerWidget {
               size: 22,
             ),
             tooltip: isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme',
-            onPressed: () => ref.read(themeProvider.notifier).toggleTheme(),
+            onPressed: () => context.read<ThemeCubit>().toggleTheme(),
           ),
           const SizedBox(width: 8),
         ],
@@ -115,27 +118,26 @@ class ProfileScreen extends ConsumerWidget {
                           );
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: user?.isKycVerified == true
-                                ? const Color(0xFF00D68F).withValues(alpha: 0.2)
-                                : const Color(0xFFFF4757).withValues(alpha: 0.2),
+                            color: kycColor.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: user?.isKycVerified == true
-                                  ? const Color(0xFF00D68F)
-                                  : const Color(0xFFFF4757),
-                            ),
+                            border: Border.all(color: kycColor),
                           ),
-                          child: Text(
-                            user?.kycStatusDisplay ?? 'Not Submitted',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: user?.isKycVerified == true
-                                  ? const Color(0xFF00D68F)
-                                  : const Color(0xFFFF4757),
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                kycStatus.code,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: kycColor,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.chevron_right, size: 14, color: kycColor),
+                            ],
                           ),
                         ),
                       ),
@@ -201,7 +203,7 @@ class ProfileScreen extends ConsumerWidget {
                         activeThumbColor: const Color(0xFFFFD600),
                         activeTrackColor: const Color(0xFFFFD600).withValues(alpha: 0.4),
                         onChanged: (val) {
-                          ref.read(themeProvider.notifier).setDark(val);
+                          context.read<ThemeCubit>().setDark(val);
                         },
                       ),
                     ],
@@ -214,7 +216,7 @@ class ProfileScreen extends ConsumerWidget {
                       // Dark Mode Card
                       Expanded(
                         child: InkWell(
-                          onTap: () => ref.read(themeProvider.notifier).setDark(true),
+                          onTap: () => context.read<ThemeCubit>().setDark(true),
                           borderRadius: BorderRadius.circular(12),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
@@ -267,7 +269,7 @@ class ProfileScreen extends ConsumerWidget {
                       // Light Mode Card
                       Expanded(
                         child: InkWell(
-                          onTap: () => ref.read(themeProvider.notifier).setDark(false),
+                          onTap: () => context.read<ThemeCubit>().setDark(false),
                           borderRadius: BorderRadius.circular(12),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
@@ -378,6 +380,48 @@ class ProfileScreen extends ConsumerWidget {
                 children: [
                   ListTile(
                     onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const KycFlowScreen()),
+                      );
+                    },
+                    leading: Icon(
+                      kycStatus == KycVerificationStatus.approved
+                          ? Icons.verified_user_rounded
+                          : Icons.badge_outlined,
+                      color: kycColor,
+                    ),
+                    title: Text(
+                      'Identity & Address Verification (KYC)',
+                      style: TextStyle(
+                        color: context.textPrimaryColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      KycPolicy.getStatusExplanation(kycStatus),
+                      style: TextStyle(fontSize: 11, color: context.textSecondaryColor),
+                    ),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: kycColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: kycColor),
+                      ),
+                      child: Text(
+                        kycStatus.code,
+                        style: TextStyle(
+                          color: kycColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Divider(color: context.borderColor, height: 1),
+                  ListTile(
+                    onTap: () {
                       final email = user?.email ?? 'trader@asianfx.com';
                       TwoFactorAuthSheet.show(
                         context,
@@ -462,7 +506,7 @@ class ProfileScreen extends ConsumerWidget {
             // Log Out Button
             ElevatedButton.icon(
               onPressed: () {
-                ref.read(authProvider.notifier).logout();
+                context.read<AuthBloc>().logout();
                 context.go('/login');
               },
               icon: const Icon(Icons.logout_rounded, color: Color(0xFFFF4757), size: 18),

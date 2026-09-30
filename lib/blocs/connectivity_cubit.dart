@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ConnectivityState {
   final bool isConnected;
@@ -32,37 +32,33 @@ class ConnectivityState {
   }
 }
 
-class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
+class ConnectivityCubit extends Cubit<ConnectivityState> {
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _subscription;
 
-  ConnectivityNotifier() : super(const ConnectivityState(isConnected: true)) {
+  ConnectivityCubit() : super(const ConnectivityState(isConnected: true)) {
     _init();
   }
 
   void _init() {
-    // Listen to device connectivity hardware changes
     _subscription = _connectivity.onConnectivityChanged.listen((results) {
       _evaluateConnection(results);
     });
-
-    // Check initial connectivity status
     checkConnection();
   }
 
   Future<void> checkConnection() async {
-    state = state.copyWith(isChecking: true);
+    emit(state.copyWith(isChecking: true));
     try {
       final results = await _connectivity.checkConnectivity();
       await _evaluateConnection(results);
     } catch (_) {
-      // Fallback
-      state = state.copyWith(
+      emit(state.copyWith(
         isConnected: false,
         isChecking: false,
         wasDisconnected: true,
         lastChecked: DateTime.now(),
-      );
+      ));
     }
   }
 
@@ -75,29 +71,27 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
         r == ConnectivityResult.other);
 
     if (!hasHardwareLink) {
-      state = state.copyWith(
+      emit(state.copyWith(
         isConnected: false,
         isChecking: false,
         wasDisconnected: true,
         lastChecked: DateTime.now(),
-      );
+      ));
       return;
     }
 
-    // If hardware is connected, verify actual internet reachability (DNS lookup)
     final bool actuallyConnected = await _verifyInternetAccess();
 
-    state = state.copyWith(
+    emit(state.copyWith(
       isConnected: actuallyConnected,
       isChecking: false,
       wasDisconnected: !actuallyConnected ? true : state.wasDisconnected,
       lastChecked: DateTime.now(),
-    );
+    ));
   }
 
   Future<bool> _verifyInternetAccess() async {
     if (kIsWeb) {
-      // dart:io is unavailable on Web, rely on navigator connectivity
       return true;
     }
 
@@ -110,7 +104,6 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
     } on TimeoutException catch (_) {
       return false;
     } catch (_) {
-      // Fallback: try alternative high-availability host
       try {
         final lookupBackup = await InternetAddress.lookup('cloudflare.com')
             .timeout(const Duration(seconds: 3));
@@ -122,17 +115,12 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
   }
 
   void markOnlineAcknowledged() {
-    state = state.copyWith(wasDisconnected: false);
+    emit(state.copyWith(wasDisconnected: false));
   }
 
   @override
-  void dispose() {
+  Future<void> close() {
     _subscription?.cancel();
-    super.dispose();
+    return super.close();
   }
 }
-
-final connectivityProvider =
-    StateNotifierProvider<ConnectivityNotifier, ConnectivityState>((ref) {
-  return ConnectivityNotifier();
-});

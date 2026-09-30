@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../blocs/auth_bloc.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/router/app_router.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../providers/auth_provider.dart';
 import '../common/widgets/fx_button.dart';
 import '../common/widgets/fx_text_field.dart';
 
-class LoginScreen extends ConsumerStatefulWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen>
+class _LoginScreenState extends State<LoginScreen>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -57,7 +57,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
-    final success = await ref.read(authProvider.notifier).login(
+    final authBloc = context.read<AuthBloc>();
+    final success = await authBloc.login(
       email: _emailController.text.trim(),
       password: _passwordController.text,
     );
@@ -66,14 +67,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     setState(() => _isLoading = false);
 
     if (success) {
-      final user = ref.read(authProvider).user;
+      final user = authBloc.state.user;
       if (user?.role == UserRole.admin) {
         context.go(AppRoutes.admin);
       } else {
         context.go(AppRoutes.dashboard);
       }
     } else {
-      final error = ref.read(authProvider).error;
+      final error = authBloc.state.error;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error ?? AppStrings.errorGeneric),

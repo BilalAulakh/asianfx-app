@@ -1,21 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../blocs/blocs.dart';
 import '../../core/math/money_math.dart';
-import '../../core/theme/app_colors.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../providers/admin_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/trading_engine_provider.dart';
-import '../../providers/wallet_provider.dart';
 
-class AdminDashboardScreen extends ConsumerStatefulWidget {
+class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  ConsumerState<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
-class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
+class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _userSearchQuery = '';
@@ -34,8 +29,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    final admin = ref.watch(adminProvider);
-    final adminNotifier = ref.read(adminProvider.notifier);
+    final admin = context.watch<AdminCubit>().state;
+    final adminNotifier = context.read<AdminCubit>();
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F141C),
@@ -329,56 +324,130 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
 
   // ── 2. Finance Tab (Deposits & Withdrawals) ─────────────────────────────────
   Widget _buildFinanceTab(AdminState admin, AdminNotifier notifier) {
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: admin.transactions.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, i) {
-        final tx = admin.transactions[i];
-        final isDeposit = tx.type == 'DEPOSIT';
-        final isPending = tx.status == AdminTxStatus.pending;
-
-        return Container(
-          padding: const EdgeInsets.all(16),
+    final children = <Widget>[
+      // Instant Auto-Approval Gateway Banner
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E232A),
-            borderRadius: BorderRadius.circular(16),
+            color: admin.autoApproveTransactions
+                ? const Color(0xFF0ECB81).withValues(alpha: 0.12)
+                : const Color(0xFFFFD600).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isPending ? const Color(0xFFFFD600).withOpacity(0.5) : const Color(0xFF2B313A),
+              color: admin.autoApproveTransactions ? const Color(0xFF0ECB81) : const Color(0xFFFFD600),
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              // Row 1: Type, Amount & Status
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isDeposit ? const Color(0xFF0ECB81).withOpacity(0.15) : const Color(0xFFF6465D).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          tx.type,
-                          style: TextStyle(
-                            color: isDeposit ? const Color(0xFF0ECB81) : const Color(0xFFF6465D),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
+              Icon(
+                admin.autoApproveTransactions ? Icons.bolt_rounded : Icons.pause_circle_rounded,
+                color: admin.autoApproveTransactions ? const Color(0xFF0ECB81) : const Color(0xFFFFD600),
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      admin.autoApproveTransactions
+                          ? 'INSTANT AUTO-APPROVAL: ACTIVE'
+                          : 'MANUAL REVIEW MODE: ACTIVE',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: admin.autoApproveTransactions ? const Color(0xFF0ECB81) : const Color(0xFFFFD600),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      admin.autoApproveTransactions
+                          ? 'Deposits & withdrawals are auto-approved & credited immediately to trading equity.'
+                          : 'Transactions require manual review and approval before funds are credited.',
+                      style: const TextStyle(fontSize: 10, color: Color(0xFF848E9C)),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: admin.autoApproveTransactions,
+                activeColor: const Color(0xFF0ECB81),
+                onChanged: (_) => notifier.toggleAutoApproveTransactions(),
+              ),
+            ],
+          ),
+        ),
+
+        // Transactions List
+        ...admin.transactions.map((tx) {
+          final isDeposit = tx.type == 'DEPOSIT';
+          final isPending = tx.status == AdminTxStatus.pending;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E232A),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isPending ? const Color(0xFFFFD600).withValues(alpha: 0.5) : const Color(0xFF2B313A),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Row 1: Type, Amount & Status
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isDeposit
+                                ? const Color(0xFF0ECB81).withValues(alpha: 0.15)
+                                : const Color(0xFFF6465D).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            tx.type,
+                            style: TextStyle(
+                              color: isDeposit ? const Color(0xFF0ECB81) : const Color(0xFFF6465D),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        tx.id,
-                        style: const TextStyle(color: Color(0xFF848E9C), fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  Text(
+                        if (tx.isAutoApproved || tx.status == AdminTxStatus.approved) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0ECB81).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFF0ECB81), width: 0.8),
+                            ),
+                            child: const Text(
+                              '⚡ AUTO',
+                              style: TextStyle(
+                                color: Color(0xFF0ECB81),
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(width: 8),
+                        Text(
+                          tx.id,
+                          style: const TextStyle(color: Color(0xFF848E9C), fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    Text(
                     '\$${tx.amount.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontFamily: 'Inter',
@@ -490,17 +559,18 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                         onPressed: () {
                           notifier.approveTransaction(tx.id);
                           if (tx.type == 'DEPOSIT') {
-                            ref.read(tradingEngineProvider.notifier).depositFunds(
+                            context.read<TradingEngineCubit>().depositFunds(
                               tx.userId,
                               MoneyMath.toDec(tx.amount),
                             );
-                            ref.read(walletProvider.notifier).creditDeposit(tx.amount, tx.method);
+                            context.read<WalletCubit>().creditDeposit(tx.amount, tx.method);
+                            context.read<WalletBloc>().creditDeposit(tx.amount, tx.method, txId: tx.id);
                           } else {
-                            ref.read(tradingEngineProvider.notifier).withdrawFunds(
+                            context.read<TradingEngineCubit>().withdrawFunds(
                               tx.userId,
                               MoneyMath.toDec(tx.amount),
                             );
-                            ref.read(walletProvider.notifier).debitWithdrawal(tx.amount, tx.method);
+                            context.read<WalletCubit>().debitWithdrawal(tx.amount, tx.method);
                           }
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -551,7 +621,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
             ],
           ),
         );
-      },
+      }),
+    ];
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: children,
     );
   }
 
@@ -650,9 +725,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                         label: const Text('Approve KYC', style: TextStyle(fontWeight: FontWeight.bold)),
                         onPressed: () {
                           notifier.approveKyc(kyc.id, kyc.userId);
-                          final currentUser = ref.read(authProvider).user;
+                          final currentUser = context.read<AuthCubit>().state.user;
                           if (currentUser != null && currentUser.id == kyc.userId) {
-                            ref.read(authProvider.notifier).updateUserKyc(KycStatus.approved);
+                            context.read<AuthCubit>().updateUserKyc(KycStatus.approved);
                           }
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('${kyc.userName} KYC Approved! Trader can now place live orders.'), backgroundColor: const Color(0xFF0ECB81)),

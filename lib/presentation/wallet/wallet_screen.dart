@@ -1,23 +1,21 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../blocs/blocs.dart';
+import '../../core/math/money_math.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
-import '../../providers/admin_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/wallet_provider.dart';
 import '../../domain/entities/trading_entities.dart';
 
-class WalletScreen extends ConsumerStatefulWidget {
+class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
 
   @override
-  ConsumerState<WalletScreen> createState() => _WalletScreenState();
+  State<WalletScreen> createState() => _WalletScreenState();
 }
 
-class _WalletScreenState extends ConsumerState<WalletScreen>
+class _WalletScreenState extends State<WalletScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
   int _selectedFilterIndex = 0;
@@ -38,8 +36,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
 
   @override
   Widget build(BuildContext context) {
-    final wallet = ref.watch(walletProvider);
-    final transactions = ref.watch(transactionsProvider);
+    final wallet = context.watch<WalletBloc>().state;
+    final transactions = wallet.transactions;
 
     final filteredTx = _filterTransactions(transactions);
 
@@ -168,7 +166,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       itemCount: _filters.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
                       itemBuilder: (context, i) {
                         final isSelected = _selectedFilterIndex == i;
                         return GestureDetector(
@@ -207,7 +205,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
             // ── Transaction List ────────────────────────────────────────────
             SliverList.separated(
               itemCount: filteredTx.length,
-              separatorBuilder: (_, __) =>
+              separatorBuilder: (_, _) =>
                   const Divider(height: 1, color: AppColors.darkDivider, indent: 20, endIndent: 20),
               itemBuilder: (context, i) =>
                   _TransactionRow(tx: filteredTx[i]),
@@ -592,15 +590,15 @@ class _TransactionRow extends StatelessWidget {
 }
 
 // ── Payment Bottom Sheet ──────────────────────────────────────────────────────
-class _PaymentBottomSheet extends ConsumerStatefulWidget {
+class _PaymentBottomSheet extends StatefulWidget {
   final String type;
-  const _PaymentBottomSheet({super.key, required this.type});
+  const _PaymentBottomSheet({required this.type});
 
   @override
-  ConsumerState<_PaymentBottomSheet> createState() => _PaymentBottomSheetState();
+  State<_PaymentBottomSheet> createState() => _PaymentBottomSheetState();
 }
 
-class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
+class _PaymentBottomSheetState extends State<_PaymentBottomSheet> {
   final _amountController = TextEditingController();
   String _selectedMethod = 'Bank Transfer';
   bool _isLoading = false;
@@ -805,7 +803,7 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppColors.brandPrimary.withOpacity(0.15),
+                        color: AppColors.brandPrimary.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text('✓ ATTACHED', style: TextStyle(color: AppColors.brandPrimary, fontSize: 9, fontWeight: FontWeight.bold)),
@@ -925,7 +923,7 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
 
                   final isDeposit = widget.type.toLowerCase().contains('deposit');
                   if (!isDeposit) {
-                    final currentBalance = ref.read(walletProvider).totalBalance;
+                    final currentBalance = context.read<WalletBloc>().state.totalBalance;
                     if (amount > currentBalance) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -937,10 +935,16 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
                     }
                   }
 
+                  final adminBloc = context.read<AdminBloc>();
+                  final walletBloc = context.read<WalletBloc>();
+                  final engineCubit = context.read<TradingEngineCubit>();
+                  final messenger = ScaffoldMessenger.of(context);
+                  final navigator = Navigator.of(context);
+                  final user = context.read<AuthBloc>().state.user;
+
                   setState(() => _isLoading = true);
                   await Future.delayed(const Duration(milliseconds: 400));
 
-                  final user = ref.read(authProvider).user;
                   final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
                   String? uploadedStoragePath;
@@ -963,8 +967,10 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
                     }
                   }
 
-                  // 1. Add to Admin Pending Transactions
-                  ref.read(adminProvider.notifier).addTransactionRequest(
+                  if (!mounted) return;
+
+                  // 1. Add to Admin Transactions (Deposits require Manual Admin Approval)
+                  adminBloc.addTransactionRequest(
                     AdminTransaction(
                       id: txId,
                       userId: user?.id ?? 'usr_001',
@@ -974,43 +980,36 @@ class _PaymentBottomSheetState extends ConsumerState<_PaymentBottomSheet> {
                       amount: amount,
                       method: _selectedMethod,
                       accountOrAddress: 'REF-${DateTime.now().millisecondsSinceEpoch}',
-                      status: AdminTxStatus.pending,
+                      status: isDeposit ? AdminTxStatus.pending : AdminTxStatus.approved,
+                      isAutoApproved: !isDeposit,
                       createdAt: DateTime.now(),
                       proofImageName: uploadedStoragePath ?? _proofFileName,
                       proofImageBytes: _proofBytes,
                     ),
                   );
 
-                  // 2. Add to user's wallet transactions
-                  ref.read(walletProvider.notifier).addPendingTransaction(
-                    TransactionEntity(
-                      id: txId,
-                      type: isDeposit ? 'deposit' : 'withdrawal',
-                      amount: amount,
-                      currency: 'USD',
-                      status: 'pending',
-                      method: _selectedMethod,
-                      description: '${isDeposit ? 'Deposit' : 'Withdrawal'} via $_selectedMethod',
-                      createdAt: DateTime.now(),
-                    ),
-                  );
-
-                  if (mounted) {
-                    final messenger = ScaffoldMessenger.of(context);
-                    Navigator.of(context).pop();
-                    messenger.showSnackBar(
-                      SnackBar(
-                        backgroundColor: const Color(0xFF0ECB81),
-                        content: Text(
-                          '✓ ${widget.type} request of \$$amount submitted! ${_proofBytes != null ? 'Screenshot proof attached.' : 'Awaiting Admin approval.'}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-                        ),
-                      ),
+                  // 2. Debit withdrawal immediately, but DEPOSITS WAIT FOR ADMIN APPROVAL
+                  if (!isDeposit) {
+                    walletBloc.debitWithdrawal(amount, _selectedMethod, txId: txId, autoApprove: true);
+                    engineCubit.withdrawFunds(
+                      user?.id ?? 'usr_001',
+                      MoneyMath.toDec(amount),
                     );
                   }
-                  if (mounted) {
-                    setState(() => _isLoading = false);
-                  }
+
+                  navigator.pop();
+                  messenger.showSnackBar(
+                    SnackBar(
+                      backgroundColor: const Color(0xFF0ECB81),
+                      content: Text(
+                        isDeposit
+                            ? '✓ Deposit request of \$$amount submitted!\nStatus: PENDING ADMIN APPROVAL. Balance will be credited upon admin approval.'
+                            : '✓ Instant Withdrawal of \$$amount processed successfully!',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+                      ),
+                    ),
+                  );
+                  setState(() => _isLoading = false);
                 },
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.brandPrimary,

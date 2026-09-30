@@ -1,24 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:decimal/decimal.dart';
-import '../../core/theme/app_colors.dart';
+import '../../blocs/blocs.dart';
 import '../../domain/entities/trading_entities.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/market_provider.dart';
-import '../../providers/trading_provider.dart';
-import '../../providers/trading_engine_provider.dart';
-import '../../providers/wallet_provider.dart';
 import '../kyc/kyc_screen.dart';
 
-class DashboardScreen extends ConsumerStatefulWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends ConsumerState<DashboardScreen>
+class _DashboardScreenState extends State<DashboardScreen>
     with AutomaticKeepAliveClientMixin {
   int _selectedOrderTab = 0; // 0: Open, 1: Pending, 2: Closed
 
@@ -28,8 +22,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final instruments = ref.watch(instrumentsProvider);
-    final wallet = ref.watch(walletProvider);
+    final instruments = context.watch<MarketBloc>().state.instruments;
+    final wallet = context.watch<WalletCubit>().state;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F141C),
@@ -343,9 +337,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
                         // ── Tab 0: OPEN ORDERS ──
                         if (_selectedOrderTab == 0) ...[
-                          Consumer(
-                            builder: (context, ref, _) {
-                              final engine = ref.watch(tradingEngineProvider);
+                          BlocBuilder<TradingEngineCubit, TradingEngineState>(
+                            builder: (context, engine) {
                               final openTrades = engine.openPositions;
 
                               if (openTrades.isEmpty) {
@@ -536,7 +529,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                               icon: const Icon(Icons.close_rounded, color: Color(0xFFF6465D), size: 18),
                                               tooltip: 'Close Position',
                                               onPressed: () {
-                                                ref.read(tradingEngineProvider.notifier).closePosition(trade.id);
+                                                context.read<TradingEngineCubit>().closePosition(trade.id);
                                                 ScaffoldMessenger.of(context).showSnackBar(
                                                   SnackBar(
                                                     content: Text('Closed ${trade.symbol} position!'),
@@ -557,9 +550,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                         ]
                         // ── Tab 1: PENDING ORDERS ──
                         else if (_selectedOrderTab == 1) ...[
-                          Consumer(
-                            builder: (context, ref, _) {
-                              final engine = ref.watch(tradingEngineProvider);
+                          BlocBuilder<TradingEngineCubit, TradingEngineState>(
+                            builder: (context, engine) {
                               final pending = engine.pendingOrders;
 
                               if (pending.isEmpty) {
@@ -597,7 +589,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.cancel_outlined, color: Color(0xFFF6465D), size: 18),
-                                          onPressed: () => ref.read(tradingEngineProvider.notifier).cancelPendingOrder(order.id),
+                                          onPressed: () => context.read<TradingEngineCubit>().cancelPendingOrder(order.id),
                                         ),
                                       ],
                                     ),
@@ -609,9 +601,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                         ]
                         // ── Tab 2: CLOSED TRADES ──
                         else ...[
-                          Consumer(
-                            builder: (context, ref, _) {
-                              final engine = ref.watch(tradingEngineProvider);
+                          BlocBuilder<TradingEngineCubit, TradingEngineState>(
+                            builder: (context, engine) {
                               final history = engine.closedTrades;
 
                               if (history.isEmpty) {

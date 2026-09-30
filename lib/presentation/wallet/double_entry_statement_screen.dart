@@ -1,29 +1,30 @@
-import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../blocs/blocs.dart';
 import '../../core/math/money_math.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/repositories/ledger_repository.dart';
 import '../../domain/entities/ledger_entities.dart';
-import '../../providers/ledger_provider.dart';
 
-class DoubleEntryStatementScreen extends ConsumerStatefulWidget {
+class DoubleEntryStatementScreen extends StatefulWidget {
   const DoubleEntryStatementScreen({super.key});
 
   @override
-  ConsumerState<DoubleEntryStatementScreen> createState() =>
+  State<DoubleEntryStatementScreen> createState() =>
       _DoubleEntryStatementScreenState();
 }
 
 class _DoubleEntryStatementScreenState
-    extends ConsumerState<DoubleEntryStatementScreen> {
+    extends State<DoubleEntryStatementScreen> {
   LedgerTxType? _filterType;
 
   @override
   Widget build(BuildContext context) {
-    final transactions = ref.watch(ledgerProvider);
-    final proof = ref.watch(treasuryAuditProofProvider);
+    final ledgerState = context.watch<LedgerCubit>().state;
+    final transactions = ledgerState.transactions;
+    final proof = ledgerState.auditProof ??
+        LedgerRepository.instance.generateTreasuryProof();
 
     final filtered = _filterType == null
         ? transactions

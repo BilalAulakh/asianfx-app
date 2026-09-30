@@ -1,6 +1,5 @@
 import 'package:decimal/decimal.dart';
 import 'package:equatable/equatable.dart';
-import '../../core/math/money_math.dart';
 
 /// Double-Entry Ledger Account Classification
 enum LedgerAccountType {

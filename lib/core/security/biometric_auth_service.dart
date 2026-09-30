@@ -1,12 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
-
-final biometricAuthServiceProvider = Provider<BiometricAuthService>((ref) {
-  return BiometricAuthService.instance;
-});
 
 class BiometricAuthService {
   BiometricAuthService._();

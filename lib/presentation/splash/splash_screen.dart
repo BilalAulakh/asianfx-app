@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../blocs/auth_bloc.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../providers/auth_provider.dart';
 
-class SplashScreen extends ConsumerStatefulWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  ConsumerState<SplashScreen> createState() => _SplashScreenState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen>
+class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   late AnimationController _logoController;
   late AnimationController _pulseController;
@@ -67,13 +67,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 2800));
     if (!mounted) return;
 
-    final authState = ref.read(authProvider);
+    final authState = context.read<AuthBloc>().state;
     if (authState.status == AuthStatus.loading) {
       await Future.delayed(const Duration(milliseconds: 500));
     }
 
     if (!mounted) return;
-    final finalState = ref.read(authProvider);
+    final finalState = context.read<AuthBloc>().state;
     if (finalState.status == AuthStatus.authenticated) {
       if (finalState.user?.role == UserRole.admin) {
         context.go(AppRoutes.admin);

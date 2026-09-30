@@ -1,4 +1,3 @@
-import 'package:decimal/decimal.dart';
 import 'package:equatable/equatable.dart';
 
 /// Single Candlestick OHLCV bar
