@@ -123,7 +123,17 @@ class AdminCubit extends Cubit<AdminState> {
   }
 
   void addKycRequest(AdminKycItem kyc) {
-    emit(state.copyWith(kycRequests: [kyc, ...state.kycRequests]));
+    final autoApprovedKyc = kyc.copyWith(status: AdminKycStatus.approved);
+    final updatedUsers = state.users.map((u) {
+      if (u.id == kyc.userId || u.email == kyc.userEmail) {
+        return u.copyWith(isKycVerified: true);
+      }
+      return u;
+    }).toList();
+    emit(state.copyWith(
+      kycRequests: [autoApprovedKyc, ...state.kycRequests],
+      users: updatedUsers,
+    ));
   }
 
   void approveTransaction(String id) {

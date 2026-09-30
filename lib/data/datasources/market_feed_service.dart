@@ -31,6 +31,7 @@ class MarketFeedService {
 
   final Map<String, List<CandleStickModel>> _candleHistory = {};
   final Map<String, InstrumentEntity> _instruments = {};
+  final Map<String, double> _anchorPrices = {};
 
   static const Map<String, String> _appToYahooSymbol = {
     'XAU/USD': 'GC=F',
@@ -159,7 +160,7 @@ class MarketFeedService {
     _addInst('EUR/USD', 'Euro vs US Dollar', 'forex', 1.1633, 1.1635, 4, AppConstants.contractSizeForex, 0.18, 1.1690, 1.1585, 450000, true);
     _addInst('GBP/USD', 'British Pound vs US Dollar', 'forex', 1.3549, 1.3552, 4, AppConstants.contractSizeForex, 0.35, 1.3620, 1.3480, 380000, true);
     _addInst('USD/JPY', 'US Dollar vs Japanese Yen', 'forex', 153.59, 153.62, 2, AppConstants.contractSizeForex, -0.22, 154.30, 152.95, 410000, true);
-    _addInst('XAU/USD', 'Gold vs US Dollar', 'forex', 4333.02, 4333.42, 2, AppConstants.contractSizeGold, -1.53, 4420.00, 4310.00, 248000, true);
+    _addInst('XAU/USD', 'Gold vs US Dollar', 'forex', 4192.04, 4192.44, 2, AppConstants.contractSizeGold, 0.24, 4219.41, 4165.69, 248000, true);
     _addInst('XAG/USD', 'Silver vs US Dollar', 'forex', 63.78, 63.81, 2, AppConstants.contractSizeSilver, -5.19, 67.95, 63.75, 185000, true);
     _addInst('XPT/USD', 'Platinum vs US Dollar', 'forex', 1045.60, 1046.20, 2, AppConstants.contractSizeGold, 0.85, 1060.00, 1032.50, 48000, false);
     _addInst('USD/CHF', 'US Dollar vs Swiss Franc', 'forex', 0.8095, 0.8098, 4, AppConstants.contractSizeForex, 0.12, 0.8140, 0.8050, 220000, false);
@@ -283,6 +284,7 @@ class MarketFeedService {
       volume24h: MoneyMath.toDec(volume24h),
       isFavorite: isFavorite,
     );
+    _anchorPrices[symbol] = bid;
   }
 
   Future<void> _connectRealBinanceFeed() async {
@@ -464,6 +466,7 @@ class MarketFeedService {
               );
 
               _instruments[appSymbol] = updated;
+              _anchorPrices[appSymbol] = curPrice;
               _tickController.add(updated);
 
               _updateLiveCandlesAcrossTimeframes(appSymbol, updated.midPrice.toDouble());
@@ -585,7 +588,13 @@ class MarketFeedService {
         final pipStep = pow(10, -inst.decimals).toDouble();
         // Authentic micro-pip delta: Gold moves ~0.04-0.16 per tick like Exness
         final multiplier = sym.contains('XAU') ? 7 : (inst.category == 'crypto' ? 4 : (sym.contains('XAG') ? 3 : 1.5));
-        final delta = (random.nextDouble() - 0.495) * (pipStep * multiplier);
+        final rawNoise = (random.nextDouble() - 0.5) * (pipStep * multiplier);
+        
+        // Gentle mean reversion pull to keep price centered around real market anchor (TradingView)
+        final anchor = _anchorPrices[sym] ?? inst.rawBid.toDouble();
+        final drift = inst.rawBid.toDouble() - anchor;
+        final pull = -drift * 0.05;
+        final delta = rawNoise + pull;
         
         // Preserve raw liquidity spread so spread markup does not compound
         final baseSpread = (inst.rawAsk - inst.rawBid).toDouble();
@@ -631,6 +640,7 @@ class MarketFeedService {
     );
 
     _instruments[symbol] = updated;
+    _anchorPrices[symbol] = mid;
     _tickController.add(updated);
 
     // Dynamically update latest candle across all cached timeframes for this symbol

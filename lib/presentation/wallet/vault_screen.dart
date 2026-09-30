@@ -20,7 +20,6 @@ class VaultScreen extends StatefulWidget {
 
 class _VaultScreenState extends State<VaultScreen> {
   final _amountController = TextEditingController(text: '100');
-  final _txidController = TextEditingController();
   final _scrollController = ScrollController();
   final GlobalKey _depositSectionKey = GlobalKey();
   Uint8List? _proofBytes;
@@ -88,22 +87,9 @@ class _VaultScreenState extends State<VaultScreen> {
       return;
     }
 
-    if (_proofBytes == null && _txidController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xFFFF4757),
-          content: Text('Please attach payment screenshot or enter your TRON TXID!'),
-        ),
-      );
-      return;
-    }
-
-    final rawTxid = _txidController.text.trim();
     final authUser = context.read<AuthBloc>().state.user;
     final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
-    final txId = rawTxid.isNotEmpty
-        ? rawTxid
-        : 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    final txId = 'DEP-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
 
     setState(() => _isVerifyingDeposit = true);
 
@@ -144,7 +130,7 @@ class _VaultScreenState extends State<VaultScreen> {
           amount: amt,
           method: 'USDT (TRC20)',
           accountOrAddress: _depositAddress,
-          txHash: rawTxid.isNotEmpty ? rawTxid : txId,
+          txHash: txId,
           status: AdminTxStatus.pending,
           isAutoApproved: false,
           createdAt: DateTime.now(),
@@ -167,7 +153,6 @@ class _VaultScreenState extends State<VaultScreen> {
       setState(() {
         _proofBytes = null;
         _proofFileName = null;
-        _txidController.clear();
         _showDepositSection = false;
       });
     } finally {
@@ -559,68 +544,6 @@ class _VaultScreenState extends State<VaultScreen> {
                     ),
                     const SizedBox(height: 18),
 
-                    // ── TRON Blockchain Transaction ID (TXID) Input ──────────
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.tag_rounded, size: 14, color: Color(0xFF00D68F)),
-                            const SizedBox(width: 6),
-                            Text(
-                              'TRON Transaction Hash (TXID)',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textPrimary),
-                            ),
-                          ],
-                        ),
-                        InkWell(
-                          onTap: () async {
-                            final data = await Clipboard.getData(Clipboard.kTextPlain);
-                            if (data?.text != null && data!.text!.trim().isNotEmpty) {
-                              setState(() {
-                                _txidController.text = data.text!.trim();
-                              });
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.paste_rounded, size: 12, color: Color(0xFF00D68F)),
-                                SizedBox(width: 4),
-                                Text('Paste TXID', style: TextStyle(fontSize: 11, color: Color(0xFF00D68F), fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _txidController,
-                      style: TextStyle(color: _textPrimary, fontSize: 13, fontFamily: 'monospace'),
-                      decoration: InputDecoration(
-                        hintText: 'Paste 64-char TRON TXID (e.g. c3f94288319fbb35...)',
-                        hintStyle: TextStyle(color: _textSecondary.withValues(alpha: 0.5), fontSize: 12),
-                        filled: true,
-                        fillColor: _subCardBg,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00D68F))),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Attach your TRON transaction hash (optional) for admin verification on Tronscan.',
-                      style: TextStyle(fontSize: 10, color: _textSecondary),
-                    ),
-                    const SizedBox(height: 18),
 
                     // ── Screenshot / Payment Proof Upload Section ─────────────
                     Row(

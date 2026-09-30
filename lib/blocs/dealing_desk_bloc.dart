@@ -61,28 +61,29 @@ class DealingDeskCubit extends Cubit<DealerRiskSummary> {
 
   void calculateExposure() {
     final positions = _tradingEngineCubit?.state.openPositions ?? [];
-    final instruments = _feedService.getAllInstruments();
-
-    if (positions.isEmpty) {
-      emit(DealerRiskSummary(
-        totalGrossExposureLots: Decimal.zero,
-        totalNetExposureLots: Decimal.zero,
-        aggregateClientFloatingPnl: Decimal.zero,
-        aggregateHouseFloatingPnl: Decimal.zero,
-        feeRevenueEarned: state.feeRevenueEarned,
-        totalOpenPositions: 0,
-        bBookOrderCount: 0,
-        aBookOrderCount: 0,
-        instrumentExposures: const [],
-        lastRefreshed: DateTime.now(),
-      ));
-      return;
-    }
 
     final Map<String, List<TradeEntity>> posBySymbol = {};
     for (final p in positions) {
       posBySymbol.putIfAbsent(p.symbol, () => []).add(p);
     }
+
+    // Always include primary market instruments for dealer controls (markup & routing)
+    const primarySymbols = [
+      'XAU/USD',
+      'EUR/USD',
+      'GBP/USD',
+      'BTC/USD',
+      'ETH/USD',
+      'USD/JPY',
+      'XAG/USD',
+      'USD/CAD',
+      'AUD/USD',
+    ];
+
+    final allSymbols = <String>{
+      ...posBySymbol.keys,
+      ...primarySymbols,
+    };
 
     final exposureList = <InstrumentExposure>[];
     Decimal totalGross = Decimal.zero;
@@ -90,9 +91,8 @@ class DealingDeskCubit extends Cubit<DealerRiskSummary> {
     int bBookCount = 0;
     int aBookCount = 0;
 
-    for (final entry in posBySymbol.entries) {
-      final sym = entry.key;
-      final symPositions = entry.value;
+    for (final sym in allSymbols) {
+      final symPositions = posBySymbol[sym] ?? const [];
 
       Decimal longLots = Decimal.zero;
       Decimal shortLots = Decimal.zero;
@@ -119,10 +119,7 @@ class DealingDeskCubit extends Cubit<DealerRiskSummary> {
         aBookCount += symPositions.length;
       }
 
-      final inst = instruments.firstWhere(
-        (i) => i.symbol == sym,
-        orElse: () => _feedService.getInstrument(sym) ?? instruments.first,
-      );
+      final markup = _feedService.getSpreadMarkup(sym);
 
       exposureList.add(
         InstrumentExposure(
@@ -134,7 +131,7 @@ class DealingDeskCubit extends Cubit<DealerRiskSummary> {
           clientFloatingPnl: symClientPnl,
           houseFloatingPnl: -symClientPnl,
           activePositionCount: symPositions.length,
-          spreadMarkupPips: inst.spreadPips.toInt(),
+          spreadMarkupPips: markup,
           routing: routing,
         ),
       );

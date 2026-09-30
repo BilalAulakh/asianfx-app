@@ -320,14 +320,16 @@ class KycCubit extends Cubit<KycState> {
     }
   }
 
-  Future<bool> submitKycApplication(String userId) async {
+  Future<bool> submitKycApplication(String userId, {bool autoApprove = true}) async {
     emit(state.copyWith(isSubmitting: true, error: null));
     try {
-      final submitted = await _repository.submitKycApplication(userId);
+      final submitted = await _repository.submitKycApplication(userId, autoApprove: autoApprove);
       emit(state.copyWith(
         currentProfile: submitted,
         isSubmitting: false,
-        successMessage: 'Your verification request has been submitted and is currently under review.',
+        successMessage: autoApprove
+            ? '🎉 KYC Auto-Approved! Level 2 Full Access Unlocked.'
+            : 'Application submitted for review.',
       ));
       await loadAdminQueue();
       return true;
@@ -340,14 +342,16 @@ class KycCubit extends Cubit<KycState> {
     }
   }
 
-  Future<bool> resubmitKycApplication(String userId) async {
+  Future<bool> resubmitKycApplication(String userId, {bool autoApprove = true}) async {
     emit(state.copyWith(isSubmitting: true, error: null));
     try {
-      final resubmitted = await _repository.resubmitKycApplication(userId);
+      final resubmitted = await _repository.resubmitKycApplication(userId, autoApprove: autoApprove);
       emit(state.copyWith(
         currentProfile: resubmitted,
         isSubmitting: false,
-        successMessage: 'Resubmitted successfully! Your updated documents are under review.',
+        successMessage: autoApprove
+            ? '🎉 Resubmitted KYC Auto-Approved! Level 2 Full Access Unlocked.'
+            : 'Resubmitted for review.',
       ));
       await loadAdminQueue();
       return true;

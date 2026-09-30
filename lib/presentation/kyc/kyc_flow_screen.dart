@@ -462,6 +462,20 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                     city: _cityController.text.trim(),
                     postalCode: _postalCodeController.text.trim(),
                   );
+              try {
+                context.read<AdminBloc>().addKycRequest(
+                  AdminKycItem(
+                    id: 'kyc_${DateTime.now().millisecondsSinceEpoch}',
+                    userId: user.id,
+                    userName: user.fullName,
+                    userEmail: user.email,
+                    docType: _selectedIdentityType.displayName,
+                    docNumber: docNum,
+                    status: AdminKycStatus.approved,
+                    submittedAt: DateTime.now(),
+                  ),
+                );
+              } catch (_) {}
               return true;
             }
             return false;
@@ -1631,7 +1645,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     required ValueChanged<T?> onChanged,
   }) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       dropdownColor: const Color(0xFF121824),
       style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Inter'),
       decoration: InputDecoration(
@@ -1649,7 +1663,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     );
   }
 
-  Widget _docTypeSelectCard(KycDocumentType type, IconData icon, {bool isIdentity = true}) {
+  Widget _docTypeSelectCard(KycDocumentType type, IconData icon) {
     final isSelected = _selectedIdentityType == type;
 
     return Expanded(

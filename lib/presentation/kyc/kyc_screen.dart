@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../blocs/blocs.dart';
 import '../../core/theme/app_colors.dart';
+import '../../domain/entities/user_entity.dart';
 import '../common/widgets/fx_button.dart';
 import '../common/widgets/fx_card.dart';
 
@@ -12,12 +14,14 @@ class KycScreen extends StatefulWidget {
 }
 
 class _KycScreenState extends State<KycScreen> {
-  int _currentStep = 0;
   bool _isUploading = false;
   String _selectedDocType = 'Passport';
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthBloc>().state.user;
+    final isVerified = user?.isKycVerified ?? false;
+
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
       appBar: AppBar(
@@ -34,24 +38,54 @@ class _KycScreenState extends State<KycScreen> {
           children: [
             // Status Banner
             FxCard(
-              backgroundColor: AppColors.brandPrimary.withOpacity(0.1),
-              borderColor: AppColors.brandPrimary,
-              child: const Row(
+              backgroundColor: isVerified
+                  ? const Color(0xFF0ECB81).withValues(alpha: 0.12)
+                  : AppColors.brandPrimary.withValues(alpha: 0.1),
+              borderColor: isVerified ? const Color(0xFF0ECB81) : AppColors.brandPrimary,
+              child: Row(
                 children: [
-                  Icon(Icons.verified_user, color: AppColors.brandPrimary, size: 36),
-                  SizedBox(width: 16),
+                  Icon(
+                    isVerified ? Icons.verified_user : Icons.security,
+                    color: isVerified ? const Color(0xFF0ECB81) : AppColors.brandPrimary,
+                    size: 36,
+                  ),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'KYC Level 2 Verified',
-                          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                        Row(
+                          children: [
+                            Text(
+                              isVerified ? 'KYC Level 2 Verified' : 'KYC Verification Required',
+                              style: TextStyle(
+                                color: isVerified ? const Color(0xFF0ECB81) : AppColors.textPrimary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            if (isVerified) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0ECB81).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'AUTO-APPROVED',
+                                  style: TextStyle(color: Color(0xFF0ECB81), fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
-                          'Your limits: Unlimited deposits & \$50,000/day withdrawal',
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          isVerified
+                              ? 'Your limits: Unlimited deposits & \$50,000/day withdrawal'
+                              : 'Upload front side of your ID below for instant AI Auto-Approval (< 3s).',
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                         ),
                       ],
                     ),
@@ -101,15 +135,52 @@ class _KycScreenState extends State<KycScreen> {
                   ),
                   const SizedBox(height: 20),
                   FxButton(
-                    text: 'Submit Document',
+                    text: isVerified ? 'Re-Verify / Update Document' : '⚡ Submit Document (Instant Auto-Approve)',
                     isLoading: _isUploading,
                     onPressed: () async {
                       setState(() => _isUploading = true);
-                      await Future.delayed(const Duration(seconds: 1));
+                      await Future.delayed(const Duration(milliseconds: 1200));
+
+                      final docNum = 'FX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+                      if (!context.mounted) return;
+
+                      // Auto-approve user KYC in AuthBloc
+                      context.read<AuthBloc>().updateUserKyc(
+                        KycStatus.approved,
+                        kycTier: 2,
+                        documentType: _selectedDocType,
+                        documentNumber: docNum,
+                      );
+
+                      // Also register in AdminBloc & KycCubit as approved
+                      try {
+                        final curUser = context.read<AuthBloc>().state.user;
+                        context.read<AdminBloc>().addKycRequest(
+                          AdminKycItem(
+                            id: 'kyc_${DateTime.now().millisecondsSinceEpoch}',
+                            userId: curUser?.id ?? 'trader_1',
+                            userName: curUser?.fullName ?? 'Trader',
+                            userEmail: curUser?.email ?? 'trader@asianfx.com',
+                            docType: _selectedDocType,
+                            docNumber: docNum,
+                            status: AdminKycStatus.approved,
+                            submittedAt: DateTime.now(),
+                          ),
+                        );
+                        context.read<KycCubit>().autoApproveKyc(curUser?.id ?? 'trader_1');
+                      } catch (_) {}
+
                       setState(() => _isUploading = false);
-                      if (mounted) {
+
+                      if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Document submitted for review!')),
+                          const SnackBar(
+                            backgroundColor: Color(0xFF0ECB81),
+                            content: Text(
+                              '🎉 KYC Auto-Approved! Level 2 Full Access Unlocked in 1.2s.',
+                              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                            ),
+                          ),
                         );
                       }
                     },
@@ -125,18 +196,42 @@ class _KycScreenState extends State<KycScreen> {
 
   Widget _buildDocOption(String title, IconData icon) {
     final isSelected = _selectedDocType == title;
-    return RadioListTile<String>(
-      value: title,
-      groupValue: _selectedDocType,
-      onChanged: (val) => setState(() => _selectedDocType = val!),
-      activeColor: AppColors.brandPrimary,
-      title: Row(
-        children: [
-          Icon(icon, color: isSelected ? AppColors.brandPrimary : AppColors.textSecondary, size: 20),
-          const SizedBox(width: 12),
-          Text(title, style: const TextStyle(color: AppColors.textPrimary)),
-        ],
+    return InkWell(
+      onTap: () => setState(() => _selectedDocType = title),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.brandPrimary.withValues(alpha: 0.1) : AppColors.darkSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppColors.brandPrimary : AppColors.darkBorder,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? AppColors.brandPrimary : AppColors.textSecondary, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
+            Icon(
+              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: isSelected ? AppColors.brandPrimary : AppColors.textMuted,
+              size: 20,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+

@@ -391,47 +391,52 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
           const SizedBox(height: 16),
 
           // ── Broker Account & User KPIs ──────────────────────────────────────
-          GridView.count(
-            crossAxisCount: 2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.6,
-            children: [
-              _overviewKpiCard(
-                title: 'REGISTERED TRADERS',
-                value: '${admin.totalUsersCount}',
-                subtitle: '${admin.activeUsersCount} Active Accounts',
-                icon: Icons.people_alt_rounded,
-                color: _goldAccent,
-                onTap: () => _tabController.animateTo(2),
-              ),
-              _overviewKpiCard(
-                title: 'CLIENT DEPOSITS',
-                value: '\$${admin.totalUserFunds.toStringAsFixed(2)}',
-                subtitle: 'Total User Balances',
-                icon: Icons.account_balance_wallet_rounded,
-                color: const Color(0xFF00D68F),
-                onTap: () => _tabController.animateTo(2),
-              ),
-              _overviewKpiCard(
-                title: 'KYC COMPLIANCE',
-                value: '${admin.verifiedUsersCount} / ${admin.totalUsersCount}',
-                subtitle: 'Verified Traders',
-                icon: Icons.verified_user_rounded,
-                color: const Color(0xFF3861FB),
-                onTap: () => _tabController.animateTo(3),
-              ),
-              _overviewKpiCard(
-                title: 'PENDING FINANCE',
-                value: '${admin.pendingDepositsCount + admin.pendingWithdrawalsCount}',
-                subtitle: 'Deposit / Withdrawal',
-                icon: Icons.receipt_long_rounded,
-                color: const Color(0xFFFFB300),
-                onTap: () => _tabController.animateTo(1),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = constraints.maxWidth >= 750;
+              return GridView.count(
+                crossAxisCount: isDesktop ? 4 : 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: isDesktop ? 2.3 : 1.6,
+                children: [
+                  _overviewKpiCard(
+                    title: 'REGISTERED TRADERS',
+                    value: '${admin.totalUsersCount}',
+                    subtitle: '${admin.activeUsersCount} Active Accounts',
+                    icon: Icons.people_alt_rounded,
+                    color: _goldAccent,
+                    onTap: () => _tabController.animateTo(2),
+                  ),
+                  _overviewKpiCard(
+                    title: 'CLIENT DEPOSITS',
+                    value: '\$${admin.totalUserFunds.toStringAsFixed(2)}',
+                    subtitle: 'Total User Balances',
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: const Color(0xFF00D68F),
+                    onTap: () => _tabController.animateTo(2),
+                  ),
+                  _overviewKpiCard(
+                    title: 'KYC COMPLIANCE',
+                    value: '${admin.verifiedUsersCount} / ${admin.totalUsersCount}',
+                    subtitle: 'Verified Traders',
+                    icon: Icons.verified_user_rounded,
+                    color: const Color(0xFF3861FB),
+                    onTap: () => _tabController.animateTo(3),
+                  ),
+                  _overviewKpiCard(
+                    title: 'PENDING FINANCE',
+                    value: '${admin.pendingDepositsCount + admin.pendingWithdrawalsCount}',
+                    subtitle: 'Deposit / Withdrawal',
+                    icon: Icons.receipt_long_rounded,
+                    color: const Color(0xFFFFB300),
+                    onTap: () => _tabController.animateTo(1),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 20),
 
@@ -3132,7 +3137,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: _cardBg,
           borderRadius: BorderRadius.circular(12),
@@ -3149,7 +3154,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3163,39 +3168,35 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                   child: Icon(icon, color: color, size: 16),
                 ),
                 if (onTap != null)
-                  Icon(Icons.arrow_forward_ios_rounded, color: _textSecondary, size: 10),
+                  Icon(Icons.arrow_forward_ios_rounded, color: _textSecondary, size: 12),
               ],
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      color: _textPrimary,
-                    ),
-                  ),
+            const SizedBox(height: 8),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: _textPrimary,
                 ),
-                const SizedBox(height: 1),
-                Text(
-                  title,
-                  style: TextStyle(fontSize: 9.5, color: _textSecondary, fontWeight: FontWeight.bold, letterSpacing: 0.3),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  subtitle,
-                  style: TextStyle(fontSize: 8.5, color: color, fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              title,
+              style: TextStyle(fontSize: 9.5, color: _textSecondary, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              subtitle,
+              style: TextStyle(fontSize: 8.5, color: color, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

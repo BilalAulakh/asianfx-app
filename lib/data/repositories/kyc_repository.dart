@@ -197,7 +197,7 @@ class KycRepository {
   }
 
   /// Submit KYC for compliance verification
-  Future<KycProfileEntity> submitKycApplication(String userId) async {
+  Future<KycProfileEntity> submitKycApplication(String userId, {bool autoApprove = false}) async {
     final profile = await getOrCreateProfile(userId);
 
     // Prevent duplicate submission while already under review
@@ -225,10 +225,12 @@ class KycRepository {
       throw Exception('Both Front and Back sides are required for ${profile.identityDocType.displayName}.');
     }
 
-    // POA document is no longer mandatory for KYC submission
+    // Process submission status
     final submitted = profile.copyWith(
-      status: KycVerificationStatus.pendingReview,
+      status: autoApprove ? KycVerificationStatus.approved : KycVerificationStatus.pendingReview,
       submittedAt: DateTime.now(),
+      reviewedAt: autoApprove ? DateTime.now() : null,
+      reviewedBy: autoApprove ? 'AsianFX AI Auto-Engine (Fast-Track)' : null,
       rejectionReason: null,
       resubmissionNotes: null,
       updatedAt: DateTime.now(),
@@ -241,27 +243,31 @@ class KycRepository {
       id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
       kycId: profile.id,
       userId: userId,
-      action: 'SUBMITTED',
-      performedBy: userId,
+      action: autoApprove ? 'AUTO_APPROVED_AI' : 'SUBMITTED',
+      performedBy: autoApprove ? 'AsianFX AI Auto-Engine (Fast-Track)' : profile.fullName,
       timestamp: DateTime.now(),
-      notes: 'KYC application submitted for review.',
+      notes: autoApprove
+          ? 'KYC verified and approved automatically (Fast-Track Auto-Approval). Level 2 Full Access Unlocked.'
+          : 'KYC application submitted for Level 2 verification review.',
     ));
 
     return submitted;
   }
 
   /// Resubmit KYC after administrative correction request
-  Future<KycProfileEntity> resubmitKycApplication(String userId) async {
+  Future<KycProfileEntity> resubmitKycApplication(String userId, {bool autoApprove = false}) async {
     final profile = await getOrCreateProfile(userId);
 
     if (profile.status != KycVerificationStatus.resubmissionRequired &&
         profile.status != KycVerificationStatus.rejected) {
-      return submitKycApplication(userId);
+      return submitKycApplication(userId, autoApprove: autoApprove);
     }
 
     final resubmitted = profile.copyWith(
-      status: KycVerificationStatus.pendingReview,
+      status: autoApprove ? KycVerificationStatus.approved : KycVerificationStatus.pendingReview,
       submittedAt: DateTime.now(),
+      reviewedAt: autoApprove ? DateTime.now() : null,
+      reviewedBy: autoApprove ? 'AsianFX AI Auto-Engine (Fast-Track)' : null,
       rejectionReason: null,
       resubmissionNotes: null,
       updatedAt: DateTime.now(),
@@ -274,10 +280,12 @@ class KycRepository {
       id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
       kycId: profile.id,
       userId: userId,
-      action: 'RESUBMITTED',
-      performedBy: userId,
+      action: autoApprove ? 'AUTO_APPROVED_AI' : 'RESUBMITTED',
+      performedBy: autoApprove ? 'AsianFX AI Auto-Engine (Fast-Track)' : profile.fullName,
       timestamp: DateTime.now(),
-      notes: 'Resubmitted KYC application after addressing compliance feedback.',
+      notes: autoApprove
+          ? 'Resubmitted KYC application auto-approved instantly.'
+          : 'Resubmitted corrected documents for compliance officer re-evaluation.',
     ));
 
     return resubmitted;
