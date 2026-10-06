@@ -38,6 +38,27 @@ class OrderPlacementSheet extends StatefulWidget {
 }
 
 class _OrderPlacementSheetState extends State<OrderPlacementSheet> {
+  /// TP/SL input on this always-dark sheet; styled here so a light app theme
+  /// cannot turn it into a white box.
+  static InputDecoration _priceField(String label, Color color) => InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: color, fontSize: 12),
+        floatingLabelStyle: TextStyle(color: color, fontSize: 12),
+        filled: true,
+        fillColor: const Color(0xFF0F141C),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: color.withValues(alpha: 0.5)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: color, width: 1.5),
+        ),
+      );
+
   late OrderSide _selectedSide;
   double _lotSize = 0.10;
   bool _enableSl = false;
@@ -406,11 +427,7 @@ class _OrderPlacementSheetState extends State<OrderPlacementSheet> {
                       child: TextField(
                         controller: _tpController,
                         style: const TextStyle(color: Color(0xFF0ECB81), fontSize: 13),
-                        decoration: const InputDecoration(
-                          labelText: 'TP Price',
-                          labelStyle: TextStyle(color: Color(0xFF0ECB81), fontSize: 12),
-                          border: OutlineInputBorder(),
-                        ),
+                        decoration: _priceField('TP Price', const Color(0xFF0ECB81)),
                       ),
                     ),
                   if (_enableTp && _enableSl) const SizedBox(width: 10),
@@ -419,11 +436,7 @@ class _OrderPlacementSheetState extends State<OrderPlacementSheet> {
                       child: TextField(
                         controller: _slController,
                         style: const TextStyle(color: Color(0xFFF6465D), fontSize: 13),
-                        decoration: const InputDecoration(
-                          labelText: 'SL Price',
-                          labelStyle: TextStyle(color: Color(0xFFF6465D), fontSize: 12),
-                          border: OutlineInputBorder(),
-                        ),
+                        decoration: _priceField('SL Price', const Color(0xFFF6465D)),
                       ),
                     ),
                 ],

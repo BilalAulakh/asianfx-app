@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../data/datasources/app_update_service.dart';
 
 /// Checks for a newer published build on start and when the app comes back to
-/// the foreground (at most every 30 minutes).
+/// the foreground (at most every 5 minutes; one small RPC per check).
 ///
 /// * Optional update on Wi-Fi: the APK downloads quietly in the background and
 ///   the user only sees "Update ready - INSTALL".
@@ -30,7 +30,7 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
   late final AppUpdateService _service = widget.service ?? AppUpdateService.instance;
 
   static const _green = Color(0xFF10B981);
-  static const _checkEvery = Duration(minutes: 30);
+  static const _checkEvery = Duration(minutes: 5);
 
   _Phase _phase = _Phase.hidden;
   AppRelease? _release;

@@ -676,28 +676,30 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                   if (_enableTp)
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
                         decoration: BoxDecoration(
                           color: const Color(0xFF0F141C),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.5)),
                         ),
-                        child: TextField(
-                          controller: _tpController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF00D68F),
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'TP Price',
-                            labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 10, color: Color(0xFF00D68F)),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(vertical: 4),
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('TP Price',
+                                style: TextStyle(fontFamily: 'Inter', fontSize: 10, color: Color(0xFF00D68F))),
+                            TextField(
+                              controller: _tpController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              cursorColor: const Color(0xFF00D68F),
+                              style: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF00D68F),
+                              ),
+                              decoration: _plainField,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -705,28 +707,30 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                   if (_enableSl)
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
                         decoration: BoxDecoration(
                           color: const Color(0xFF0F141C),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFFFF4757).withValues(alpha: 0.5)),
                         ),
-                        child: TextField(
-                          controller: _slController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFFF4757),
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'SL Price',
-                            labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 10, color: Color(0xFFFF4757)),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(vertical: 4),
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('SL Price',
+                                style: TextStyle(fontFamily: 'Inter', fontSize: 10, color: Color(0xFFFF4757))),
+                            TextField(
+                              controller: _slController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              cursorColor: const Color(0xFFFF4757),
+                              style: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFFF4757),
+                              ),
+                              decoration: _plainField,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -996,6 +1000,19 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
       ),
     );
   }
+
+  /// Bare input inside the TP/SL boxes: no theme fill (a light theme painted
+  /// it white) and no border of its own.
+  static const _plainField = InputDecoration(
+    filled: false,
+    border: InputBorder.none,
+    enabledBorder: InputBorder.none,
+    focusedBorder: InputBorder.none,
+    isDense: true,
+    hintText: '0.00',
+    hintStyle: TextStyle(fontFamily: 'Inter', fontSize: 14, color: Color(0xFF4A5568)),
+    contentPadding: EdgeInsets.only(top: 4, bottom: 2),
+  );
 
   Widget _metricRow(String label, String value) {
     return Row(
