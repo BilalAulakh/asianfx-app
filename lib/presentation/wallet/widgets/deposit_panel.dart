@@ -97,12 +97,31 @@ class _DepositPanelState extends State<DepositPanel> {
     super.dispose();
   }
 
+  /// The open request this field was last filled from.
+  String? _amountFilledFor;
+
+  /// Shows the open request's amount in the field once per request, so the
+  /// user can see and correct it; never overwrites what they are typing.
+  void _syncAmountField() {
+    final active = _active;
+    if (active == null || _amountFilledFor == active.id) return;
+    _amountFilledFor = active.id;
+    _amountController.text = active.amountClaimed.toString();
+  }
+
+  /// The typed amount differs from the open request's amount.
+  bool _amountChanged(DepositRequest r) {
+    final typed = _parsedAmount;
+    return typed != null && typed != r.amountClaimed;
+  }
+
   Future<void> _loadConfig() async {
     final cfg = await _service.loadConfig();
     if (!mounted) return;
     setState(() {
       _config = cfg;
       _loadingConfig = false;
+      _syncAmountField();
       if (_amountController.text.isEmpty) _amountController.text = cfg.minDeposit.toString();
     });
   }
@@ -122,6 +141,7 @@ class _DepositPanelState extends State<DepositPanel> {
         _requests = list;
         _loadingRequests = false;
         _requestsError = null;
+        _syncAmountField();
       });
       // Credited since we last looked (admin or automatic): refresh the balance.
       final newlyApproved = list.where(
@@ -188,9 +208,15 @@ class _DepositPanelState extends State<DepositPanel> {
     }
     setState(() => _isBusy = true);
     try {
+      final wasOpen = _active?.id;
       final r = await _service.createRequest(amount: amount, minDeposit: _config?.minDeposit);
       if (!mounted) return;
-      setState(() => _requests = [r, ..._requests.where((x) => x.id != r.id)]);
+      setState(() {
+        _requests = [r, ..._requests.where((x) => x.id != r.id)];
+        _amountFilledFor = r.id;
+        _amountController.text = r.amountClaimed.toString();
+      });
+      if (wasOpen == r.id) _snack('Amount updated to ${MoneyMath.formatCurrency(r.amountClaimed)} USDT.', _green);
     } on DepositServiceException catch (e) {
       _snack(e.message, _red);
     } finally {
@@ -362,11 +388,8 @@ class _DepositPanelState extends State<DepositPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _label('Send exactly'),
-          Text('${MoneyMath.formatCurrency(r.amountClaimed)} USDT',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: _textPrimary)),
-          const SizedBox(height: 12),
-          _label('To this TRC-20 address'),
+          // The amount is the editable field above; only the address is shown here.
+          _label('Send to this TRC-20 address'),
           Row(
             children: [
               Expanded(
@@ -404,13 +427,44 @@ class _DepositPanelState extends State<DepositPanel> {
 
   // ── Step 2: pay, then attach the screenshot ───────────────────────────────
   List<Widget> _paymentStep(DepositRequest r) => [
+        _label('Amount you will send (USDT)'),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                key: const Key('deposit_amount'),
+                controller: _amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,4}'))],
+                onChanged: (_) => setState(() {}),
+                style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                decoration: _inputDecoration(hint: '0.00', prefix: '\$ ', suffixText: 'USDT').copyWith(
+                  errorText: _amountController.text.isNotEmpty && !_isAmountValid
+                      ? 'Minimum deposit is ${_config?.minDeposit ?? 10} USDT'
+                      : null,
+                ),
+              ),
+            ),
+            if (_amountChanged(r)) ...[
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _isBusy || !_isAmountValid ? null : _getAddress,
+                style: _primaryStyle().copyWith(minimumSize: const WidgetStatePropertyAll(Size(0, 48))),
+                child: const Text('UPDATE AMOUNT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 14),
         _addressBox(r),
         const SizedBox(height: 14),
         _label('Payment screenshot (required)'),
         _proofPicker(),
         const SizedBox(height: 16),
         ElevatedButton(
-          onPressed: _isBusy || _proofBytes == null ? null : () => _confirmSent(r),
+          // An edited amount must be saved first, so the claim matches the payment.
+          onPressed: _isBusy || _proofBytes == null || _amountChanged(r) ? null : () => _confirmSent(r),
           style: _primaryStyle(),
           child: _isBusy
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
