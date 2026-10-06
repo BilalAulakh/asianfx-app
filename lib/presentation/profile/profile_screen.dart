@@ -502,11 +502,30 @@ class ProfileScreen extends StatelessWidget {
             // Installed version: lets users and support confirm an update arrived.
             FutureBuilder<PackageInfo>(
               future: PackageInfo.fromPlatform(),
-              builder: (context, snap) => Text(
-                snap.hasData ? 'FXAsian v${snap.data!.version} (build ${snap.data!.buildNumber})' : '',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: context.textSecondaryColor),
-              ),
+              builder: (context, snap) => !snap.hasData
+                  ? const SizedBox.shrink()
+                  : Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF10B981)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'FXAsian v${snap.data!.version} (build ${snap.data!.buildNumber})',
+                              style: const TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF10B981)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
             ),
           ],
         ),
