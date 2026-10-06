@@ -204,8 +204,25 @@ class AuthCubit extends Cubit<AuthState> {
     if (msg.contains('rate limit') || msg.contains('too many')) {
       return 'Too many attempts. Please wait a moment and try again.';
     }
+    if (msg.contains('error sending') || msg.contains('smtp')) {
+      // The project's e-mail service (custom SMTP) rejected the message.
+      return 'We could not send the email right now. Please try again in a few minutes or contact support.';
+    }
+    if (msg.contains('signups not allowed') || msg.contains('signup is disabled')) {
+      // "Allow new users to sign up" is off in Supabase Auth settings.
+      return 'New registrations are currently closed. Please try again later or contact support.';
+    }
+    if (msg.contains('for security purposes')) {
+      return 'Please wait a minute before requesting another email.';
+    }
     return e.message;
   }
+
+  /// Sign-up and password reset wait for Supabase to send an e-mail; never
+  /// leave the user on a spinner if the mail server hangs.
+  static const _emailRequestTimeout = Duration(seconds: 30);
+  static const _emailTimeoutError =
+      'The server took too long to send the email. Please check your inbox, then try again.';
 
   static const _networkError =
       'Could not reach the server. Please check your internet connection and try again.';
@@ -281,7 +298,7 @@ class AuthCubit extends Cubit<AuthState> {
         // Display-only profile fields. Never role / KYC / tier: user_metadata
         // is user-editable and must not carry anything that grants access.
         data: signUpMetadata(fullName: fullName, phone: phone),
-      );
+      ).timeout(_emailRequestTimeout);
 
       final supaUser = res.user;
       if (supaUser == null) {
@@ -304,6 +321,9 @@ class AuthCubit extends Cubit<AuthState> {
       return state.status == AuthStatus.authenticated;
     } on AuthException catch (e) {
       emit(AuthState(status: AuthStatus.unauthenticated, error: _messageFor(e)));
+      return false;
+    } on TimeoutException {
+      emit(const AuthState(status: AuthStatus.unauthenticated, error: _emailTimeoutError));
       return false;
     } catch (_) {
       emit(const AuthState(status: AuthStatus.unauthenticated, error: _networkError));
@@ -379,10 +399,13 @@ class AuthCubit extends Cubit<AuthState> {
       return false;
     }
     try {
-      await client.auth.resetPasswordForEmail(email.trim().toLowerCase());
+      await client.auth.resetPasswordForEmail(email.trim().toLowerCase()).timeout(_emailRequestTimeout);
       return true;
     } on AuthException catch (e) {
       emit(state.copyWith(error: _messageFor(e)));
+      return false;
+    } on TimeoutException {
+      emit(state.copyWith(error: _emailTimeoutError));
       return false;
     } catch (_) {
       emit(state.copyWith(error: _networkError));
