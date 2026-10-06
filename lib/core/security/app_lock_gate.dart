@@ -1,14 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import 'biometric_auth_service.dart';
 
+/// Device lock (fingerprint / face / phone PIN) for a signed-in account.
+///
+/// The lock screen is drawn OVER the app instead of replacing it, so the
+/// screen underneath keeps its state (e.g. a half-finished form) across a
+/// lock / unlock. Nothing is locked while signed out (login, sign-up, forgot
+/// password): there is no account to protect yet, and those flows send the
+/// user to their e-mail app and back.
 class AppLockGate extends StatefulWidget {
   final Widget child;
+  final BiometricAuthService? service;
+
+  /// Whether an account is signed in. Defaults to the Supabase session.
+  final bool Function()? isSignedIn;
 
   const AppLockGate({
     super.key,
     required this.child,
+    this.service,
+    this.isSignedIn,
   });
 
   @override
@@ -17,7 +31,16 @@ class AppLockGate extends StatefulWidget {
 
 class _AppLockGateState extends State<AppLockGate>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
-  final BiometricAuthService _service = BiometricAuthService.instance;
+  late final BiometricAuthService _service = widget.service ?? BiometricAuthService.instance;
+
+  bool get _signedIn {
+    if (widget.isSignedIn != null) return widget.isSignedIn!();
+    try {
+      return Supabase.instance.client.auth.currentSession != null;
+    } catch (_) {
+      return false;
+    }
+  }
 
   bool _isChecking = true;
   bool _isSupported = false;
@@ -66,6 +89,7 @@ class _AppLockGateState extends State<AppLockGate>
       // User reopened the app
       if (_wasBackgrounded && !_isAuthenticating) {
         _wasBackgrounded = false;
+        if (!_signedIn) return;
         setState(() {
           _isLocked = true;
           _errorMessage = null;
@@ -102,15 +126,16 @@ class _AppLockGateState extends State<AppLockGate>
     final biometrics = await _service.getAvailableBiometrics();
     if (!mounted) return;
 
+    final lockNow = _signedIn;
     setState(() {
       _isChecking = false;
       _isSupported = true;
-      _isLocked = true;
+      _isLocked = lockNow;
       _availableBiometrics = biometrics;
     });
 
-    // Auto prompt on initial launch
-    _requestAuth();
+    // Auto prompt on launch when a saved session would open the account.
+    if (lockNow) _requestAuth();
   }
 
   Future<void> _requestAuth() async {
@@ -155,26 +180,35 @@ class _AppLockGateState extends State<AppLockGate>
 
   @override
   Widget build(BuildContext context) {
-    if (_isChecking) {
-      // Brief loading indicator while checking device security capabilities
-      return const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          backgroundColor: AppColors.darkBackground,
-          body: Center(
-            child: CircularProgressIndicator(
-              color: AppColors.brandPrimary,
-              strokeWidth: 2.5,
-            ),
-          ),
+    final covered = _isChecking || _isLocked;
+    // The app stays mounted underneath (keeps its state); while covered it is
+    // hidden from touch and accessibility.
+    return Stack(
+      children: [
+        IgnorePointer(
+          ignoring: covered,
+          child: ExcludeSemantics(excluding: covered, child: widget.child),
         ),
-      );
-    }
+        if (_isChecking)
+          // Brief loading indicator while checking device security capabilities
+          const Positioned.fill(
+            child: ColoredBox(
+              color: AppColors.darkBackground,
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.brandPrimary,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ),
+          )
+        else if (_isLocked)
+          Positioned.fill(child: _lockScreen()),
+      ],
+    );
+  }
 
-    if (!_isLocked) {
-      return widget.child;
-    }
-
+  Widget _lockScreen() {
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Scaffold(
