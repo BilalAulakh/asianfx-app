@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../blocs/blocs.dart';
 import '../../core/policy/kyc_policy.dart';
@@ -495,6 +496,16 @@ class ProfileScreen extends StatelessWidget {
                 side: BorderSide(color: context.subtleBorderColor),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Installed version: lets users and support confirm an update arrived.
+            FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snap) => Text(
+                snap.hasData ? 'FXAsian v${snap.data!.version} (build ${snap.data!.buildNumber})' : '',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: context.textSecondaryColor),
               ),
             ),
           ],
