@@ -95,12 +95,19 @@ void main() {
         documentNumber: '35201-1234567-1',
       );
 
-      // 2. Submit KYC application with Auto-Approve enabled
-      final autoApprovedProfile = await kycRepo.submitKycApplication(testUserId, autoApprove: true);
+      // 2. Submit the application. It is queued for manual review — the client
+      //    cannot approve itself, whatever it passes for autoApprove.
+      final submittedProfile = await kycRepo.submitKycApplication(testUserId, autoApprove: true);
+      expect(submittedProfile.status, equals(KycVerificationStatus.pendingReview));
+      expect(submittedProfile.reviewedBy, isNull);
 
-      // Verify that status is instantly APPROVED with zero manual waiting
+      // 3. Only an administrator's verdict unlocks Level 2.
+      final autoApprovedProfile = await kycRepo.adminApproveKyc(
+        kycId: submittedProfile.id,
+        reviewerEmail: 'compliance@asianfx.com',
+      );
       expect(autoApprovedProfile.status, equals(KycVerificationStatus.approved));
-      expect(autoApprovedProfile.reviewedBy, contains('AI Auto-Engine'));
+      expect(autoApprovedProfile.reviewedBy, equals('compliance@asianfx.com'));
 
       // 3. Verify Admin Bloc auto-approves incoming request
       adminBloc.addKycRequest(

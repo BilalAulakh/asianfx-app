@@ -365,7 +365,9 @@ void main() {
       expect(auditLogs.any((l) => l.action == 'REJECTED' && l.notes!.contains(rejectReason)), isTrue);
     });
 
-    test('Automated Fast-Track KYC AI Verification approves profile immediately (Exness-Speed)', () async {
+    // Verification is manual now: the applicant can only reach PENDING_REVIEW,
+    // and the old fast-track path also skipped every document requirement.
+    test('Applicant cannot self-approve and must supply the required documents', () async {
       const testUserId = 'user_fast_track_ai_99';
       const testEmail = 'fasttrack@asianfx.com';
 
@@ -392,12 +394,31 @@ void main() {
         bytes: samplePdf,
       );
 
-      final autoApproved = await repository.autoApproveKyc(testUserId);
-      expect(autoApproved.status, equals(KycVerificationStatus.approved));
-      expect(autoApproved.reviewedBy, contains('AI Auto-Engine'));
+      // CNIC requires both sides; the old auto-approve path bypassed this check
+      // entirely, so an applicant could be verified with a single page.
+      await expectLater(
+        repository.submitKycApplication(testUserId),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(), 'message', contains('Front and Back'))),
+      );
 
-      final auditLogs = await repository.getAuditHistory(autoApproved.id);
-      expect(auditLogs.any((l) => l.action == 'AUTO_APPROVED_AI'), isTrue);
+      await repository.uploadDocument(
+        userId: testUserId,
+        category: KycDocumentCategory.identity,
+        documentType: KycDocumentType.cnic,
+        fileName: 'cnic_back.pdf',
+        bytes: samplePdf,
+        documentSide: 'BACK',
+      );
+
+      final submitted = await repository.submitKycApplication(testUserId);
+      expect(submitted.status, equals(KycVerificationStatus.pendingReview),
+          reason: 'the applicant may queue an application, never approve it');
+      expect(submitted.reviewedBy, isNull);
+
+      final auditLogs = await repository.getAuditHistory(submitted.id);
+      expect(auditLogs.any((l) => l.action == 'SUBMITTED'), isTrue);
+      expect(auditLogs.any((l) => l.action.contains('AUTO_APPROVED')), isFalse);
     });
 
     test('Identity-Only KYC Flow: Submits successfully with POI and without POA', () async {

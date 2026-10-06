@@ -19,12 +19,28 @@ class AppConstants {
 
   // Dynamic leverage choices
   static const List<int> availableLeverages = [50, 100, 200, 500];
-  
+
   static const int defaultLeverage = 100;
+
+  // Volume (lot) limits enforced on both the client preview and the server RPC.
+  static final Decimal minLots = Decimal.parse('0.01');
+  static final Decimal maxLots = Decimal.fromInt(100);
+  static final Decimal lotStep = Decimal.parse('0.01');
 
   // Margin Risk Thresholds (Exness Institutional Model)
   static const double marginCallLevelPercent = 50.0; // Warning notification
   static const double stopOutLevelPercent = 10.0;     // Mandatory Auto-Liquidation
+
+  /// Hard cap on stop-out liquidation passes per evaluation cycle. Guards the
+  /// recovery loop against a runaway cascade when equity cannot be restored.
+  static const int maxLiquidationPassesPerCycle = 20;
+
+  // Canonical close reasons persisted in trades.close_reason. The server RPCs
+  // write exactly these strings, so UI and audit queries stay stable.
+  static const String closeReasonManual = 'MANUAL';
+  static const String closeReasonStopLoss = 'STOP_LOSS';
+  static const String closeReasonTakeProfit = 'TAKE_PROFIT';
+  static const String closeReasonStopOut = 'STOP_OUT';
 
   // Double-Entry Ledger System Account Codes (Standard Chart of Accounts)
   static const String acctClientFundsSegregated = '1001';    // Asset: Segregated Tier-1 Bank / Cold Wallet
@@ -37,5 +53,7 @@ class AppConstants {
 
   static final Decimal defaultClientInitialBalance = Decimal.zero;
 
+  // Company USDT (TRC-20) deposit address (confirmed by the owner). Shown
+  // statically in the deposit panel; broker_config is no longer required.
   static const String usdtTrc20DepositAddress = 'TA199GDmT2ybpMKdHwZkjMgo2awuk1N1fV';
 }

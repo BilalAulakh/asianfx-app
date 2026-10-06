@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../blocs/blocs.dart';
 
@@ -127,7 +126,7 @@ class _TradingScreenState extends State<TradingScreen> {
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: filtered.length,
-                separatorBuilder: (_, __) => const Divider(color: Color(0xFF1E232A), height: 1),
+                separatorBuilder: (_, _) => const Divider(color: Color(0xFF1E232A), height: 1),
                 itemBuilder: (context, idx) {
                   final inst = filtered[idx];
                   final isUp = inst.changePercent >= 0;
@@ -232,13 +231,13 @@ class _TradingScreenState extends State<TradingScreen> {
     IconData iconData = Icons.currency_exchange_rounded;
 
     if (symbol.contains('BTC')) {
-      bg = const Color(0xFFF7931A).withOpacity(0.2);
+      bg = const Color(0xFFF7931A).withValues(alpha: 0.2);
       return CircleAvatar(backgroundColor: bg, radius: 20, child: const Text('₿', style: TextStyle(color: Color(0xFFF7931A), fontWeight: FontWeight.bold, fontSize: 18)));
     } else if (symbol.contains('XAU')) {
-      bg = const Color(0xFFFFD700).withOpacity(0.2);
+      bg = const Color(0xFFFFD700).withValues(alpha: 0.2);
       return CircleAvatar(backgroundColor: bg, radius: 20, child: const Icon(Icons.monetization_on_rounded, color: Color(0xFFFFD700), size: 20));
     } else if (symbol.contains('ETH')) {
-      bg = const Color(0xFF627EEA).withOpacity(0.2);
+      bg = const Color(0xFF627EEA).withValues(alpha: 0.2);
       return CircleAvatar(backgroundColor: bg, radius: 20, child: const Text('Ξ', style: TextStyle(color: Color(0xFF627EEA), fontWeight: FontWeight.bold, fontSize: 18)));
     }
 

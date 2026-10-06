@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:decimal/decimal.dart';
 import '../../blocs/blocs.dart';
 import '../../domain/entities/trading_entities.dart';
-import '../kyc/kyc_screen.dart';
+import '../kyc/kyc_flow_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -137,7 +137,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                   onPressed: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (context) => const KycScreen()),
+                                      MaterialPageRoute(builder: (context) => const KycFlowScreen()),
                                     );
                                   },
                                   style: ElevatedButton.styleFrom(
@@ -194,7 +194,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                     style: TextStyle(
                                       fontFamily: 'Inter',
                                       fontSize: 13,
-                                      color: Colors.white.withOpacity(0.5),
+                                      color: Colors.white.withValues(alpha: 0.5),
                                     ),
                                   ),
                                 ],
@@ -269,7 +269,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E232A).withOpacity(0.6),
+                        color: const Color(0xFF1E232A).withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: const Color(0xFF2B313A)),
                       ),
@@ -280,7 +280,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Welcome to Exness',
+                                  'Welcome to FXAsian',
                                   style: TextStyle(
                                     fontFamily: 'Inter',
                                     fontSize: 16,
@@ -426,7 +426,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
                                 itemCount: openTrades.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                                separatorBuilder: (_, _) => const SizedBox(height: 10),
                                 itemBuilder: (context, i) {
                                   final trade = openTrades[i];
                                   final isBuy = trade.side == OrderSide.buy;
@@ -449,8 +449,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                                                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                                                 decoration: BoxDecoration(
                                                   color: isBuy
-                                                      ? const Color(0xFF0ECB81).withOpacity(0.15)
-                                                      : const Color(0xFFF6465D).withOpacity(0.15),
+                                                      ? const Color(0xFF0ECB81).withValues(alpha: 0.15)
+                                                      : const Color(0xFFF6465D).withValues(alpha: 0.15),
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
@@ -570,7 +570,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
                                 itemCount: pending.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                separatorBuilder: (_, _) => const SizedBox(height: 8),
                                 itemBuilder: (context, i) {
                                   final order = pending[i];
                                   return Container(
@@ -618,7 +618,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
                                 itemCount: history.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                separatorBuilder: (_, _) => const SizedBox(height: 8),
                                 itemBuilder: (context, i) {
                                   final trade = history[i];
                                   final isBuy = trade.side == OrderSide.buy;

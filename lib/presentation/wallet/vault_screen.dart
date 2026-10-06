@@ -5,11 +5,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../blocs/blocs.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/math/money_math.dart';
 import '../../core/theme/app_colors.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/user_entity.dart';
+import 'widgets/deposit_panel.dart';
 
 class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
@@ -19,147 +19,45 @@ class VaultScreen extends StatefulWidget {
 }
 
 class _VaultScreenState extends State<VaultScreen> {
-  final _amountController = TextEditingController(text: '100');
   final _scrollController = ScrollController();
   final GlobalKey _depositSectionKey = GlobalKey();
-  Uint8List? _proofBytes;
-  String? _proofFileName;
-  bool _isPicking = false;
   bool _showDepositSection = false;
-  bool _isVerifyingDeposit = false;
-  static const _depositAddress = AppConstants.usdtTrc20DepositAddress;
 
   bool get _isDark => context.watch<ThemeCubit>().state;
-  Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
-  Color get _subCardBg => _isDark ? const Color(0xFF0F141C) : const Color(0xFFF8FAFC);
-  Color get _subtleBorder => _isDark ? const Color(0xFF2B384E) : const Color(0xFFCBD5E1);
-  Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0F172A);
-  Color get _textSecondary => _isDark ? const Color(0xFF848E9C) : const Color(0xFF64748B);
+  Color get _cardBg => _isDark ? const Color(0xFF15222C) : Colors.white;
+  Color get _subCardBg =>
+      _isDark ? const Color(0xFF0F1A22) : const Color(0xFFF5F8FA);
+  Color get _subtleBorder =>
+      _isDark ? const Color(0xFF233440) : const Color(0xFFE3EBF0);
+  Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0B1B2B);
+  Color get _textSecondary =>
+      _isDark ? const Color(0xFF8FA3B3) : const Color(0xFF64748B);
+  Color get _mutedValue =>
+      _isDark ? const Color(0xFF9FB0BF) : const Color(0xFF5B6B7B);
+
+  static const _brandGreen = Color(0xFF1EC27E);
+  static const _lossRed = Color(0xFFFF4757);
+
+  List<BoxShadow> get _cardShadow => _isDark
+      ? [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ]
+      : [
+          BoxShadow(
+            color: const Color(0xFF0B1B2B).withValues(alpha: 0.07),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ];
 
   @override
   void dispose() {
-    _amountController.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickProof() async {
-    try {
-      setState(() => _isPicking = true);
-      final picker = ImagePicker();
-      final XFile? file = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-        maxWidth: 1920,
-      );
-      if (file != null) {
-        final bytes = await file.readAsBytes();
-        setState(() {
-          _proofBytes = bytes;
-          _proofFileName = file.name;
-          _isPicking = false;
-        });
-      } else {
-        setState(() => _isPicking = false);
-      }
-    } catch (e) {
-      setState(() => _isPicking = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFFF4757),
-            content: Text('Failed to select file: $e'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _submitDeposit() async {
-    final amt = double.tryParse(_amountController.text) ?? 0.0;
-    if (amt <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xFFFF4757),
-          content: Text('Please enter a valid deposit amount'),
-        ),
-      );
-      return;
-    }
-
-    final authUser = context.read<AuthBloc>().state.user;
-    final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
-    final txId = 'DEP-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
-
-    setState(() => _isVerifyingDeposit = true);
-
-    try {
-      // 1. Upload Screenshot Proof to Supabase Storage if attached
-      String? uploadedStoragePath;
-      if (_proofBytes != null) {
-        final fileExt = (_proofFileName != null && _proofFileName!.contains('.'))
-            ? _proofFileName!.split('.').last.toLowerCase()
-            : 'png';
-        final storagePath = 'receipt_${effectiveUserId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
-        try {
-          await Supabase.instance.client.storage
-              .from('reciept-proof')
-              .uploadBinary(
-                storagePath,
-                _proofBytes!,
-                fileOptions: FileOptions(contentType: 'image/$fileExt', upsert: true),
-              );
-          uploadedStoragePath = storagePath;
-          debugPrint('✓ Successfully uploaded screenshot to reciept-proof/$storagePath');
-        } catch (err) {
-          debugPrint('Supabase storage upload error: $err');
-        }
-      }
-
-      if (!mounted) return;
-
-      // 2. Submit Deposit Request to Admin with status PENDING (Manual Admin Approval)
-      // Balance is NOT credited until Admin verifies and approves
-      context.read<AdminBloc>().addTransactionRequest(
-        AdminTransaction(
-          id: txId,
-          userId: effectiveUserId,
-          userName: authUser?.fullName ?? 'Trader',
-          userEmail: authUser?.email ?? 'trader@asianfx.com',
-          type: 'DEPOSIT',
-          amount: amt,
-          method: 'USDT (TRC20)',
-          accountOrAddress: _depositAddress,
-          txHash: txId,
-          status: AdminTxStatus.pending,
-          isAutoApproved: false,
-          createdAt: DateTime.now(),
-          proofImageName: uploadedStoragePath ?? _proofFileName,
-          proofImageBytes: _proofBytes,
-        ),
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF0ECB81),
-          content: Text(
-            '✓ Deposit request of \$${amt.toStringAsFixed(2)} USDT submitted!\nStatus: PENDING ADMIN APPROVAL. Balance will be credited once approved.',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-          ),
-          duration: const Duration(seconds: 5),
-        ),
-      );
-
-      setState(() {
-        _proofBytes = null;
-        _proofFileName = null;
-        _showDepositSection = false;
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _isVerifyingDeposit = false);
-      }
-    }
   }
 
   void _scrollToDeposit() {
@@ -176,543 +74,298 @@ class _VaultScreenState extends State<VaultScreen> {
   Widget build(BuildContext context) {
     final engineState = context.watch<TradingEngineBloc>().state;
     final account = engineState.accountState;
-    final balance = context.watch<LedgerCubit>().getClientBalance(account.userId);
-    final rawBalance = balance > Decimal.zero ? balance : account.ledgerBalance;
-    final displayedBalance = (rawBalance == MoneyMath.toDec(10000.0) || rawBalance == MoneyMath.toDec(25000.0))
+    // Show the authoritative wallet balance. This used to read the in-memory
+    // double-entry aggregate (a demo bookkeeping figure) and then rewrite a
+    // balance of exactly 10,000 or 25,000 to zero, so a real $10,000 account
+    // displayed $0. Free margin also now includes floating PnL, matching the
+    // number the server checks when an order is submitted.
+    final displayedBalance = account.ledgerBalance;
+    final cleanFreeMargin = account.freeMargin < Decimal.zero
         ? Decimal.zero
-        : rawBalance;
-    final cleanFreeMargin = (displayedBalance - account.usedMargin).clamp(Decimal.zero, MoneyMath.toDec(1000000000.0));
+        : account.freeMargin;
     final authUser = context.watch<AuthBloc>().state.user;
     final isDark = _isDark;
 
+    final rawId = authUser?.id ?? 'TRADER01';
+    final accountId = (rawId.length > 8 ? rawId.substring(0, 8) : rawId)
+        .toUpperCase();
+
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0A0E17) : const Color(0xFFF4F6F9),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF151D28) : Colors.white,
-        elevation: 0,
-        title: Text(
-          'Wallet',
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : const Color(0xFF0F172A),
+      backgroundColor: isDark
+          ? const Color(0xFF0A1218)
+          : const Color(0xFFE8F0F3),
+      body: Container(
+        // Fill the whole screen, not just the content height.
+        constraints: const BoxConstraints.expand(),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? const [Color(0xFF111D25), Color(0xFF0A1218)]
+                : const [Color(0xFFF6F9FB), Color(0xFFE8F0F3)],
           ),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              color: isDark ? const Color(0xFFFFD600) : const Color(0xFF0F172A),
-              size: 20,
-            ),
-            tooltip: isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme',
-            onPressed: () => context.read<ThemeCubit>().toggleTheme(),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: SingleChildScrollView(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // ── Main Segregated Vault Card ─────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1E2838), Color(0xFF101722)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF2B384E)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00D68F).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF00D68F)),
-                        ),
-                        child: const Text(
-                          'SEGREGATED ASSET VAULT',
+        child: SafeArea(
+          bottom: false,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Header ────────────────────────────────────────────────────
+                Row(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Wallet',
                           style: TextStyle(
                             fontFamily: 'Inter',
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF00D68F),
-                            letterSpacing: 0.5,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: _textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: 30,
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: _brandGreen,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    Tooltip(
+                      message: isDark
+                          ? 'Switch to Light Theme'
+                          : 'Switch to Dark Theme',
+                      child: Material(
+                        color: isDark ? const Color(0xFF1A2832) : Colors.white,
+                        shape: CircleBorder(
+                          side: BorderSide(color: _subtleBorder),
+                        ),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => context.read<ThemeCubit>().toggleTheme(),
+                          child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Icon(
+                              Icons.dark_mode_rounded,
+                              size: 20,
+                              color: _textPrimary,
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFD600).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.3)),
-                        ),
-                        child: Text(
-                          'ACC: #AFX-${(authUser?.id ?? "TRADER01").length > 8 ? (authUser?.id ?? "TRADER01").substring(0, 8).toUpperCase() : (authUser?.id ?? "TRADER01").toUpperCase()}',
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFFFD600),
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'PURE CASH LEDGER BALANCE',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF848E9C),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    MoneyMath.formatCurrency(displayedBalance),
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Vault Breakdown Row
-                  Row(
-                    children: [
-                      _vaultBreakdownItem('Free Margin', MoneyMath.formatCurrency(cleanFreeMargin)),
-                      _vaultBreakdownItem('Used Margin', MoneyMath.formatCurrency(account.usedMargin)),
-                      _vaultBreakdownItem('Floating PnL', MoneyMath.formatPnL(account.unrealizedPnl)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ── Action Buttons (Deposit, Withdraw, Statement) ──────────────
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _showDepositSection = !_showDepositSection;
-                      });
-                      if (_showDepositSection) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          _scrollToDeposit();
-                        });
-                      }
-                    },
-                    icon: Icon(
-                      _showDepositSection ? Icons.close_rounded : Icons.arrow_downward_rounded,
-                      size: 18,
-                    ),
-                    label: Text(_showDepositSection ? 'HIDE DEPOSIT' : 'DEPOSIT'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00D68F),
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showWithdrawModal(context, authUser),
-                    icon: const Icon(Icons.arrow_upward_rounded, size: 18),
-                    label: const Text('WITHDRAW'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _isDark ? Colors.white : const Color(0xFF0F172A),
-                      side: BorderSide(color: _subtleBorder),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // ── Active Open Trades Section (Directly Below Balance & Action Buttons) ──
-            _buildActiveTradesSection(engineState.openPositions),
-            const SizedBox(height: 20),
-
-            // ── Interactive Institutional USDT TRC-20 Deposit Gateway Card (Shown on click) ──
-            if (_showDepositSection) ...[
-              Container(
-                key: _depositSectionKey,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: _cardBg,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.5)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF00D68F).withValues(alpha: 0.08),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
+                const SizedBox(height: 18),
+
+                // ── Balance card ──────────────────────────────────────────────
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? null : Colors.white,
+                    gradient: isDark
+                        ? const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF1A2A35), Color(0xFF101B23)],
+                          )
+                        : null,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: _subtleBorder),
+                    boxShadow: _cardShadow,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: Stack(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              painter: _CardWavePainter(isDark: isDark),
+                            ),
                           ),
-                          child: const Icon(Icons.currency_bitcoin, color: Color(0xFF00D68F), size: 22),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Deposit Gateway (USDT TRC-20)',
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: _textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Instant 0% Network Fee • Segregated Treasury Settlement',
-                                style: TextStyle(fontSize: 11, color: _textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.close_rounded, color: _textSecondary, size: 20),
-                          tooltip: 'Hide Deposit',
-                          onPressed: () => setState(() => _showDepositSection = false),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ── Official TRC-20 Address Box ────────────────────────────
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: _subCardBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _subtleBorder),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
                                 children: [
-                                  Icon(Icons.account_balance_wallet_outlined, size: 14, color: _textSecondary),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'USDT (TRC-20) Vault Deposit Address:',
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _textSecondary),
+                                  _pill(
+                                    icon: Icons.shield_rounded,
+                                    label: 'SEGREGATED ASSET VAULT',
+                                    fg: isDark
+                                        ? _brandGreen
+                                        : const Color(0xFF15965E),
+                                    bg: isDark
+                                        ? _brandGreen.withValues(alpha: 0.08)
+                                        : const Color(0xFFDDF5E9),
+                                    border: isDark
+                                        ? _brandGreen.withValues(alpha: 0.55)
+                                        : const Color(0xFFB9EAD1),
+                                  ),
+                                  _pill(
+                                    icon: Icons.person_outline_rounded,
+                                    label: 'ACC: #AFX-$accountId',
+                                    fg: isDark
+                                        ? const Color(0xFFF5C451)
+                                        : const Color(0xFF9A6A00),
+                                    bg: isDark
+                                        ? const Color(
+                                            0xFFF5C451,
+                                          ).withValues(alpha: 0.06)
+                                        : const Color(0xFFFFF4D6),
+                                    border: isDark
+                                        ? const Color(
+                                            0xFFF5C451,
+                                          ).withValues(alpha: 0.55)
+                                        : const Color(0xFFF5DFA0),
                                   ),
                                 ],
                               ),
-                              InkWell(
-                                onTap: () {
-                                  Clipboard.setData(const ClipboardData(text: _depositAddress));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      backgroundColor: Color(0xFF00D68F),
-                                      duration: Duration(seconds: 2),
-                                      content: Text('Address copied to clipboard!'),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.copy_rounded, size: 12, color: Color(0xFF00D68F)),
-                                      SizedBox(width: 4),
-                                      Text('Copy', style: TextStyle(fontSize: 11, color: Color(0xFF00D68F), fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
+                              const SizedBox(height: 18),
+                              Text(
+                                'PURE CASH LEDGER BALANCE',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.4,
+                                  color: _textSecondary,
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          SelectableText(
-                            _depositAddress,
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.bold,
-                              color: _isDark ? const Color(0xFFFFD600) : const Color(0xFFD97706),
-                              fontSize: 14,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Send only USDT via Tron (TRC-20) network. Other assets cannot be recovered.',
-                            style: TextStyle(fontSize: 10, color: _textSecondary),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ── Amount Input Field ──────────────────────────────────────
-                    Text(
-                      'Deposit Amount (USD)',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _textSecondary),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _amountController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
-                      decoration: InputDecoration(
-                        prefixText: '\$ ',
-                        prefixStyle: const TextStyle(color: Color(0xFF00D68F), fontSize: 18, fontWeight: FontWeight.bold),
-                        filled: true,
-                        fillColor: _subCardBg,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _subtleBorder)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00D68F))),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Quick amount chips
-                    Row(
-                      children: [500, 1000, 5000, 10000, 25000].map((preset) => Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _amountController.text = '$preset'),
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 2),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _subCardBg,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: _subtleBorder),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '\$$preset',
-                                style: TextStyle(fontSize: 11, color: _textPrimary, fontWeight: FontWeight.w600),
+                              const SizedBox(height: 6),
+                              Text(
+                                MoneyMath.formatCurrency(displayedBalance),
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 38,
+                                  fontWeight: FontWeight.w800,
+                                  color: _textPrimary,
+                                  height: 1.1,
+                                ),
                               ),
-                            ),
-                          ),
-                        ),
-                      )).toList(),
-                    ),
-                    const SizedBox(height: 18),
-
-
-                    // ── Screenshot / Payment Proof Upload Section ─────────────
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF00D68F)),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Deposit Screenshot / Payment Receipt (Optional)',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textPrimary),
-                            ),
-                          ],
-                        ),
-                        if (_proofBytes != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text('✓ ATTACHED', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9, fontWeight: FontWeight.bold)),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    if (_proofBytes == null)
-                      GestureDetector(
-                        onTap: _pickProof,
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: _subCardBg,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: _subtleBorder),
-                          ),
-                          child: _isPicking
-                              ? const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(12.0),
-                                    child: CircularProgressIndicator(color: Color(0xFF00D68F), strokeWidth: 2),
-                                  ),
-                                )
-                              : Column(
+                              const SizedBox(height: 16),
+                              Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: _subtleBorder,
+                              ),
+                              const SizedBox(height: 14),
+                              IntrinsicHeight(
+                                child: Row(
                                   children: [
-                                    const Icon(Icons.cloud_upload_outlined, color: Color(0xFF00D68F), size: 36),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Click to Attach Transfer Screenshot',
-                                      style: TextStyle(color: _textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+                                    _vaultBreakdownItem(
+                                      'Free Margin',
+                                      MoneyMath.formatCurrency(cleanFreeMargin),
+                                      valueColor: _brandGreen,
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Supports PNG, JPG, JPEG (Max 10 MB)',
-                                      style: TextStyle(color: _textSecondary, fontSize: 11),
+                                    VerticalDivider(
+                                      width: 24,
+                                      thickness: 1,
+                                      color: _subtleBorder,
                                     ),
-                                    const SizedBox(height: 12),
-                                    ElevatedButton.icon(
-                                      onPressed: _pickProof,
-                                      icon: const Icon(Icons.photo_library_outlined, size: 16),
-                                      label: const Text('Choose Screenshot File', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF00D68F).withValues(alpha: 0.2),
-                                        foregroundColor: const Color(0xFF00D68F),
-                                        elevation: 0,
-                                        side: const BorderSide(color: Color(0xFF00D68F)),
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    _vaultBreakdownItem(
+                                      'Used Margin',
+                                      MoneyMath.formatCurrency(
+                                        account.usedMargin,
                                       ),
+                                    ),
+                                    VerticalDivider(
+                                      width: 24,
+                                      thickness: 1,
+                                      color: _subtleBorder,
+                                    ),
+                                    _vaultBreakdownItem(
+                                      'Floating PnL',
+                                      account.unrealizedPnl == Decimal.zero
+                                          ? MoneyMath.formatCurrency(
+                                              Decimal.zero,
+                                            )
+                                          : MoneyMath.formatPnL(
+                                              account.unrealizedPnl,
+                                            ),
+                                      valueColor:
+                                          account.unrealizedPnl > Decimal.zero
+                                          ? _brandGreen
+                                          : account.unrealizedPnl < Decimal.zero
+                                          ? _lossRed
+                                          : null,
                                     ),
                                   ],
                                 ),
-                        ),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _subCardBg,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF00D68F)),
-                        ),
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Image.memory(
-                                _proofBytes!,
-                                width: 54,
-                                height: 54,
-                                fit: BoxFit.cover,
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _proofFileName ?? 'payment_receipt.png',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: _textPrimary, fontSize: 12, fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${(_proofBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB • Verified Proof',
-                                    style: const TextStyle(color: Color(0xFF00D68F), fontSize: 11),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.edit_outlined, color: _textSecondary, size: 20),
-                              tooltip: 'Change File',
-                              onPressed: _pickProof,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Color(0xFFFF4757), size: 20),
-                              tooltip: 'Remove',
-                              onPressed: () => setState(() {
-                                _proofBytes = null;
-                                _proofFileName = null;
-                              }),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    const SizedBox(height: 18),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
 
-                    // ── Submit Button ──────────────────────────────────────────
-                    ElevatedButton(
-                      onPressed: _isVerifyingDeposit ? null : _submitDeposit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00D68F),
-                        foregroundColor: Colors.black,
-                        disabledBackgroundColor: const Color(0xFF00D68F).withValues(alpha: 0.5),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        elevation: 2,
+                // ── Deposit / Withdraw ────────────────────────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 11,
+                      child: _actionButton(
+                        icon: _showDepositSection
+                            ? Icons.close_rounded
+                            : Icons.arrow_downward_rounded,
+                        label: _showDepositSection ? 'Hide Deposit' : 'Deposit',
+                        filled: true,
+                        onTap: () {
+                          setState(
+                            () => _showDepositSection = !_showDepositSection,
+                          );
+                          if (_showDepositSection) {
+                            WidgetsBinding.instance.addPostFrameCallback(
+                              (_) => _scrollToDeposit(),
+                            );
+                          }
+                        },
                       ),
-                      child: _isVerifyingDeposit
-                          ? const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                                ),
-                                SizedBox(width: 10),
-                                Text(
-                                  'SUBMITTING DEPOSIT REQUEST...',
-                                  style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5),
-                                ),
-                              ],
-                            )
-                          : const Text(
-                              '⚡ SUBMIT DEPOSIT (PENDING ADMIN APPROVAL)',
-                              style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5),
-                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 9,
+                      child: _actionButton(
+                        icon: Icons.arrow_upward_rounded,
+                        label: 'WITHDRAW',
+                        filled: false,
+                        onTap: () => _showWithdrawModal(context, authUser),
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ],
-          ],
+                const SizedBox(height: 18),
+
+                // ── Active Open Trades Section (Directly Below Balance & Action Buttons) ──
+                _buildActiveTradesSection(engineState.openPositions),
+                const SizedBox(height: 20),
+
+                // ── USDT TRC-20 deposit (manual admin verification) ──
+                if (_showDepositSection)
+                  DepositPanel(
+                    key: _depositSectionKey,
+                    onClose: () => setState(() => _showDepositSection = false),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -724,18 +377,34 @@ class _VaultScreenState extends State<VaultScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: _cardBg,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(color: _subtleBorder),
+          boxShadow: _cardShadow,
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(11),
               decoration: BoxDecoration(
-                color: const Color(0xFF00D68F).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
+                color: _brandGreen.withValues(alpha: _isDark ? 0.14 : 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: _isDark
+                    ? Border.all(color: _brandGreen.withValues(alpha: 0.45))
+                    : null,
+                boxShadow: _isDark
+                    ? [
+                        BoxShadow(
+                          color: _brandGreen.withValues(alpha: 0.25),
+                          blurRadius: 14,
+                        ),
+                      ]
+                    : null,
               ),
-              child: const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF00D68F), size: 22),
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                color: _brandGreen,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -765,7 +434,10 @@ class _VaultScreenState extends State<VaultScreen> {
     }
 
     // Total floating PnL of all open positions
-    final totalPnL = positions.fold<Decimal>(Decimal.zero, (sum, p) => sum + p.unrealizedPnl);
+    final totalPnL = positions.fold<Decimal>(
+      Decimal.zero,
+      (sum, p) => sum + p.unrealizedPnl,
+    );
     final isTotalProfit = totalPnL >= Decimal.zero;
 
     return Container(
@@ -818,7 +490,9 @@ class _VaultScreenState extends State<VaultScreen> {
                     fontFamily: 'Inter',
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
-                    color: isTotalProfit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                    color: isTotalProfit
+                        ? const Color(0xFF00D68F)
+                        : const Color(0xFFFF4757),
                   ),
                 ),
               ),
@@ -845,7 +519,10 @@ class _VaultScreenState extends State<VaultScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: pos.isBuy
                               ? const Color(0xFF00D68F).withValues(alpha: 0.15)
@@ -858,7 +535,9 @@ class _VaultScreenState extends State<VaultScreen> {
                             fontFamily: 'Inter',
                             fontSize: 10,
                             fontWeight: FontWeight.w900,
-                            color: pos.isBuy ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                            color: pos.isBuy
+                                ? const Color(0xFF00D68F)
+                                : const Color(0xFFFF4757),
                           ),
                         ),
                       ),
@@ -879,7 +558,9 @@ class _VaultScreenState extends State<VaultScreen> {
                           fontFamily: 'Inter',
                           fontSize: 14,
                           fontWeight: FontWeight.w900,
-                          color: isPosProfit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                          color: isPosProfit
+                              ? const Color(0xFF00D68F)
+                              : const Color(0xFFFF4757),
                         ),
                       ),
                     ],
@@ -896,17 +577,29 @@ class _VaultScreenState extends State<VaultScreen> {
                       ),
                       Row(
                         children: [
-                          Icon(Icons.trending_up, size: 12, color: _textSecondary),
+                          Icon(
+                            Icons.trending_up,
+                            size: 12,
+                            color: _textSecondary,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'Live: ${MoneyMath.formatDec(pos.currentPrice, 2)}',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _textPrimary),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: _textPrimary,
+                            ),
                           ),
                         ],
                       ),
                       Text(
                         'Margin: ${MoneyMath.formatCurrency(pos.requiredMargin)}',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFFFFD600), fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFFFD600),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -915,7 +608,9 @@ class _VaultScreenState extends State<VaultScreen> {
                   // Row 3: Direct Close Trade Button
                   OutlinedButton.icon(
                     onPressed: () async {
-                      await context.read<TradingEngineBloc>().closePosition(pos.id);
+                      await context.read<TradingEngineBloc>().closePosition(
+                        pos.id,
+                      );
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -929,12 +624,20 @@ class _VaultScreenState extends State<VaultScreen> {
                       }
                     },
                     icon: const Icon(Icons.close_rounded, size: 14),
-                    label: const Text('CLOSE POSITION', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    label: const Text(
+                      'CLOSE POSITION',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFFFF4757),
                       side: const BorderSide(color: Color(0xFFFF4757)),
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
                 ],
@@ -946,18 +649,122 @@ class _VaultScreenState extends State<VaultScreen> {
     );
   }
 
-  Widget _vaultBreakdownItem(String label, String value) {
+  Widget _vaultBreakdownItem(String label, String value, {Color? valueColor}) {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontSize: 11, color: _textSecondary)),
-          const SizedBox(height: 2),
           Text(
-            value,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _textPrimary),
+            label,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11.5,
+              color: _textSecondary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: valueColor ?? _mutedValue,
+              ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _pill({
+    required IconData icon,
+    required String label,
+    required Color fg,
+    required Color bg,
+    required Color border,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: fg),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required bool filled,
+    required VoidCallback onTap,
+  }) {
+    final fg = filled ? Colors.white : _textPrimary;
+    return Container(
+      height: 58,
+      decoration: BoxDecoration(
+        color: filled
+            ? _brandGreen
+            : (_isDark ? const Color(0xFF1A2832) : Colors.white),
+        borderRadius: BorderRadius.circular(16),
+        border: filled ? null : Border.all(color: _subtleBorder),
+        boxShadow: filled
+            ? [
+                BoxShadow(
+                  color: _brandGreen.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : _cardShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 22, color: fg),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: filled ? 18 : 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: filled ? 0 : 0.4,
+                    color: fg,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -965,7 +772,7 @@ class _VaultScreenState extends State<VaultScreen> {
   void _showWithdrawModal(BuildContext context, UserEntity? user) {
     // For now: allow withdrawal requests without requiring KYC approval
     final amountController = TextEditingController(text: '1000');
-    final addressController = TextEditingController(text: 'TY9xKpLm82ZvWq31RbPz');
+    final addressController = TextEditingController();
     Uint8List? withdrawProofBytes;
     String? withdrawProofFileName;
     bool isPickingProof = false;
@@ -974,7 +781,9 @@ class _VaultScreenState extends State<VaultScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF151D28),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           Future<void> pickWithdrawProof() async {
@@ -1018,10 +827,18 @@ class _VaultScreenState extends State<VaultScreen> {
                     children: [
                       const Text(
                         'Withdrawal Disbursement',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Color(0xFF848E9C), size: 20),
+                        icon: const Icon(
+                          Icons.close,
+                          color: Color(0xFF848E9C),
+                          size: 20,
+                        ),
                         onPressed: () => Navigator.of(ctx).pop(),
                       ),
                     ],
@@ -1029,8 +846,14 @@ class _VaultScreenState extends State<VaultScreen> {
                   const SizedBox(height: 14),
                   TextField(
                     controller: amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Withdrawal Amount (USD)',
                       prefixText: '\$ ',
@@ -1040,7 +863,9 @@ class _VaultScreenState extends State<VaultScreen> {
                   TextField(
                     controller: addressController,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
-                    decoration: const InputDecoration(labelText: 'Destination Wallet Address (USDT TRC-20)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Destination Wallet Address (USDT TRC-20)',
+                    ),
                   ),
                   const SizedBox(height: 14),
 
@@ -1050,16 +875,32 @@ class _VaultScreenState extends State<VaultScreen> {
                     children: [
                       const Text(
                         'Wallet QR / Proof Screenshot (Optional)',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF848E9C)),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF848E9C),
+                        ),
                       ),
                       if (withdrawProofBytes != null)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF00D68F).withValues(alpha: 0.15),
+                            color: const Color(
+                              0xFF00D68F,
+                            ).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text('✓ ATTACHED', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9, fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            '✓ ATTACHED',
+                            style: TextStyle(
+                              color: Color(0xFF00D68F),
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -1069,7 +910,10 @@ class _VaultScreenState extends State<VaultScreen> {
                       onTap: pickWithdrawProof,
                       borderRadius: BorderRadius.circular(10),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF0F141C),
                           borderRadius: BorderRadius.circular(10),
@@ -1079,11 +923,28 @@ class _VaultScreenState extends State<VaultScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             if (isPickingProof)
-                              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00D68F)))
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF00D68F),
+                                ),
+                              )
                             else ...[
-                              const Icon(Icons.add_photo_alternate_outlined, size: 18, color: Color(0xFF848E9C)),
+                              const Icon(
+                                Icons.add_photo_alternate_outlined,
+                                size: 18,
+                                color: Color(0xFF848E9C),
+                              ),
                               const SizedBox(width: 8),
-                              const Text('Attach Wallet Address Slip / QR Screenshot', style: TextStyle(color: Color(0xFF848E9C), fontSize: 12)),
+                              const Text(
+                                'Attach Wallet Address Slip / QR Screenshot',
+                                style: TextStyle(
+                                  color: Color(0xFF848E9C),
+                                  fontSize: 12,
+                                ),
+                              ),
                             ],
                           ],
                         ),
@@ -1095,7 +956,9 @@ class _VaultScreenState extends State<VaultScreen> {
                       decoration: BoxDecoration(
                         color: const Color(0xFF0F141C),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.4)),
+                        border: Border.all(
+                          color: const Color(0xFF00D68F).withValues(alpha: 0.4),
+                        ),
                       ),
                       child: Row(
                         children: [
@@ -1117,18 +980,29 @@ class _VaultScreenState extends State<VaultScreen> {
                                   withdrawProofFileName ?? 'wallet_proof.png',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   '${(withdrawProofBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB • Attached for Admin Check',
-                                  style: const TextStyle(color: Color(0xFF00D68F), fontSize: 10),
+                                  style: const TextStyle(
+                                    color: Color(0xFF00D68F),
+                                    fontSize: 10,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Color(0xFFFF4757), size: 18),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Color(0xFFFF4757),
+                              size: 18,
+                            ),
                             onPressed: () => setModalState(() {
                               withdrawProofBytes = null;
                               withdrawProofFileName = null;
@@ -1143,35 +1017,50 @@ class _VaultScreenState extends State<VaultScreen> {
                     onPressed: () async {
                       final amt = double.tryParse(amountController.text) ?? 0.0;
                       final amtDec = MoneyMath.toDec(amt);
-                      final engineState = context.read<TradingEngineBloc>().state;
+                      final engineState = context
+                          .read<TradingEngineBloc>()
+                          .state;
 
                       if (amtDec > engineState.accountState.freeMargin) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             backgroundColor: AppColors.loss,
-                            content: Text('Insufficient Free Margin! Available: ${MoneyMath.formatCurrency(engineState.accountState.freeMargin)}'),
+                            content: Text(
+                              'Insufficient Free Margin! Available: ${MoneyMath.formatCurrency(engineState.accountState.freeMargin)}',
+                            ),
                           ),
                         );
                         return;
                       }
 
                       final authUser = context.read<AuthBloc>().state.user;
-                      final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
-                      final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+                      final effectiveUserId =
+                          authUser?.id ?? 'usr_institutional_01';
+                      final txId =
+                          'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
                       String? uploadedStoragePath;
                       if (withdrawProofBytes != null) {
-                        final fileExt = (withdrawProofFileName != null && withdrawProofFileName!.contains('.'))
-                            ? withdrawProofFileName!.split('.').last.toLowerCase()
+                        final fileExt =
+                            (withdrawProofFileName != null &&
+                                withdrawProofFileName!.contains('.'))
+                            ? withdrawProofFileName!
+                                  .split('.')
+                                  .last
+                                  .toLowerCase()
                             : 'png';
-                        final storagePath = 'withdraw_${effectiveUserId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+                        final storagePath =
+                            'withdraw_${effectiveUserId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
                         try {
                           await Supabase.instance.client.storage
                               .from('reciept-proof')
                               .uploadBinary(
                                 storagePath,
                                 withdrawProofBytes!,
-                                fileOptions: FileOptions(contentType: 'image/$fileExt', upsert: true),
+                                fileOptions: FileOptions(
+                                  contentType: 'image/$fileExt',
+                                  upsert: true,
+                                ),
                               );
                           uploadedStoragePath = storagePath;
                         } catch (e) {
@@ -1181,42 +1070,82 @@ class _VaultScreenState extends State<VaultScreen> {
 
                       if (!ctx.mounted || !context.mounted) return;
 
-                      // 1. Submit Auto-Approved Withdrawal to Admin
-                      context.read<AdminBloc>().addTransactionRequest(
-                            AdminTransaction(
-                              id: txId,
-                              userId: effectiveUserId,
-                              userName: authUser?.fullName ?? 'Trader',
-                              userEmail: authUser?.email ?? 'trader@asianfx.com',
-                              type: 'WITHDRAWAL',
-                              amount: amt,
+                      // 1. Hold the funds server-side FIRST. rpc_request_withdrawal locks
+                      //    the wallet, re-verifies balance and free margin, debits inside
+                      //    a transaction and records a withdrawal_hold ledger entry.
+                      //    withdrawFunds() used to only change a client-side number, so
+                      //    the real wallet was never debited and the money could be spent
+                      //    again. Nothing is recorded locally until this succeeds.
+                      final messenger = ScaffoldMessenger.of(context);
+                      final adminBloc = context.read<AdminBloc>();
+                      final walletBloc = context.read<WalletBloc>();
+
+                      try {
+                        await context
+                            .read<TradingEngineCubit>()
+                            .requestWithdrawal(
+                              amount: MoneyMath.toDec(amt),
                               method: 'USDT (TRC-20)',
-                              accountOrAddress: addressController.text,
-                              status: AdminTxStatus.approved,
-                              isAutoApproved: true,
-                              createdAt: DateTime.now(),
-                              proofImageName: uploadedStoragePath ?? withdrawProofFileName,
-                              proofImageBytes: withdrawProofBytes,
+                              destination: addressController.text,
+                              requestId: txId,
+                            );
+                      } catch (e) {
+                        if (context.mounted) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              backgroundColor: const Color(0xFFFF4757),
+                              content: Text(
+                                'Withdrawal rejected: ${e.toString().replaceAll('Exception: ', '')}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
                           );
+                        }
+                        return;
+                      }
 
-                      // 2. Instantly Debit User Wallet & Trading Engine
-                      context.read<WalletBloc>().debitWithdrawal(amt, 'USDT (TRC-20)', txId: txId, autoApprove: true);
-                      context.read<TradingEngineCubit>().withdrawFunds(
-                            effectiveUserId,
-                            MoneyMath.toDec(amt),
-                          );
+                      // 2. Mirror the accepted request for the admin queue and local UI.
+                      adminBloc.addTransactionRequest(
+                        AdminTransaction(
+                          id: txId,
+                          userId: effectiveUserId,
+                          userName: authUser?.fullName ?? 'Trader',
+                          userEmail: authUser?.email ?? 'trader@asianfx.com',
+                          type: 'WITHDRAWAL',
+                          amount: amt,
+                          method: 'USDT (TRC-20)',
+                          accountOrAddress: addressController.text,
+                          status: AdminTxStatus.pending,
+                          isAutoApproved: false,
+                          createdAt: DateTime.now(),
+                          proofImageName:
+                              uploadedStoragePath ?? withdrawProofFileName,
+                          proofImageBytes: withdrawProofBytes,
+                        ),
+                      );
+                      walletBloc.debitWithdrawal(
+                        amt,
+                        'USDT (TRC-20)',
+                        txId: txId,
+                        autoApprove: false,
+                      );
 
                       if (ctx.mounted) {
                         Navigator.of(ctx).pop();
                       }
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           SnackBar(
                             backgroundColor: const Color(0xFF0ECB81),
                             content: Text(
-                              '✓ Instant Withdrawal of \$${amt.toStringAsFixed(2)} processed successfully!',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+                              '✓ Withdrawal of \$${amt.toStringAsFixed(2)} submitted — funds held pending approval.',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
                             ),
                           ),
                         );
@@ -1227,7 +1156,10 @@ class _VaultScreenState extends State<VaultScreen> {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text('SUBMIT WITHDRAWAL REQUEST', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'SUBMIT WITHDRAWAL REQUEST',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -1237,4 +1169,57 @@ class _VaultScreenState extends State<VaultScreen> {
       ),
     );
   }
+}
+
+/// Soft green wave in the balance card's right corner.
+class _CardWavePainter extends CustomPainter {
+  final bool isDark;
+  const _CardWavePainter({required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    const green = Color(0xFF1EC27E);
+
+    final back = Path()
+      ..moveTo(w * 0.55, h)
+      ..cubicTo(w * 0.72, h * 0.62, w * 0.80, h * 0.30, w, h * 0.12)
+      ..lineTo(w, h)
+      ..close();
+    canvas.drawPath(
+      back,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            green.withValues(alpha: isDark ? 0.40 : 0.16),
+            green.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromLTWH(w * 0.5, 0, w * 0.5, h)),
+    );
+
+    final front = Path()
+      ..moveTo(w * 0.68, h)
+      ..cubicTo(w * 0.80, h * 0.78, w * 0.88, h * 0.55, w, h * 0.42)
+      ..lineTo(w, h)
+      ..close();
+    canvas.drawPath(
+      front,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            green.withValues(alpha: isDark ? 0.30 : 0.10),
+            green.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromLTWH(w * 0.6, h * 0.4, w * 0.4, h * 0.6)),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CardWavePainter oldDelegate) =>
+      oldDelegate.isDark != isDark;
 }

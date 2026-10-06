@@ -7,6 +7,7 @@ import '../../core/math/money_math.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../domain/entities/trading_entities.dart';
+import 'widgets/deposit_panel.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -227,7 +228,24 @@ class _WalletScreenState extends State<WalletScreen>
     }
   }
 
-  void _showDepositSheet(BuildContext context) => _showPaymentSheet(context, 'Deposit');
+  // Deposits go through the manual-review RPC flow, never the local admin queue.
+  void _showDepositSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.9,
+        builder: (_, controller) => SingleChildScrollView(
+          controller: controller,
+          padding: const EdgeInsets.all(12),
+          child: DepositPanel(onClose: () => Navigator.of(sheetContext).pop()),
+        ),
+      ),
+    );
+  }
+
   void _showWithdrawSheet(BuildContext context) => _showPaymentSheet(context, 'Withdraw');
   void _showTransferSheet(BuildContext context) => _showPaymentSheet(context, 'Transfer');
 
@@ -988,13 +1006,35 @@ class _PaymentBottomSheetState extends State<_PaymentBottomSheet> {
                     ),
                   );
 
-                  // 2. Debit withdrawal immediately, but DEPOSITS WAIT FOR ADMIN APPROVAL
+                  // 2. Withdrawals are held by the server; DEPOSITS WAIT FOR ADMIN APPROVAL.
+                  //    rpc_request_withdrawal re-checks the authoritative balance and
+                  //    free margin, debits the wallet inside a transaction and writes a
+                  //    withdrawal_hold ledger entry. The previous code called
+                  //    withdrawFunds(), which only decremented a number in Flutter — the
+                  //    real wallet was never touched, so the funds could be spent twice.
                   if (!isDeposit) {
-                    walletBloc.debitWithdrawal(amount, _selectedMethod, txId: txId, autoApprove: true);
-                    engineCubit.withdrawFunds(
-                      user?.id ?? 'usr_001',
-                      MoneyMath.toDec(amount),
-                    );
+                    try {
+                      await engineCubit.requestWithdrawal(
+                        amount: MoneyMath.toDec(amount),
+                        method: _selectedMethod,
+                        destination: 'REF-$txId',
+                        requestId: txId,
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      setState(() => _isLoading = false);
+                      messenger.showSnackBar(
+                        SnackBar(
+                          backgroundColor: AppColors.loss,
+                          content: Text(
+                            'Withdrawal rejected: ${e.toString().replaceAll('Exception: ', '')}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    walletBloc.debitWithdrawal(amount, _selectedMethod, txId: txId, autoApprove: false);
                   }
 
                   navigator.pop();
@@ -1004,7 +1044,7 @@ class _PaymentBottomSheetState extends State<_PaymentBottomSheet> {
                       content: Text(
                         isDeposit
                             ? '✓ Deposit request of \$$amount submitted!\nStatus: PENDING ADMIN APPROVAL. Balance will be credited upon admin approval.'
-                            : '✓ Instant Withdrawal of \$$amount processed successfully!',
+                            : '✓ Withdrawal of \$$amount submitted!\nFunds are held and will be released on approval.',
                         style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
                       ),
                     ),

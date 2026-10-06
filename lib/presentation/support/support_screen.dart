@@ -189,7 +189,7 @@ class _SupportScreenState extends State<SupportScreen>
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: tickets.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, i) {
               final t = tickets[i];
               final isOpen = t['status'] == 'Open';
@@ -224,7 +224,7 @@ class _SupportScreenState extends State<SupportScreen>
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: _faqs.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
         final faq = _faqs[i];
         final isExpanded = _expandedFaq == i;

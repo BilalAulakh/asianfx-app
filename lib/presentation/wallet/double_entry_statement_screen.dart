@@ -156,7 +156,7 @@ class _DoubleEntryStatementScreenState
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFFD600).withOpacity(0.15),
+                                    color: const Color(0xFFFFD600).withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -204,8 +204,8 @@ class _DoubleEntryStatementScreenState
                                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                       decoration: BoxDecoration(
                                         color: entry.isDebit
-                                            ? const Color(0xFF00D68F).withOpacity(0.15)
-                                            : const Color(0xFFFF4757).withOpacity(0.15),
+                                            ? const Color(0xFF00D68F).withValues(alpha: 0.15)
+                                            : const Color(0xFFFF4757).withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       alignment: Alignment.center,

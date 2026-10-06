@@ -47,3 +47,10 @@ app.*.map.json
 # Environment variables & secrets
 .env*
 !.env.example
+
+# Contains the fx-price-sweep shared secret
+SCHEDULE_PRICE_SWEEP.sql
+
+
+# Contains the shared SWEEP_SECRET
+SCHEDULE_AUTO_VERIFY.sql

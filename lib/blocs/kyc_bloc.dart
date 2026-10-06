@@ -320,16 +320,14 @@ class KycCubit extends Cubit<KycState> {
     }
   }
 
-  Future<bool> submitKycApplication(String userId, {bool autoApprove = true}) async {
+  Future<bool> submitKycApplication(String userId, {bool autoApprove = false}) async {
     emit(state.copyWith(isSubmitting: true, error: null));
     try {
       final submitted = await _repository.submitKycApplication(userId, autoApprove: autoApprove);
       emit(state.copyWith(
         currentProfile: submitted,
         isSubmitting: false,
-        successMessage: autoApprove
-            ? '🎉 KYC Auto-Approved! Level 2 Full Access Unlocked.'
-            : 'Application submitted for review.',
+        successMessage: 'Application submitted. A compliance officer will review it shortly.',
       ));
       await loadAdminQueue();
       return true;
@@ -342,16 +340,14 @@ class KycCubit extends Cubit<KycState> {
     }
   }
 
-  Future<bool> resubmitKycApplication(String userId, {bool autoApprove = true}) async {
+  Future<bool> resubmitKycApplication(String userId, {bool autoApprove = false}) async {
     emit(state.copyWith(isSubmitting: true, error: null));
     try {
       final resubmitted = await _repository.resubmitKycApplication(userId, autoApprove: autoApprove);
       emit(state.copyWith(
         currentProfile: resubmitted,
         isSubmitting: false,
-        successMessage: autoApprove
-            ? '🎉 Resubmitted KYC Auto-Approved! Level 2 Full Access Unlocked.'
-            : 'Resubmitted for review.',
+        successMessage: 'Documents resubmitted. Your application is back in the review queue.',
       ));
       await loadAdminQueue();
       return true;
@@ -364,20 +360,11 @@ class KycCubit extends Cubit<KycState> {
     }
   }
 
-  Future<bool> autoApproveKyc(String userId) async {
-    try {
-      final approved = await _repository.autoApproveKyc(userId);
-      emit(state.copyWith(
-        currentProfile: approved,
-        successMessage: 'Instant KYC verification approved by AsianFX AI Engine.',
-      ));
-      await loadAdminQueue();
-      return true;
-    } catch (e) {
-      emit(state.copyWith(error: e.toString().replaceAll('Exception: ', '')));
-      return false;
-    }
-  }
+  /// Verification is manual. This used to approve the applicant's own KYC from
+  /// the device, which meant anyone could grant themselves Level 2 access; it
+  /// now queues the application for an administrator instead.
+  @Deprecated('Use submitKycApplication(); approval is an administrator action.')
+  Future<bool> autoApproveKyc(String userId) => submitKycApplication(userId);
 
   // ── Admin Queue & Compliance Operations ────────────────────────────────────
 

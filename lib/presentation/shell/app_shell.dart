@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../blocs/blocs.dart';
 import '../../core/router/app_router.dart';
@@ -25,7 +24,25 @@ class AppShell extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0A0E17) : const Color(0xFFF4F6F9),
-      body: navigationShell,
+      // Rejected server requests (close / cancel) surface here on every tab,
+      // e.g. NO_QUOTE while the market is closed.
+      body: BlocListener<TradingEngineBloc, TradingEngineState>(
+        listenWhen: (prev, curr) =>
+            curr.lastErrorTime != null && curr.lastErrorTime != prev.lastErrorTime,
+        listener: (context, state) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFFFF4757),
+              behavior: SnackBarBehavior.floating,
+              content: Text(
+                state.lastErrorMessage ?? 'Request failed.',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            ),
+          );
+        },
+        child: navigationShell,
+      ),
 
       // ── Institutional Bottom Navigation Items ───────────────────────
       bottomNavigationBar: Container(

@@ -9,7 +9,7 @@ import '../../domain/entities/user_entity.dart';
 import '../admin/admin_portal_screen.dart';
 import '../kyc/kyc_flow_screen.dart';
 import 'widgets/change_security_pin_sheet.dart';
-import 'widgets/two_factor_auth_sheet.dart';
+import '../../core/constants/feature_flags.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -420,23 +420,10 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                   Divider(color: context.borderColor, height: 1),
+                  // Real TOTP MFA is not implemented yet; never show fake protection.
                   ListTile(
-                    onTap: () {
-                      final email = user?.email ?? 'trader@asianfx.com';
-                      TwoFactorAuthSheet.show(
-                        context,
-                        userEmail: email,
-                        isCurrentlyEnabled: user?.isTwoFactorEnabled ?? false,
-                      );
-                    },
-                    leading: Icon(
-                      user?.isTwoFactorEnabled == true
-                          ? Icons.verified_user_rounded
-                          : Icons.security_outlined,
-                      color: user?.isTwoFactorEnabled == true
-                          ? const Color(0xFF00D68F)
-                          : const Color(0xFFFF9F43),
-                    ),
+                    enabled: kTwoFactorAvailable,
+                    leading: const Icon(Icons.security_outlined, color: Color(0xFF848E9C)),
                     title: Text(
                       'Two-Factor Authentication (2FA)',
                       style: TextStyle(
@@ -446,31 +433,20 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                     subtitle: Text(
-                      user?.isTwoFactorEnabled == true
-                          ? 'Protected with Authenticator'
-                          : 'Tap to enable extra account defense',
+                      'Authenticator-app protection is coming soon',
                       style: TextStyle(fontSize: 11, color: context.textSecondaryColor),
                     ),
                     trailing: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: (user?.isTwoFactorEnabled == true
-                                ? const Color(0xFF00D68F)
-                                : const Color(0xFFFF9F43))
-                            .withAlpha(25),
+                        color: const Color(0xFF848E9C).withAlpha(25),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: user?.isTwoFactorEnabled == true
-                              ? const Color(0xFF00D68F)
-                              : const Color(0xFFFF9F43),
-                        ),
+                        border: Border.all(color: const Color(0xFF848E9C)),
                       ),
-                      child: Text(
-                        user?.isTwoFactorEnabled == true ? 'ENABLED' : 'DISABLED',
+                      child: const Text(
+                        'COMING SOON',
                         style: TextStyle(
-                          color: user?.isTwoFactorEnabled == true
-                              ? const Color(0xFF00D68F)
-                              : const Color(0xFFFF9F43),
+                          color: Color(0xFF848E9C),
                           fontWeight: FontWeight.bold,
                           fontSize: 11,
                         ),

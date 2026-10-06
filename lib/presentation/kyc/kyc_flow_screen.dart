@@ -361,136 +361,127 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     }
 
     final kycCubit = context.read<KycCubit>();
+    var profile = kycCubit.state.currentProfile;
+
+    // Only real, user-entered data goes to compliance — no placeholder names,
+    // addresses, document numbers or generated images.
+    final needsPersonal = profile == null || profile.firstName.isEmpty || profile.address.isEmpty;
+    if (needsPersonal &&
+        (_firstNameController.text.trim().isEmpty ||
+            _lastNameController.text.trim().isEmpty ||
+            _dateOfBirth == null ||
+            _addressController.text.trim().isEmpty ||
+            _cityController.text.trim().isEmpty)) {
+      _showSnackBar('Please complete your personal details (name, date of birth, address, city).', isError: true);
+      setState(() => _currentStep = 0);
+      return;
+    }
+    final docNum = _docNumberController.text.trim().isNotEmpty
+        ? _docNumberController.text.trim()
+        : (user.kycDocumentNumber ?? '');
+    if (docNum.isEmpty) {
+      _showSnackBar('Please enter your document number.', isError: true);
+      setState(() => _currentStep = 1);
+      return;
+    }
+    if (profile?.poiFrontDoc == null && _frontDocBytes == null) {
+      _showSnackBar('Please upload the front side of your document.', isError: true);
+      setState(() => _currentStep = 1);
+      return;
+    }
+    if (_selectedIdentityType.requiresBackSide && profile?.poiBackDoc == null && _backDocBytes == null) {
+      _showSnackBar('Please upload the back side of your document.', isError: true);
+      setState(() => _currentStep = 1);
+      return;
+    }
+
     setState(() => _isSubmittingFinal = true);
 
     try {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogCtx) => _ExnessAiVerificationModal(
-          onStartVerification: () async {
-            var profile = kycCubit.state.currentProfile;
+      // 1. Personal details
+      if (needsPersonal) {
+        final middle = _middleNameController.text.trim();
+        await kycCubit.savePersonalInfo(
+          userId: user.id,
+          firstName: _firstNameController.text.trim(),
+          middleName: middle.isEmpty ? null : middle,
+          lastName: _lastNameController.text.trim(),
+          dateOfBirth: _dateOfBirth!,
+          nationality: _selectedNationality,
+          countryOfResidence: _selectedCountry,
+          address: _addressController.text.trim(),
+          city: _cityController.text.trim(),
+          stateName: _stateController.text.trim(),
+          postalCode: _postalCodeController.text.trim(),
+        );
+        profile = kycCubit.state.currentProfile;
+      }
 
-            // 1. Ensure personal details are saved in profile
-            if (profile == null || profile.firstName.isEmpty || profile.address.isEmpty) {
-              final names = user.fullName.split(' ');
-              final firstName = _firstNameController.text.trim().isNotEmpty
-                  ? _firstNameController.text.trim()
-                  : (names.isNotEmpty ? names.first : 'Trader');
-              final lastName = _lastNameController.text.trim().isNotEmpty
-                  ? _lastNameController.text.trim()
-                  : (names.length > 1 ? names.last : 'User');
-              final middle = _middleNameController.text.trim().isNotEmpty
-                  ? _middleNameController.text.trim()
-                  : (names.length > 2 ? names[1] : null);
+      // 2. Front side of the identity document
+      if (profile?.poiFrontDoc == null) {
+        await kycCubit.uploadDocument(
+          userId: user.id,
+          category: KycDocumentCategory.identity,
+          documentType: _selectedIdentityType,
+          fileName: _frontDocName ?? 'id_front.jpg',
+          bytes: _ensureValidMagicBytes(_frontDocBytes!, _frontDocName ?? 'id_front.jpg'),
+          documentSide: _selectedIdentityType.requiresBackSide ? 'FRONT' : 'SINGLE',
+          documentNumber: docNum,
+        );
+        profile = kycCubit.state.currentProfile;
+      }
 
-              await kycCubit.savePersonalInfo(
-                userId: user.id,
-                firstName: firstName,
-                middleName: middle,
-                lastName: lastName,
-                dateOfBirth: _dateOfBirth ?? DateTime(1996, 5, 14),
-                nationality: _selectedNationality,
-                countryOfResidence: _selectedCountry,
-                address: _addressController.text.trim().isNotEmpty
-                    ? _addressController.text.trim()
-                    : 'Gulberg III, Main Boulevard',
-                city: _cityController.text.trim().isNotEmpty ? _cityController.text.trim() : 'Lahore',
-                stateName: _stateController.text.trim().isNotEmpty ? _stateController.text.trim() : 'Punjab',
-                postalCode: _postalCodeController.text.trim().isNotEmpty ? _postalCodeController.text.trim() : '54000',
-              );
-              profile = kycCubit.state.currentProfile;
-            }
+      // 3. Back side, when the document type has one
+      if (_selectedIdentityType.requiresBackSide && profile?.poiBackDoc == null) {
+        await kycCubit.uploadDocument(
+          userId: user.id,
+          category: KycDocumentCategory.identity,
+          documentType: _selectedIdentityType,
+          fileName: _backDocName ?? 'id_back.jpg',
+          bytes: _ensureValidMagicBytes(_backDocBytes!, _backDocName ?? 'id_back.jpg'),
+          documentSide: 'BACK',
+          documentNumber: docNum,
+        );
+        profile = kycCubit.state.currentProfile;
+      }
 
-            final docNum = _docNumberController.text.trim().isNotEmpty
-                ? _docNumberController.text.trim()
-                : (user.kycDocumentNumber ?? '35201-9876543-1');
+      // 4. Queue the application for MANUAL compliance review. The account
+      //    stays PENDING until an admin approves it (rpc_review_kyc).
+      final submitted = await kycCubit.submitKycApplication(user.id);
+      if (!mounted) return;
+      if (!submitted) {
+        _showSnackBar('Could not submit your verification. Please try again.', isError: true);
+        return;
+      }
 
-            // 2. Ensure POI Front document is uploaded to repository
-            if (profile?.poiFrontDoc == null) {
-              final frontBytes = _frontDocBytes != null
-                  ? _ensureValidMagicBytes(_frontDocBytes!, _frontDocName ?? 'cnic_front.jpg')
-                  : Uint8List.fromList([
-                      0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-                      ...List.generate(2036, (i) => (i + 1) % 255),
-                      0xFF, 0xD9,
-                    ]);
+      context.read<AuthBloc>().updateUserKyc(
+            KycStatus.pending,
+            documentType: _selectedIdentityType.displayName,
+            documentNumber: docNum,
+            streetAddress: _addressController.text.trim(),
+            city: _cityController.text.trim(),
+            postalCode: _postalCodeController.text.trim(),
+          );
+      try {
+        context.read<AdminBloc>().addKycRequest(
+          AdminKycItem(
+            id: 'kyc_${DateTime.now().millisecondsSinceEpoch}',
+            userId: user.id,
+            userName: user.fullName,
+            userEmail: user.email,
+            docType: _selectedIdentityType.displayName,
+            docNumber: docNum,
+            status: AdminKycStatus.pending,
+            submittedAt: DateTime.now(),
+          ),
+        );
+      } catch (_) {}
 
-              await kycCubit.uploadDocument(
-                userId: user.id,
-                category: KycDocumentCategory.identity,
-                documentType: _selectedIdentityType,
-                fileName: _frontDocName ?? 'cnic_front.jpg',
-                bytes: frontBytes,
-                documentSide: _selectedIdentityType.requiresBackSide ? 'FRONT' : 'SINGLE',
-                documentNumber: docNum,
-              );
-              profile = kycCubit.state.currentProfile;
-            }
-
-            // 3. Ensure POI Back document is uploaded if required
-            if (_selectedIdentityType.requiresBackSide && profile?.poiBackDoc == null) {
-              final backBytes = _backDocBytes != null
-                  ? _ensureValidMagicBytes(_backDocBytes!, _backDocName ?? 'cnic_back.jpg')
-                  : Uint8List.fromList([
-                      0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-                      ...List.generate(2036, (i) => (i + 1) % 255),
-                      0xFF, 0xD9,
-                    ]);
-
-              await kycCubit.uploadDocument(
-                userId: user.id,
-                category: KycDocumentCategory.identity,
-                documentType: _selectedIdentityType,
-                fileName: _backDocName ?? 'cnic_back.jpg',
-                bytes: backBytes,
-                documentSide: 'BACK',
-                documentNumber: docNum,
-              );
-              profile = kycCubit.state.currentProfile;
-            }
-
-            // 4. Automated AI Fast-Track Instant Approval (< 3s - Exness Speed)
-            final approved = await kycCubit.autoApproveKyc(user.id);
-            if (approved && mounted) {
-              context.read<AuthBloc>().updateUserKyc(
-                    KycStatus.approved,
-                    kycTier: 2,
-                    documentType: _selectedIdentityType.displayName,
-                    documentNumber: docNum,
-                    streetAddress: _addressController.text.trim(),
-                    city: _cityController.text.trim(),
-                    postalCode: _postalCodeController.text.trim(),
-                  );
-              try {
-                context.read<AdminBloc>().addKycRequest(
-                  AdminKycItem(
-                    id: 'kyc_${DateTime.now().millisecondsSinceEpoch}',
-                    userId: user.id,
-                    userName: user.fullName,
-                    userEmail: user.email,
-                    docType: _selectedIdentityType.displayName,
-                    docNumber: docNum,
-                    status: AdminKycStatus.approved,
-                    submittedAt: DateTime.now(),
-                  ),
-                );
-              } catch (_) {}
-              return true;
-            }
-            return false;
-          },
-          onVerificationComplete: () {
-            if (mounted) {
-              setState(() {
-                _isEditingFromStatus = false;
-                _currentStep = 0;
-              });
-              _showSnackBar('🎉 KYC Auto-Approved! Level 2 Full Access Unlocked in 2.8s.');
-            }
-          },
-        ),
-      );
+      setState(() {
+        _isEditingFromStatus = false;
+        _currentStep = 0;
+      });
+      _showSnackBar('✓ Documents submitted. Our compliance team will review them, usually within 24 hours.');
     } catch (e) {
       if (mounted) {
         _showSnackBar('Error: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
@@ -1229,11 +1220,12 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
             ),
             child: const Row(
               children: [
-                Icon(Icons.bolt_rounded, color: Color(0xFF0ECB81), size: 20),
+                Icon(Icons.verified_user_outlined, color: Color(0xFF0ECB81), size: 20),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Instant AI Verification: Your details & documents will be auto-scanned and approved in ~2.8 seconds (faster than Exness).',
+                    'Manual review: our compliance team checks your details and documents by hand, '
+                    'usually within 24 hours. Your status will update once a decision is made.',
                     style: TextStyle(
                       color: Color(0xFF0ECB81),
                       fontSize: 11,
@@ -1277,10 +1269,10 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                         )
-                      : const Icon(Icons.bolt_rounded, size: 20, color: Colors.black),
+                      : const Icon(Icons.send_rounded, size: 20, color: Colors.black),
                   label: Flexible(
                     child: Text(
-                      _isSubmittingFinal ? 'AI SCANNING...' : '⚡ AUTO-VERIFY (FAST-TRACK)',
+                      _isSubmittingFinal ? 'SUBMITTING...' : 'SUBMIT FOR REVIEW',
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5),
                     ),
@@ -1334,10 +1326,10 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.bolt_rounded, size: 14, color: Color(0xFF0ECB81)),
+                Icon(Icons.verified_rounded, size: 14, color: Color(0xFF0ECB81)),
                 SizedBox(width: 4),
                 Text(
-                  'FAST-TRACK AI VERIFIED (2.8s)',
+                  'APPROVED BY COMPLIANCE',
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF0ECB81)),
                 ),
               ],
@@ -1926,401 +1918,3 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     );
   }
 }
-
-// ── Exness-Speed AI Verification Modal ───────────────────────────────────────
-
-class _ExnessAiVerificationModal extends StatefulWidget {
-  final Future<bool> Function() onStartVerification;
-  final VoidCallback onVerificationComplete;
-
-  const _ExnessAiVerificationModal({
-    required this.onStartVerification,
-    required this.onVerificationComplete,
-  });
-
-  @override
-  State<_ExnessAiVerificationModal> createState() => _ExnessAiVerificationModalState();
-}
-
-class _ExnessAiVerificationModalState extends State<_ExnessAiVerificationModal>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
-  int _currentStepIndex = 0;
-  bool _isSuccess = false;
-  String? _errorMessage;
-
-  final List<Map<String, dynamic>> _stages = [
-    {
-      'title': 'Scanning Document OCR & MRZ Data',
-      'detail': 'Extracting identity credentials & biometric zone',
-      'icon': Icons.document_scanner_rounded,
-    },
-    {
-      'title': 'Global AML & Sanctions Screening',
-      'detail': 'Checking against UN, FATF & PEP watchlists',
-      'icon': Icons.shield_rounded,
-    },
-    {
-      'title': 'Biometric & Hologram Matching',
-      'detail': 'Matching facial vectors & anti-tamper watermark',
-      'icon': Icons.face_retouching_natural_rounded,
-    },
-    {
-      'title': 'Level 2 Fast-Track Clearance',
-      'detail': 'Tier 2 full trading & unlimited limits unlocked',
-      'icon': Icons.verified_rounded,
-    },
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    )..addListener(() {
-        if (!mounted) return;
-        final val = _animController.value;
-        if (val >= 0.75 && _currentStepIndex < 3) {
-          setState(() => _currentStepIndex = 3);
-        } else if (val >= 0.50 && _currentStepIndex < 2) {
-          setState(() => _currentStepIndex = 2);
-        } else if (val >= 0.25 && _currentStepIndex < 1) {
-          setState(() => _currentStepIndex = 1);
-        }
-      });
-
-    _startFlow();
-  }
-
-  Future<void> _startFlow() async {
-    _animController.forward();
-    try {
-      final success = await widget.onStartVerification();
-      if (!success) {
-        if (mounted) {
-          setState(() {
-            _errorMessage = 'Verification encountered an error. Please try again.';
-          });
-        }
-        return;
-      }
-
-      await Future.delayed(const Duration(milliseconds: 2800));
-      if (mounted) {
-        setState(() {
-          _isSuccess = true;
-          _currentStepIndex = 4;
-        });
-        widget.onVerificationComplete();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
-        });
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _animController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: Center(
-        child: Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(maxWidth: 420),
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: const Color(0xFF121824),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: _isSuccess
-                  ? const Color(0xFF0ECB81)
-                  : (_errorMessage != null
-                      ? const Color(0xFFFF4757)
-                      : const Color(0xFFFFC700).withValues(alpha: 0.6)),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: (_isSuccess ? const Color(0xFF0ECB81) : const Color(0xFFFFC700))
-                    .withValues(alpha: 0.15),
-                blurRadius: 28,
-                spreadRadius: 4,
-              ),
-            ],
-          ),
-          child: AnimatedBuilder(
-            animation: _animController,
-            builder: (context, _) {
-              final progress = _animController.value;
-              final percent = (progress * 100).toInt();
-
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Header badge
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFC700).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFFFC700)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.bolt_rounded, size: 12, color: Color(0xFFFFC700)),
-                            SizedBox(width: 4),
-                            Text(
-                              'AI AUTO-VERIFY (2.8s)',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFFFFC700),
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _isSuccess
-                              ? const Color(0xFF0ECB81).withValues(alpha: 0.2)
-                              : const Color(0xFF1E2838),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          _isSuccess ? 'PASSED 100%' : '$percent%',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: _isSuccess ? const Color(0xFF0ECB81) : Colors.white70,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Center icon / progress ring
-                  Center(
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          width: 80,
-                          height: 80,
-                          child: CircularProgressIndicator(
-                            value: _isSuccess ? 1.0 : progress,
-                            strokeWidth: 4,
-                            backgroundColor: const Color(0xFF1E2838),
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              _isSuccess ? const Color(0xFF0ECB81) : const Color(0xFFFFC700),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: (_isSuccess ? const Color(0xFF0ECB81) : const Color(0xFFFFC700))
-                                .withValues(alpha: 0.15),
-                          ),
-                          child: Icon(
-                            _isSuccess
-                                ? Icons.verified_rounded
-                                : (_errorMessage != null
-                                    ? Icons.error_outline_rounded
-                                    : Icons.shield_rounded),
-                            size: 32,
-                            color: _isSuccess
-                                ? const Color(0xFF0ECB81)
-                                : (_errorMessage != null
-                                    ? const Color(0xFFFF4757)
-                                    : const Color(0xFFFFC700)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Headline
-                  Text(
-                    _isSuccess
-                        ? 'KYC VERIFICATION APPROVED!'
-                        : (_errorMessage != null
-                            ? 'VERIFICATION FAILED'
-                            : 'AI FAST-TRACK SCANNING...'),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      color: _isSuccess
-                          ? const Color(0xFF0ECB81)
-                          : (_errorMessage != null ? const Color(0xFFFF4757) : Colors.white),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _isSuccess
-                        ? 'Your identity documents have been verified automatically in 2.8 seconds. Level 2 unlocked!'
-                        : (_errorMessage != null
-                            ? _errorMessage!
-                            : 'Processing biometric parameters & compliance checks faster than Exness...'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF848E9C), height: 1.4),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Progressive Checklist
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F141C),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF1E2838)),
-                    ),
-                    child: Column(
-                      children: List.generate(_stages.length, (idx) {
-                        final isCompleted = _isSuccess || _currentStepIndex > idx;
-                        final isCurrent = !_isSuccess && _currentStepIndex == idx;
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 5),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 22,
-                                height: 22,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isCompleted
-                                      ? const Color(0xFF0ECB81)
-                                      : (isCurrent
-                                          ? const Color(0xFFFFC700).withValues(alpha: 0.2)
-                                          : const Color(0xFF1E2838)),
-                                  border: Border.all(
-                                    color: isCompleted
-                                        ? const Color(0xFF0ECB81)
-                                        : (isCurrent
-                                            ? const Color(0xFFFFC700)
-                                            : const Color(0xFF2E394A)),
-                                  ),
-                                ),
-                                child: isCompleted
-                                    ? const Icon(Icons.check, size: 14, color: Colors.black)
-                                    : (isCurrent
-                                        ? const Padding(
-                                            padding: EdgeInsets.all(4),
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Color(0xFFFFC700),
-                                            ),
-                                          )
-                                        : null),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _stages[idx]['title'] as String,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: isCompleted
-                                            ? Colors.white
-                                            : (isCurrent
-                                                ? const Color(0xFFFFC700)
-                                                : const Color(0xFF55657E)),
-                                      ),
-                                    ),
-                                    Text(
-                                      _stages[idx]['detail'] as String,
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        color: isCompleted
-                                            ? const Color(0xFF0ECB81)
-                                            : const Color(0xFF55657E),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Bottom action
-                  if (_isSuccess)
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0ECB81),
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: const Text(
-                        'CONTINUE TO DASHBOARD',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-                      ),
-                    )
-                  else if (_errorMessage != null)
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF4757),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: const Text(
-                        'CLOSE & RETRY',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    )
-                  else
-                    const Center(
-                      child: Text(
-                        '⚡ Real-time fast-track approval in progress...',
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: Color(0xFF848E9C),
-                            fontStyle: FontStyle.italic),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-

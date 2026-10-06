@@ -1,6 +1,5 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../blocs/blocs.dart';
 import '../../core/router/app_router.dart';
@@ -10,6 +9,7 @@ import '../../domain/entities/chart_entities.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/user_entity.dart';
 import '../charts/candlestick_chart_canvas.dart';
+import '../common/widgets/price_staleness_chip.dart';
 import 'widgets/order_placement_modal.dart';
 
 class TerminalScreen extends StatefulWidget {
@@ -89,7 +89,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 10,
-                          color: Colors.white.withOpacity(0.5),
+                          color: Colors.white.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -158,8 +158,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: account.isStopOutLiquidation
-                      ? const Color(0xFFFF4757).withOpacity(0.2)
-                      : const Color(0xFFFFB300).withOpacity(0.2),
+                      ? const Color(0xFFFF4757).withValues(alpha: 0.2)
+                      : const Color(0xFFFFB300).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: account.isStopOutLiquidation
@@ -281,6 +281,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            PriceStalenessChip(symbol: live.symbol),
+                            const SizedBox(width: 8),
                             Text(
                               'Markup: +${live.spreadMarkupPips}p',
                               style: const TextStyle(
@@ -330,6 +332,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: CandlestickChartCanvas(
                   candles: candles,
+                  timeframe: currentTf,
+                  symbol: activeSymbol,
                   style: _chartStyle,
                   priceDecimals: live.decimals,
                   currentPrice: live.midPrice.toDouble(),
@@ -484,8 +488,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
               ),
             ),
 
-            // ── Live Active Positions Drawer / Quick Close on Terminal Screen ──
-            if (engineState.openPositions.isNotEmpty)
+            // ── Live Active Positions & Pending Orders Drawer on Terminal Screen ──
+            if (engineState.openPositions.isNotEmpty || engineState.pendingOrders.isNotEmpty)
               Container(
                 margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -505,7 +509,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             const Icon(Icons.show_chart_rounded, color: Color(0xFFFFD600), size: 16),
                             const SizedBox(width: 6),
                             Text(
-                              'Live Trades (${engineState.openPositions.length})',
+                              engineState.pendingOrders.isNotEmpty
+                                  ? 'Trades (${engineState.openPositions.length}) • Pending (${engineState.pendingOrders.length})'
+                                  : 'Live Trades (${engineState.openPositions.length})',
                               style: const TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 12,
@@ -515,17 +521,28 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             ),
                           ],
                         ),
-                        Text(
-                          'PnL: ${engineState.totalUnrealizedPnl >= Decimal.zero ? '+' : ''}\$${MoneyMath.formatDec(engineState.totalUnrealizedPnl, 2)}',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: engineState.totalUnrealizedPnl >= Decimal.zero
-                                ? const Color(0xFF00D68F)
-                                : const Color(0xFFFF4757),
+                        if (engineState.openPositions.isNotEmpty)
+                          Text(
+                            'PnL: ${engineState.totalUnrealizedPnl >= Decimal.zero ? '+' : ''}\$${MoneyMath.formatDec(engineState.totalUnrealizedPnl, 2)}',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: engineState.totalUnrealizedPnl >= Decimal.zero
+                                  ? const Color(0xFF00D68F)
+                                  : const Color(0xFFFF4757),
+                            ),
+                          )
+                        else
+                          const Text(
+                            'Orders Waiting Fill',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 11,
+                              color: Color(0xFFFFD600),
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -539,8 +556,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: trade.isBuy
-                                ? const Color(0xFF00D68F).withOpacity(0.3)
-                                : const Color(0xFFFF4757).withOpacity(0.3),
+                                ? const Color(0xFF00D68F).withValues(alpha: 0.3)
+                                : const Color(0xFFFF4757).withValues(alpha: 0.3),
                           ),
                         ),
                         child: Row(
@@ -549,8 +566,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: trade.isBuy
-                                    ? const Color(0xFF00D68F).withOpacity(0.2)
-                                    : const Color(0xFFFF4757).withOpacity(0.2),
+                                    ? const Color(0xFF00D68F).withValues(alpha: 0.2)
+                                    : const Color(0xFFFF4757).withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -588,12 +605,83 @@ class _TerminalScreenState extends State<TerminalScreen> {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFF4757).withOpacity(0.2),
+                                  color: const Color(0xFFFF4757).withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(color: const Color(0xFFFF4757)),
                                 ),
                                 child: const Text(
                                   'CLOSE',
+                                  style: TextStyle(
+                                    color: Color(0xFFFF4757),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    // ── Pending Limit & Stop Orders ──
+                    ...engineState.pendingOrders.take(3).map((order) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F1520),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFFFFD600).withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFD600).withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${order.type.name.toUpperCase()} ${order.side.name.toUpperCase()}',
+                                style: const TextStyle(
+                                  color: Color(0xFFFFD600),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${order.symbol} (${order.lots} lots)',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              'Target: \$${MoneyMath.formatDec(order.targetPrice ?? order.openPrice, 2)}',
+                              style: const TextStyle(
+                                color: Color(0xFFFFD600),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            InkWell(
+                              onTap: () => context.read<TradingEngineBloc>().cancelPendingOrder(order.id),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF4757).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFFF4757)),
+                                ),
+                                child: const Text(
+                                  'CANCEL',
                                   style: TextStyle(
                                     color: Color(0xFFFF4757),
                                     fontWeight: FontWeight.bold,

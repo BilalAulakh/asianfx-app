@@ -18,7 +18,7 @@ class FxTextField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final FocusNode? focusNode;
 
-  FxTextField({
+  const FxTextField({
     super.key,
     this.controller,
     String? label,

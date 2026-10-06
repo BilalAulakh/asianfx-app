@@ -1,16 +1,29 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../data/datasources/market_feed_service.dart';
+import '../data/datasources/supabase_trade_service.dart';
 import '../domain/entities/dealing_entities.dart';
 import '../domain/entities/trading_entities.dart';
 import 'trading_engine_bloc.dart';
 
 export '../domain/entities/dealing_entities.dart';
 
+/// Dealer exposure view + dealer controls.
+///
+/// * Markup is persisted with `rpc_admin_set_markup` (audited, clamped 0..500)
+///   and read back from the `instruments` table by MarketFeedService.
+/// * "A-Book / B-Book" is an INTERNAL TAG only. There is no liquidity-provider
+///   bridge: every trade is held by the broker and nothing is hedged
+///   externally, whatever the tag says.
 class DealingDeskCubit extends Cubit<DealerRiskSummary> {
   final MarketFeedService _feedService;
   final TradingEngineCubit? _tradingEngineCubit;
+  final SupabaseTradeService _trades = SupabaseTradeService.instance;
 
+  /// Slider value being dragged but not yet saved, per symbol.
+  final Map<String, int> _pendingMarkup = {};
+
+  /// Internal book tags (display / reporting only — no routing happens).
   final Map<String, ExecutionRouting> _routingMap = {
     'XAU/USD': ExecutionRouting.bBookInternal,
     'BTC/USD': ExecutionRouting.bBookInternal,
@@ -21,9 +34,8 @@ class DealingDeskCubit extends Cubit<DealerRiskSummary> {
 
   DealingDeskCubit({
     MarketFeedService? feedService,
-    TradingEngineCubit? tradingEngineCubit,
+    this._tradingEngineCubit,
   })  : _feedService = feedService ?? MarketFeedService(),
-        _tradingEngineCubit = tradingEngineCubit,
         super(
           DealerRiskSummary(
             totalGrossExposureLots: Decimal.zero,
@@ -54,9 +66,27 @@ class DealingDeskCubit extends Cubit<DealerRiskSummary> {
     updateRouting(symbol, next);
   }
 
-  void updateSpreadMarkup(String symbol, int markupPips) {
-    _feedService.updateSpreadMarkup(symbol, markupPips);
+  /// Live slider preview; nothing is saved until [commitSpreadMarkup].
+  void previewSpreadMarkup(String symbol, int points) {
+    _pendingMarkup[symbol] = points;
     calculateExposure();
+  }
+
+  /// Persist the markup server-side. Returns an error message, or null on success.
+  Future<String?> commitSpreadMarkup(String symbol, int points) async {
+    _pendingMarkup[symbol] = points;
+    try {
+      final stored = await _trades.adminSetMarkup(symbol: symbol, points: points);
+      _feedService.updateSpreadMarkup(symbol, stored);
+      return null;
+    } on TradeServiceException catch (e) {
+      return e.code == 'FORBIDDEN'
+          ? 'Not saved: the server did not recognise you as an administrator.'
+          : 'Not saved: ${e.message}';
+    } finally {
+      _pendingMarkup.remove(symbol);
+      if (!isClosed) calculateExposure();
+    }
   }
 
   void calculateExposure() {
@@ -119,7 +149,7 @@ class DealingDeskCubit extends Cubit<DealerRiskSummary> {
         aBookCount += symPositions.length;
       }
 
-      final markup = _feedService.getSpreadMarkup(sym);
+      final markup = _pendingMarkup[sym] ?? _feedService.getSpreadMarkup(sym);
 
       exposureList.add(
         InstrumentExposure(

@@ -8,7 +8,6 @@ import '../../presentation/splash/splash_screen.dart';
 import '../../presentation/onboarding/onboarding_screen.dart';
 import '../../presentation/auth/login_screen.dart';
 import '../../presentation/auth/register_screen.dart';
-import '../../presentation/auth/otp_screen.dart';
 import '../../presentation/auth/forgot_password_screen.dart';
 import '../../presentation/shell/app_shell.dart';
 import '../../presentation/trading/terminal_screen.dart';
@@ -26,7 +25,6 @@ abstract class AppRoutes {
   static const onboarding = '/onboarding';
   static const login = '/login';
   static const register = '/register';
-  static const otp = '/otp';
   static const forgotPassword = '/forgot-password';
   static const shell = '/app';
   static const vault = '/app/vault';
@@ -67,10 +65,12 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       final isAuthRoute = state.matchedLocation == AppRoutes.login ||
           state.matchedLocation == AppRoutes.register ||
           state.matchedLocation == AppRoutes.onboarding ||
-          state.matchedLocation == AppRoutes.forgotPassword ||
-          state.matchedLocation == AppRoutes.otp;
+          state.matchedLocation == AppRoutes.forgotPassword;
       final isSplash = state.matchedLocation == AppRoutes.splash;
       final isAdminRoute = state.matchedLocation == AppRoutes.admin;
+      // role comes from rpc_whoami (fx_is_admin() in the database), never from
+      // the e-mail or user_metadata. This guard is cosmetic: every admin RPC
+      // re-checks the caller server-side.
       final isAdmin = authState.user?.role == UserRole.admin;
 
       if (isSplash) return null;
@@ -116,12 +116,6 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           key: state.pageKey,
           child: const RegisterScreen(),
           transitionsBuilder: _fadeSlideTransition,
-        ),
-      ),
-      GoRoute(
-        path: AppRoutes.otp,
-        builder: (context, state) => OtpScreen(
-          email: state.extra as String? ?? '',
         ),
       ),
       GoRoute(

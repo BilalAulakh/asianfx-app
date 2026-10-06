@@ -1,6 +1,32 @@
 -- ==============================================================================
 -- ASIANFX MARKET MAKER TRADING ENGINE: SUPABASE DATABASE SCHEMA & PROCEDURES
 -- ==============================================================================
+--
+--  ####  SUPERSEDED — DO NOT RUN THIS FILE AGAINST A LIVE DATABASE  ####
+--
+--  Kept only as a record of the original bootstrap. Re-running it would REVERSE
+--  the security fixes in supabase/migrations/20261001*, because the versions
+--  below still contain:
+--
+--   * wallets.balance DEFAULT 10000  -> every new wallet mints $10,000
+--   * `FOR ALL USING (auth.uid() = user_id)` on wallets / trades /
+--     ledger_entries -> a signed-in user can UPDATE their own balance, flip a
+--     trade to 'closed', or INSERT fabricated ledger rows directly from Flutter
+--   * rpc_open_trade falling back to the hard-coded user
+--     'usr_institutional_01' when auth.uid() is NULL, and creating $10,000
+--     wallets on demand
+--   * rpc_close_trade taking p_close_price FROM THE CLIENT and never checking
+--     trade ownership -> any caller could close anyone's position at any price
+--
+--  The authoritative schema now lives in, and must be applied in this order:
+--    supabase/migrations/20261001000000_trading_core_schema.sql
+--    supabase/migrations/20261001000100_trading_rpcs.sql
+--    supabase/migrations/20261001000200_trading_public_rpcs.sql
+--
+--  Those migrations are additive and idempotent: they ALTER the tables defined
+--  here, drop the permissive policies, and drop every old rpc_open_trade /
+--  rpc_close_trade overload by name.
+-- ==============================================================================
 
 -- Enable UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

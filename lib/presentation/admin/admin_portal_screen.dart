@@ -2,7 +2,6 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../blocs/blocs.dart';
 import '../../core/math/money_math.dart';
@@ -13,7 +12,11 @@ import '../../domain/entities/trading_entities.dart';
 import '../../core/policy/kyc_policy.dart';
 import '../../domain/entities/kyc_entities.dart';
 import '../../domain/entities/user_entity.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'widgets/app_release_tab.dart';
+import 'widgets/deposit_requests_tab.dart';
+import 'widgets/withdrawal_requests_tab.dart';
+import '../../data/datasources/market_feed_service.dart';
+import '../../data/datasources/supabase_trade_service.dart';
 
 class AdminPortalScreen extends StatefulWidget {
   const AdminPortalScreen({super.key});
@@ -26,7 +29,6 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _userSearchQuery = '';
-  String _financeFilter = 'ALL'; // ALL, DEPOSIT, WITHDRAWAL
   KycVerificationStatus? _selectedKycStatusFilter;
   String _adminKycSearchQuery = '';
   String _adminKycCountryFilter = 'All';
@@ -46,10 +48,51 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
   Color get _goldBorder => _isDark ? const Color(0xFFFFD600).withValues(alpha: 0.4) : const Color(0xFFFDE68A);
   Color get _goldSlider => _isDark ? const Color(0xFFFFD600) : const Color(0xFFF59E0B);
 
+  /// Position of "KYC & AML" in the portal's TabBar.
+  static const int _kycTabIndex = 3;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
+    // The KYC queue is first loaded at app start, before the admin has signed
+    // in, when RLS only returns the caller's own profile. Reload it now that
+    // the admin session exists, and again whenever the KYC tab is opened.
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging && _tabController.index == _kycTabIndex) {
+        context.read<KycCubit>().loadAdminQueue();
+      }
+    });
+    // Load the persisted dealer config (markups, spread multiplier).
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      context.read<KycCubit>().loadAdminQueue();
+      final feed = MarketFeedService();
+      await feed.refreshServerQuotes(forceConfig: true);
+      if (!mounted) return;
+      context.read<AdminCubit>().setSpreadMultiplier(feed.spreadMultiplier);
+      context.read<DealingDeskCubit>().calculateExposure();
+    });
+  }
+
+  Future<void> _commitSpreadMultiplier(double value, AdminNotifier adminNotifier) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final feed = MarketFeedService();
+    try {
+      final stored = await SupabaseTradeService.instance.adminSetSpreadMultiplier(value);
+      feed.updateSpreadMultiplier(stored);
+      adminNotifier.setSpreadMultiplier(stored);
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFF00D68F),
+        content: Text('Spread multiplier saved: ${stored.toStringAsFixed(2)}x '
+            '(applied by the price publisher on its next run).'),
+      ));
+    } on TradeServiceException catch (e) {
+      adminNotifier.setSpreadMultiplier(feed.spreadMultiplier);
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFFFF4757),
+        content: Text('Spread multiplier NOT saved: ${e.message}'),
+      ));
+    }
   }
 
   @override
@@ -233,6 +276,15 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                     ],
                   ),
                 ),
+                const Tab(
+                  child: Row(
+                    children: [
+                      Icon(Icons.system_update_rounded, size: 16),
+                      SizedBox(width: 6),
+                      Text('App Update'),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -244,8 +296,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
           // 1. Chief Dealer & Market Maker Tab
           _buildDealingDeskTab(dealerRisk, admin, adminNotifier),
 
-          // 2. Finance Desk Tab (Deposits / Withdrawals)
-          _buildFinanceDeskTab(admin, adminNotifier),
+          // 2. Finance Desk: USDT deposit review + transactions/withdrawals
+          _buildFinanceDesk(admin, adminNotifier),
 
           // 3. Trader CRM & User Accounts Tab
           _buildTraderCrmTab(admin, adminNotifier),
@@ -258,6 +310,9 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
 
           // 6. Treasury & Audit Proof Tab
           _buildTreasuryTab(treasuryProof),
+
+          // 7. Publish a new app version (in-app update)
+          const AppReleaseTab(),
         ],
       ),
     );
@@ -320,7 +375,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'HOUSE B-BOOK PnL',
+                            'HOUSE PnL (UNHEDGED)',
                             style: TextStyle(fontSize: 10, color: _textSecondary, fontWeight: FontWeight.bold, letterSpacing: 0.3),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -457,9 +512,16 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.35)),
                 ),
-                child: const Text('AUTO-REBALANCE', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9.5, fontWeight: FontWeight.bold)),
+                child: const Text('NOT HEDGED', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9.5, fontWeight: FontWeight.bold)),
               ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'A-Book / B-Book are internal tags only. There is no liquidity-provider bridge: '
+            'every client trade is held by the broker and nothing is hedged externally. '
+            'Markup changes are saved to the server and used by the price publisher.',
+            style: TextStyle(fontSize: 10.5, color: _textSecondary),
           ),
           const SizedBox(height: 10),
 
@@ -506,7 +568,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                           ),
                         ),
                         child: Text(
-                          exp.routing == ExecutionRouting.bBookInternal ? 'B-BOOK INTERNAL' : 'A-BOOK STP',
+                          exp.routing == ExecutionRouting.bBookInternal ? 'TAG: B-BOOK' : 'TAG: A-BOOK (NOT HEDGED)',
                           style: TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
@@ -535,7 +597,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                       Text('Short: ${exp.totalShortLots.toDouble().toStringAsFixed(2)}L', style: TextStyle(fontSize: 11, color: _textSecondary)),
                       const Spacer(),
                       Text(
-                        'Markup: +${(exp.spreadMarkupPips / 10.0).toStringAsFixed(1)} pips',
+                        'Markup: ${exp.spreadMarkupPips} pts',
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _goldText),
                       ),
                     ],
@@ -551,15 +613,23 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                     ),
                     child: Slider(
-                      value: exp.spreadMarkupPips.toDouble().clamp(0.0, 50.0),
+                      value: exp.spreadMarkupPips.toDouble().clamp(0.0, 500.0),
                       min: 0.0,
-                      max: 50.0,
-                      divisions: 50,
+                      max: 500.0,
+                      divisions: 500,
                       onChanged: (val) {
-                        context.read<DealingDeskCubit>().updateSpreadMarkup(
-                              exp.symbol,
-                              val.toInt(),
-                            );
+                        context.read<DealingDeskCubit>().previewSpreadMarkup(exp.symbol, val.round());
+                      },
+                      onChangeEnd: (val) async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        final error = await context
+                            .read<DealingDeskCubit>()
+                            .commitSpreadMarkup(exp.symbol, val.round());
+                        messenger.showSnackBar(SnackBar(
+                          duration: const Duration(seconds: 2),
+                          backgroundColor: error == null ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                          content: Text(error ?? '${exp.symbol} markup saved: ${val.round()} pts'),
+                        ));
                       },
                     ),
                   ),
@@ -572,7 +642,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                         },
                         icon: Icon(Icons.swap_horiz, size: 14, color: _textSecondary),
                         label: Text(
-                          exp.routing == ExecutionRouting.bBookInternal ? 'Switch to A-Book STP' : 'Switch to B-Book Internal',
+                          exp.routing == ExecutionRouting.bBookInternal ? 'Tag as A-Book' : 'Tag as B-Book',
                           style: TextStyle(fontSize: 11, color: _textSecondary),
                         ),
                       ),
@@ -590,881 +660,62 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
   // ════════════════════════════════════════════════════════════════════════════
   // 2. FINANCE DESK TAB (DEPOSITS & WITHDRAWALS)
   // ════════════════════════════════════════════════════════════════════════════
-  Widget _buildFinanceDeskTab(AdminState admin, AdminNotifier adminNotifier) {
-    final filteredTxs = admin.transactions.where((tx) {
-      if (_financeFilter == 'DEPOSIT') return tx.type == 'DEPOSIT';
-      if (_financeFilter == 'WITHDRAWAL') return tx.type == 'WITHDRAWAL';
-      return true;
-    }).toList();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+  /// Finance Desk = one place for money in and out:
+  ///   * USDT Deposits — manual review of deposit claims (rpc_review_deposit)
+  ///   * USDT Withdrawals — pay out and record held withdrawals
+  ///     (rpc_admin_review_withdrawal); replaces the old client-side list whose
+  ///     Approve / Reject never reached the database
+  Widget _buildFinanceDesk(AdminState admin, AdminNotifier adminNotifier) {
+    return DefaultTabController(
+      length: 2,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Finance Summary Cards
-          Row(
-            children: [
-              Expanded(
-                child: _summaryCard('Total Deposited', '\$${admin.totalDeposited.toStringAsFixed(2)}', const Color(0xFF00D68F), Icons.arrow_downward_rounded),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _summaryCard('Total Withdrawn', '\$${admin.totalWithdrawn.toStringAsFixed(2)}', const Color(0xFFFF4757), Icons.arrow_upward_rounded),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _summaryCard('Pending Action', '${admin.pendingDepositsCount + admin.pendingWithdrawalsCount}', const Color(0xFFFFB300), Icons.pending_actions_rounded),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Filter bar
-          Row(
-            children: [
-              Text(
-                'Transaction Requests',
-                style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: _textPrimary),
-              ),
-              const SizedBox(width: 8),
-              if (admin.transactions.any((tx) => tx.id.startsWith('TX-948')))
-                InkWell(
-                  onTap: () {
-                    adminNotifier.clearDemoTransactions();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('Demo transactions removed! Queue is now clean.'),
-                        backgroundColor: _cardBg,
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF4757).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: const Color(0xFFFF4757).withValues(alpha: 0.4)),
-                    ),
-                    child: const Text(
-                      'Clear Demo Data',
-                      style: TextStyle(color: Color(0xFFFF4757), fontSize: 9, fontWeight: FontWeight.bold),
-                    ),
+          Container(
+            color: _cardBg,
+            child: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              indicatorColor: _goldAccent,
+              labelColor: _goldAccent,
+              unselectedLabelColor: _textSecondary,
+              labelStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold, fontSize: 12),
+              tabs: const [
+                Tab(
+                  child: Row(
+                    children: [
+                      Icon(Icons.currency_bitcoin, size: 16),
+                      SizedBox(width: 6),
+                      Text('USDT Deposits'),
+                    ],
                   ),
                 ),
-              const Spacer(),
-              _filterChip('ALL', 'All'),
-              const SizedBox(width: 6),
-              _filterChip('DEPOSIT', 'Deposits (${admin.pendingDepositsCount})'),
-              const SizedBox(width: 6),
-              _filterChip('WITHDRAWAL', 'Withdrawals (${admin.pendingWithdrawalsCount})'),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          if (filteredTxs.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(30),
-              decoration: BoxDecoration(
-                color: _cardBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _borderColor),
-              ),
-              child: Center(
-                child: Text('No transactions in this queue.', style: TextStyle(color: _textSecondary)),
-              ),
-            )
-          else
-            ...filteredTxs.map((tx) {
-              final isPending = tx.status == AdminTxStatus.pending;
-              final isDeposit = tx.type == 'DEPOSIT';
-              final hasProof = tx.proofImageBytes != null || (tx.proofImageName != null && tx.proofImageName!.isNotEmpty);
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: _cardBg,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isPending
-                        ? (isDeposit ? const Color(0xFF00D68F).withValues(alpha: 0.5) : const Color(0xFFFF4757).withValues(alpha: 0.5))
-                        : _borderColor,
+                Tab(
+                  child: Row(
+                    children: [
+                      Icon(Icons.north_east_rounded, size: 16),
+                      SizedBox(width: 6),
+                      Text('USDT Withdrawals'),
+                    ],
                   ),
-                  boxShadow: _isDark
-                      ? null
-                      : [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.03),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: isDeposit ? const Color(0xFF00D68F).withValues(alpha: 0.15) : const Color(0xFFFF4757).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                tx.type,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDeposit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              tx.userName,
-                              style: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.bold, color: _textPrimary),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          '\$${tx.amount.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: isDeposit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text('Method: ${tx.method}', style: TextStyle(fontSize: 11, color: _textPrimary, fontWeight: FontWeight.w500)),
-                        const Spacer(),
-                        Text(DateFormat('yyyy-MM-dd HH:mm').format(tx.createdAt), style: TextStyle(fontSize: 10, color: _textSecondary)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _subCardBg,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF2B384E)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.tag_rounded, size: 14, color: Color(0xFF00D68F)),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'TxID: ${tx.txHash ?? tx.accountOrAddress}',
-                              style: const TextStyle(fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.w600, color: Color(0xFFFFD600)),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          InkWell(
-                            onTap: () {
-                              Clipboard.setData(ClipboardData(text: tx.txHash ?? tx.accountOrAddress));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  backgroundColor: Color(0xFF00D68F),
-                                  duration: Duration(seconds: 1),
-                                  content: Text('TxID copied!'),
-                                ),
-                              );
-                            },
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 4),
-                              child: Icon(Icons.copy, size: 14, color: Color(0xFF00D68F)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text('Email: ${tx.userEmail}', style: TextStyle(fontSize: 10, color: _textSecondary)),
-                    const SizedBox(height: 10),
-
-                    // ── Screenshot Verification Card ─────────────────────────
-                    if (hasProof)
-                      InkWell(
-                        onTap: () => _showProofInspectionDialog(context, tx, adminNotifier),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: _subCardBg,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.5)),
-                          ),
-                          child: Row(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Container(
-                                  width: 44,
-                                  height: 44,
-                                  color: Colors.black12,
-                                  child: tx.proofImageBytes != null
-                                      ? Image.memory(tx.proofImageBytes!, fit: BoxFit.cover)
-                                      : Image.network(
-                                          (tx.proofImageName!.startsWith('http://') || tx.proofImageName!.startsWith('https://'))
-                                              ? tx.proofImageName!
-                                              : Supabase.instance.client.storage.from('reciept-proof').getPublicUrl(tx.proofImageName!),
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.receipt_long_rounded, color: Color(0xFF00D68F), size: 22),
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          'Payment Proof Slip',
-                                          style: TextStyle(color: _textPrimary, fontSize: 12, fontWeight: FontWeight.bold),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF00D68F).withValues(alpha: 0.2),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: const Text(
-                                            '✓ ATTACHED',
-                                            style: TextStyle(color: Color(0xFF00D68F), fontSize: 9, fontWeight: FontWeight.bold),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      tx.proofImageName ?? 'Attached Screenshot Slip',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(color: _textSecondary, fontSize: 10),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.zoom_in_rounded, size: 14, color: Color(0xFF00D68F)),
-                                    SizedBox(width: 4),
-                                    Text('Inspect', style: TextStyle(color: Color(0xFF00D68F), fontSize: 11, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _subCardBg,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: _borderColor),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.image_not_supported_outlined, size: 13, color: _textSecondary),
-                            const SizedBox(width: 6),
-                            Text('No slip attached (Manual / Demo Request)', style: TextStyle(color: _textSecondary, fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                    const SizedBox(height: 12),
-
-                    if (isPending)
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => _executeApproval(tx, adminNotifier),
-                              icon: const Icon(Icons.check_circle_outline, size: 15),
-                              label: const Text('APPROVE & CREDIT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF00D68F),
-                                foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                adminNotifier.rejectTransaction(tx.id);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('${tx.type} #${tx.id} rejected.'),
-                                    backgroundColor: const Color(0xFFFF4757),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.cancel_outlined, size: 15),
-                              label: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFFF4757),
-                                side: const BorderSide(color: Color(0xFFFF4757)),
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: tx.status == AdminTxStatus.approved ? const Color(0xFF00D68F).withValues(alpha: 0.1) : const Color(0xFFFF4757).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          tx.status == AdminTxStatus.approved ? '✓ SETTLED / APPROVED' : '✗ REJECTED',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: tx.status == AdminTxStatus.approved ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            }),
+              ],
+            ),
+          ),
+          Expanded(
+            child: const TabBarView(
+              children: [
+                DepositRequestsTab(),
+                WithdrawalRequestsTab(),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _filterChip(String key, String label) {
-    final isSelected = _financeFilter == key;
-    return GestureDetector(
-      onTap: () => setState(() => _financeFilter = key),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? _goldSlider : _cardBg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: isSelected ? _goldSlider : _borderColor),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            color: isSelected ? (_isDark ? Colors.black : Colors.white) : _textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
 
-  void _showProofInspectionDialog(BuildContext context, AdminTransaction tx, AdminNotifier adminNotifier) {
-    final hasBytes = tx.proofImageBytes != null && tx.proofImageBytes!.isNotEmpty;
-    final hasName = tx.proofImageName != null && tx.proofImageName!.isNotEmpty;
-    final isUrl = hasName && (tx.proofImageName!.startsWith('http://') || tx.proofImageName!.startsWith('https://'));
-    final proofUrl = hasName
-        ? (isUrl ? tx.proofImageName! : Supabase.instance.client.storage.from('reciept-proof').getPublicUrl(tx.proofImageName!))
-        : null;
 
-    final isPending = tx.status == AdminTxStatus.pending;
-    final isDeposit = tx.type == 'DEPOSIT';
-
-    final allUsers = context.read<AdminCubit>().state.users;
-    AdminTraderUser? traderUser;
-    for (final u in allUsers) {
-      if (u.id == tx.userId) {
-        traderUser = u;
-        break;
-      }
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogCtx) => Dialog(
-        backgroundColor: _cardBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: _borderColor)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 620, maxHeight: 780),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Sleek Responsive Header ─────────────────────────────────────
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
-                  decoration: BoxDecoration(
-                    color: _subCardBg,
-                    border: Border(bottom: BorderSide(color: _borderColor)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: isDeposit
-                                  ? const Color(0xFF00D68F).withValues(alpha: 0.15)
-                                  : const Color(0xFFFF4757).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: isDeposit
-                                    ? const Color(0xFF00D68F).withValues(alpha: 0.4)
-                                    : const Color(0xFFFF4757).withValues(alpha: 0.4),
-                              ),
-                            ),
-                            child: Text(
-                              tx.type,
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w900,
-                                color: isDeposit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '#${tx.id}',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: _textPrimary,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '\$${tx.amount.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                              color: isDeposit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            icon: Icon(Icons.close_rounded, color: _textSecondary, size: 20),
-                            onPressed: () => Navigator.of(dialogCtx).pop(),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(Icons.person_outline_rounded, size: 14, color: _textSecondary),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              '${tx.userName}  •  ${tx.userEmail}',
-                              style: TextStyle(fontSize: 11, color: _textSecondary, fontWeight: FontWeight.w500),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // ── TxID & Blockchain Toolbar (Clean Card Format) ───────────────
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0A0E17),
-                    border: Border(bottom: BorderSide(color: _borderColor)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.tag_rounded, size: 14, color: Color(0xFF00D68F)),
-                          const SizedBox(width: 4),
-                          Text(
-                            'TxID Hash / Account:',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _textSecondary),
-                          ),
-                          const Spacer(),
-                          InkWell(
-                            onTap: () {
-                              Clipboard.setData(ClipboardData(text: tx.txHash ?? tx.accountOrAddress));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  backgroundColor: Color(0xFF00D68F),
-                                  duration: Duration(seconds: 2),
-                                  content: Text('TxID copied to clipboard!'),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF00D68F).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.3)),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.copy_rounded, size: 11, color: Color(0xFF00D68F)),
-                                  SizedBox(width: 3),
-                                  Text('Copy', style: TextStyle(fontSize: 10, color: Color(0xFF00D68F), fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          InkWell(
-                            onTap: () {
-                              final currentHash = tx.txHash ?? tx.accountOrAddress;
-                              Clipboard.setData(ClipboardData(text: 'https://tronscan.org/#/transaction/$currentHash'));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  backgroundColor: const Color(0xFFFFD600),
-                                  duration: const Duration(seconds: 2),
-                                  content: Text('Tronscan URL copied: https://tronscan.org/#/transaction/$currentHash'),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFD600).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.3)),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.open_in_new_rounded, size: 11, color: Color(0xFFFFD600)),
-                                  SizedBox(width: 3),
-                                  Text('Tronscan', style: TextStyle(fontSize: 10, color: Color(0xFFFFD600), fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      SelectableText(
-                        tx.txHash ?? tx.accountOrAddress,
-                        style: const TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 11,
-                          color: Color(0xFFFFD600),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // ── Image Inspection Area with Zoom ─────────────────────────────
-                Expanded(
-                  child: Container(
-                    color: _isDark ? const Color(0xFF06090F) : const Color(0xFFF1F5F9),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        InteractiveViewer(
-                          minScale: 0.5,
-                          maxScale: 5.0,
-                          child: Center(
-                            child: hasBytes
-                                ? Image.memory(
-                                    tx.proofImageBytes!,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) => _imageFallback(),
-                                  )
-                                : (proofUrl != null
-                                    ? Image.network(
-                                        proofUrl,
-                                        fit: BoxFit.contain,
-                                        loadingBuilder: (context, child, loadingProgress) {
-                                          if (loadingProgress == null) return child;
-                                          return const Center(
-                                            child: CircularProgressIndicator(color: Color(0xFF00D68F), strokeWidth: 2),
-                                          );
-                                        },
-                                        errorBuilder: (context, error, stackTrace) => _imageFallback(),
-                                      )
-                                    : _imageFallback()),
-                          ),
-                        ),
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.75),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFF2B384E)),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.pinch_outlined, size: 12, color: Color(0xFFFFD600)),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Pinch / Scroll to Zoom (Up to 5x)',
-                                  style: TextStyle(color: Color(0xFFFFD600), fontSize: 9.5, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // ── Transaction & Proof Metadata ────────────────────────────────
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _subCardBg,
-                    border: Border(top: BorderSide(color: _borderColor)),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _miniInfo('Method', tx.method, _textPrimary),
-                          ),
-                          Expanded(
-                            child: _miniInfo('Submitted At', DateFormat('yyyy-MM-dd HH:mm').format(tx.createdAt), _textSecondary),
-                          ),
-                          Expanded(
-                            child: _miniInfo(
-                              'Status',
-                              tx.status.name.toUpperCase(),
-                              tx.status == AdminTxStatus.approved
-                                  ? const Color(0xFF00D68F)
-                                  : (tx.status == AdminTxStatus.rejected ? const Color(0xFFFF4757) : const Color(0xFFFFB300)),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (traderUser != null) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _miniInfo('Trader Live Balance', '\$${traderUser.balance.toStringAsFixed(2)}', const Color(0xFF00D68F)),
-                            ),
-                            Expanded(
-                              child: _miniInfo('Trader Live Equity', '\$${traderUser.equity.toStringAsFixed(2)}', _textPrimary),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                // ── Action Buttons (Approve / Reject) ───────────────────────────
-                if (isPending)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: _cardBg,
-                      border: Border(top: BorderSide(color: _borderColor)),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 4,
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              adminNotifier.rejectTransaction(tx.id);
-                              Navigator.of(dialogCtx).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('${tx.type} #${tx.id} rejected.'),
-                                  backgroundColor: const Color(0xFFFF4757),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.cancel_outlined, size: 15),
-                            label: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFFFF4757),
-                              side: const BorderSide(color: Color(0xFFFF4757), width: 1.2),
-                              padding: const EdgeInsets.symmetric(vertical: 11),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 6,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.of(dialogCtx).pop();
-                              _executeApproval(tx, adminNotifier);
-                            },
-                            icon: const Icon(Icons.check_circle_rounded, size: 16),
-                            label: const Text('APPROVE & CREDIT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00D68F),
-                              foregroundColor: Colors.black,
-                              elevation: 2,
-                              padding: const EdgeInsets.symmetric(vertical: 11),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _imageFallback() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.broken_image_outlined, size: 48, color: _textSecondary),
-        const SizedBox(height: 8),
-        Text('Screenshot preview unavailable', style: TextStyle(color: _textSecondary, fontSize: 13)),
-      ],
-    );
-  }
-
-  void _executeApproval(AdminTransaction tx, AdminNotifier adminNotifier) {
-    adminNotifier.approveTransaction(tx.id);
-
-    final amtDec = MoneyMath.toDec(tx.amount);
-
-    if (tx.type == 'DEPOSIT') {
-      // 1. Credit trading engine ledger balance
-      context.read<TradingEngineCubit>().depositFunds(tx.userId, amtDec);
-
-      // 2. Credit double-entry ledger provider
-      context.read<LedgerCubit>().deposit(
-            userId: tx.userId,
-            amount: amtDec,
-            method: tx.method,
-          );
-
-      // 3. Credit wallet provider balance
-      context.read<WalletCubit>().creditDeposit(tx.amount, tx.method);
-      context.read<WalletBloc>().creditDeposit(tx.amount, tx.method, txId: tx.id);
-
-      // 4. Update Supabase wallets table
-      try {
-        Supabase.instance.client
-            .from('wallets')
-            .select('balance')
-            .eq('user_id', tx.userId)
-            .maybeSingle()
-            .then((existingWallet) {
-          final currentBal = (existingWallet?['balance'] as num?)?.toDouble() ?? 0.0;
-          final cleanBal = (currentBal == 10000.0 || currentBal == 25000.0) ? 0.0 : currentBal;
-          final newTotal = cleanBal + tx.amount;
-          Supabase.instance.client.from('wallets').upsert({
-            'user_id': tx.userId,
-            'currency': tx.currency,
-            'balance': newTotal,
-            'updated_at': DateTime.now().toIso8601String(),
-          }, onConflict: 'user_id,currency').catchError((err) {
-            debugPrint('Supabase wallet update error: $err');
-          });
-        }).catchError((err) {
-          debugPrint('Supabase wallet select error: $err');
-        });
-      } catch (e) {
-        debugPrint('Supabase wallet update exception: $e');
-      }
-    } else if (tx.type == 'WITHDRAWAL') {
-      // For withdrawal, debit trading engine and wallet if not yet debited
-      context.read<TradingEngineCubit>().withdrawFunds(tx.userId, amtDec);
-      context.read<LedgerCubit>().withdraw(
-            userId: tx.userId,
-            amount: amtDec,
-            destinationAddress: tx.accountOrAddress,
-          );
-      context.read<WalletCubit>().debitWithdrawal(tx.amount, tx.method);
-
-      try {
-        Supabase.instance.client
-            .from('wallets')
-            .select('balance')
-            .eq('user_id', tx.userId)
-            .maybeSingle()
-            .then((existingWallet) {
-          final currentBal = (existingWallet?['balance'] as num?)?.toDouble() ?? 0.0;
-          final cleanBal = (currentBal == 10000.0 || currentBal == 25000.0) ? 0.0 : currentBal;
-          final newTotal = (cleanBal - tx.amount).clamp(0.0, 1000000000.0);
-          Supabase.instance.client.from('wallets').upsert({
-            'user_id': tx.userId,
-            'currency': tx.currency,
-            'balance': newTotal,
-            'updated_at': DateTime.now().toIso8601String(),
-          }, onConflict: 'user_id,currency').catchError((err) {
-            debugPrint('Supabase wallet update error: $err');
-          });
-        }).catchError((err) {
-          debugPrint('Supabase wallet select error: $err');
-        });
-      } catch (e) {
-        debugPrint('Supabase wallet update exception: $e');
-      }
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF00D68F),
-        content: Text(
-          '✓ ${tx.type} #${tx.id} for \$${tx.amount.toStringAsFixed(2)} approved & funds settled!',
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-        ),
-      ),
-    );
-  }
 
   // ════════════════════════════════════════════════════════════════════════════
   // 3. TRADER CRM & USER CONTROL TAB
@@ -1859,7 +1110,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
             );
 
             final countryDropdown = DropdownButtonFormField<String>(
-              value: _adminKycCountryFilter,
+              initialValue: _adminKycCountryFilter,
               dropdownColor: _cardBg,
               style: TextStyle(color: _textPrimary, fontSize: 12),
               decoration: InputDecoration(
@@ -2559,7 +1810,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
         backgroundColor: const Color(0xFF121824),
         title: const Text('Approve KYC Application?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: Text(
-          'Approving ${profile.fullName} will unlock Level 2 privileges (unrestricted deposits, STP withdrawals, and live orders).',
+          'Approving ${profile.fullName} will unlock Level 2 privileges (deposits, withdrawals and live orders).',
           style: const TextStyle(color: Color(0xFF848E9C), fontSize: 13),
         ),
         actions: [
@@ -2569,7 +1820,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               Navigator.of(ctx).pop();
               context.read<KycCubit>().adminApproveProfile(
                     kycId: profile.id,
-                    reviewerEmail: 'admin@asianfx.com',
+                    reviewerEmail: context.read<AuthBloc>().state.user?.email ?? 'admin',
                   );
               // Sync user session if active
               final currentUser = context.read<AuthBloc>().state.user;
@@ -2613,7 +1864,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               const Text('Select mandatory compliance reason:', style: TextStyle(color: Color(0xFF848E9C), fontSize: 12)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: selectedReason,
+                initialValue: selectedReason,
                 dropdownColor: const Color(0xFF1E2838),
                 style: const TextStyle(color: Colors.white, fontSize: 12),
                 items: reasons.map((r) => DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(fontSize: 12)))).toList(),
@@ -2645,7 +1896,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
 
                 context.read<KycCubit>().adminRejectProfile(
                       kycId: profile.id,
-                      reviewerEmail: 'admin@asianfx.com',
+                      reviewerEmail: context.read<AuthBloc>().state.user?.email ?? 'admin',
                       reason: fullReason,
                     );
 
@@ -2705,7 +1956,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
 
               context.read<KycCubit>().adminRequestProfileResubmission(
                     kycId: profile.id,
-                    reviewerEmail: 'admin@asianfx.com',
+                    reviewerEmail: context.read<AuthBloc>().state.user?.email ?? 'admin',
                     notes: notes,
                   );
 
@@ -2873,11 +2124,12 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                     thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                   ),
                   child: Slider(
-                    value: admin.spreadMultiplier,
+                    value: admin.spreadMultiplier.clamp(1.0, 3.0),
                     min: 1.0,
                     max: 3.0,
                     divisions: 20,
                     onChanged: (val) => adminNotifier.setSpreadMultiplier(val),
+                    onChangeEnd: (val) => _commitSpreadMultiplier(val, adminNotifier),
                   ),
                 ),
               ],
@@ -3080,39 +2332,6 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
     );
   }
 
-  Widget _summaryCard(String title, String value, Color color, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _borderColor),
-        boxShadow: _isDark
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(height: 6),
-          Text(title, style: TextStyle(fontSize: 10, color: _textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(value, style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: color)),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _miniInfo(String label, String val, Color valColor) {
     return Column(

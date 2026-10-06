@@ -152,7 +152,7 @@ class _KycScreenState extends State<KycScreen> {
                         documentNumber: docNum,
                       );
 
-                      // Also register in AdminBloc & KycCubit as approved
+                      // Queue in the admin review list; approval is the admin's call.
                       try {
                         final curUser = context.read<AuthBloc>().state.user;
                         context.read<AdminBloc>().addKycRequest(
@@ -163,11 +163,11 @@ class _KycScreenState extends State<KycScreen> {
                             userEmail: curUser?.email ?? 'trader@asianfx.com',
                             docType: _selectedDocType,
                             docNumber: docNum,
-                            status: AdminKycStatus.approved,
+                            status: AdminKycStatus.pending,
                             submittedAt: DateTime.now(),
                           ),
                         );
-                        context.read<KycCubit>().autoApproveKyc(curUser?.id ?? 'trader_1');
+                        context.read<KycCubit>().submitKycApplication(curUser?.id ?? 'trader_1');
                       } catch (_) {}
 
                       setState(() => _isUploading = false);
@@ -175,9 +175,9 @@ class _KycScreenState extends State<KycScreen> {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            backgroundColor: Color(0xFF0ECB81),
+                            backgroundColor: Color(0xFFFFC700),
                             content: Text(
-                              '🎉 KYC Auto-Approved! Level 2 Full Access Unlocked in 1.2s.',
+                              '✓ Documents submitted. Your verification is pending admin review.',
                               style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
                             ),
                           ),

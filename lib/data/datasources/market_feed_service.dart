@@ -2,12 +2,29 @@ import 'dart:async';
 import 'dart:math';
 import 'package:decimal/decimal.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/constants/feature_flags.dart';
 import '../../core/math/money_math.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/chart_entities.dart';
 import 'binance_market_datasource.dart';
+import '../../core/utils/fx_session.dart';
 
+/// Market data for DISPLAY.
+///
+/// Live mode (default, `kDemoMode == false`):
+///   * crypto  - real-time Binance stream;
+///   * everything else - the server's own published quotes (`market_quotes`,
+///     source='publisher'), i.e. exactly the prices the RPCs will fill at;
+///   * dealer markup / spread multiplier / staleness limit come from the
+///     `instruments` and `broker_config` tables;
+///   * no simulated ticks, no price "gliding", no generated candle history.
+///     A symbol with no recent real price is reported by [isStale].
+///
+/// Demo mode (`--dart-define=ASIANFX_DEMO_MODE=true`) keeps the old synthetic
+/// micro-ticks and generated candles, and the app shows a "DEMO PRICES" banner.
 class MarketFeedService {
   static final MarketFeedService _instance = MarketFeedService._internal();
   factory MarketFeedService() => _instance;
@@ -28,10 +45,25 @@ class MarketFeedService {
   StreamSubscription? _binanceKlineSub;
   Timer? _liveTickTimer;
   Timer? _liveMarketSyncTimer;
+  Timer? _serverQuoteTimer;
+
+  /// When the last REAL price for a symbol was observed (source time).
+  final Map<String, DateTime> _lastLiveAt = {};
+
+  /// broker_config.quote_max_age_seconds (server default 60).
+  int _quoteMaxAgeSeconds = 60;
+  int get quoteMaxAgeSeconds => _quoteMaxAgeSeconds;
+
+  /// broker_config.spread_multiplier (global widening applied by the publisher).
+  double _spreadMultiplier = 1.0;
+  double get spreadMultiplier => _spreadMultiplier;
+
+  DateTime? _lastServerConfigLoad;
 
   final Map<String, List<CandleStickModel>> _candleHistory = {};
   final Map<String, InstrumentEntity> _instruments = {};
   final Map<String, double> _anchorPrices = {};
+  final Map<String, double> _priceVelocity = {};
 
   static const Map<String, String> _appToYahooSymbol = {
     'XAU/USD': 'GC=F',
@@ -66,8 +98,11 @@ class MarketFeedService {
     'USD/AED': 'AED=X',
   };
 
-  // Dealer Spread Markup Map (Symbol -> pips)
-  final Map<String, int> _spreadMarkupMap = {
+  // Dealer markup in points, per symbol. Live mode overwrites these with
+  // instruments.spread_markup_points from the database (the same values the
+  // publisher uses); the literals below are only the seed / demo defaults and
+  // match the instruments seed in 20261001000000_trading_core_schema.sql.
+  final Map<String, int> _markupPoints = {
     // Forex Majors & Minors
     'EUR/USD': 12,
     'GBP/USD': 15,
@@ -236,23 +271,207 @@ class MarketFeedService {
     _addInst('MSFT/USD', 'Microsoft Corporation', 'stocks', 428.20, 428.40, 2, AppConstants.contractSizeStock, 0.72, 432.00, 424.50, 145000, false);
     _addInst('GOOGL/USD', 'Alphabet Inc. (Google)', 'stocks', 184.50, 184.65, 2, AppConstants.contractSizeStock, 1.30, 187.20, 182.10, 125000, false);
 
-    // 2. Pre-generate realistic Candlesticks matching exact initial prices
-    for (final sym in _instruments.keys) {
-      final initialCandles = _generateRealisticCandles(
-        _instruments[sym]!.bid.toDouble(),
-        timeframe: ChartTimeframe.h1,
-        count: 180,
-        symbol: sym,
-      );
-      _candleHistory[sym] = initialCandles;
-      _candleHistory['${sym}_h1'] = initialCandles;
+    if (kDemoMode) {
+      // DEMO ONLY: synthetic candle history + micro-ticks.
+      for (final sym in _instruments.keys) {
+        final initialCandles = _generateRealisticCandles(
+          _instruments[sym]!.bid.toDouble(),
+          timeframe: ChartTimeframe.h1,
+          count: 180,
+          symbol: sym,
+        );
+        _candleHistory[sym] = initialCandles;
+        _candleHistory['${sym}_h1'] = initialCandles;
+      }
+      _connectRealBinanceFeed();
+      _startLiveTickSimulation();
+      return;
     }
 
-    // 3. Connect real Binance feed & Live Forex feed
+    // LIVE: real crypto stream + the server's published book. The seed prices
+    // above are placeholders only and stay flagged stale until a real price lands.
     _connectRealBinanceFeed();
+    refreshServerQuotes();
+    _serverQuoteTimer?.cancel();
+    // Prices are PUSHED over Supabase Realtime the moment the publisher writes
+    // them. This timer (re)connects the subscription after sign-in and polls as
+    // a fallback: every 5 s without a live subscription, every 30 s with one.
+    _serverQuoteTimer = Timer.periodic(const Duration(seconds: 5), (_) => _serverQuoteHeartbeat());
+  }
 
-    // 4. Start live micro-tick engine for continuous institutional market activity
-    _startLiveTickSimulation();
+  // ----------------------------------------------------- live: realtime push ---
+
+  RealtimeChannel? _quotesChannel;
+  bool _quotesRealtimeLive = false;
+  DateTime? _lastQuotePoll;
+
+  /// Whether published prices currently arrive by push (for tests / diagnostics).
+  bool get quotesRealtimeLive => _quotesRealtimeLive;
+
+  void _serverQuoteHeartbeat() {
+    final client = _supabase;
+    if (client == null) {
+      // Signed out: RLS would deliver nothing; drop the channel until sign-in.
+      _closeQuotesChannel();
+      return;
+    }
+    if (_quotesChannel == null) _openQuotesChannel(client);
+
+    final now = DateTime.now();
+    final pollEvery = _quotesRealtimeLive ? const Duration(seconds: 30) : const Duration(seconds: 5);
+    if (_lastQuotePoll == null || now.difference(_lastQuotePoll!) >= pollEvery) {
+      _lastQuotePoll = now;
+      refreshServerQuotes();
+    }
+  }
+
+  void _openQuotesChannel(SupabaseClient client) {
+    _quotesChannel = client
+        .channel('market_quotes_live')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'market_quotes',
+          callback: (payload) {
+            final row = payload.newRecord;
+            if (row.isNotEmpty) applyServerQuote(Map<String, dynamic>.from(row));
+          },
+        )
+        .subscribe((status, [error]) {
+          _quotesRealtimeLive = status == RealtimeSubscribeStatus.subscribed;
+          if (status == RealtimeSubscribeStatus.channelError || status == RealtimeSubscribeStatus.timedOut) {
+            // Retry on the next heartbeat; polling covers the gap.
+            _closeQuotesChannel();
+          }
+        });
+  }
+
+  void _closeQuotesChannel() {
+    final channel = _quotesChannel;
+    _quotesChannel = null;
+    _quotesRealtimeLive = false;
+    if (channel != null) {
+      try {
+        Supabase.instance.client.removeChannel(channel);
+      } catch (_) {}
+    }
+  }
+
+  // ----------------------------------------------------- live: server book ----
+
+  /// True when [symbol] has no real price newer than quote_max_age_seconds.
+  /// Always false in demo mode (everything there is simulated anyway).
+  bool isStale(String symbol, [DateTime? now]) {
+    if (kDemoMode) return false;
+    final at = _lastLiveAt[symbol];
+    if (at == null) return true;
+    return (now ?? DateTime.now()).toUtc().difference(at.toUtc()).inSeconds > _quoteMaxAgeSeconds;
+  }
+
+  DateTime? lastLiveAt(String symbol) => _lastLiveAt[symbol];
+
+  /// Effective markup the publisher applies: points x global multiplier.
+  int _effectiveMarkup(String symbol, [int fallback = 15]) =>
+      ((_markupPoints[symbol] ?? fallback) * _spreadMultiplier).round();
+
+  SupabaseClient? get _supabase {
+    try {
+      final c = Supabase.instance.client;
+      return c.auth.currentSession == null ? null : c;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Pull dealer config (every 5 minutes) and the published quote book.
+  Future<void> refreshServerQuotes({bool forceConfig = false}) async {
+    final client = _supabase;
+    if (client == null) return;
+
+    try {
+      final configDue = _lastServerConfigLoad == null ||
+          DateTime.now().difference(_lastServerConfigLoad!) > const Duration(minutes: 5);
+      if (forceConfig || configDue) {
+        // select('*') so a column not yet deployed (e.g. spread_multiplier before
+        // the dealer-controls migration) is just absent instead of failing the
+        // whole refresh — applyServerConfig already treats missing keys as defaults.
+        final cfg = await client
+            .from('broker_config')
+            .select('*')
+            .eq('id', 1)
+            .maybeSingle();
+        final markups = await client.from('instruments').select('symbol, spread_markup_points');
+        applyServerConfig(cfg, [for (final r in markups) Map<String, dynamic>.from(r)]);
+        _lastServerConfigLoad = DateTime.now();
+      }
+
+      final rows = await client
+          .from('market_quotes')
+          .select('symbol, bid, ask, source, updated_at')
+          .eq('source', 'publisher');
+      for (final r in rows) {
+        applyServerQuote(Map<String, dynamic>.from(r));
+      }
+    } catch (e) {
+      debugPrint('Server quote refresh failed: $e');
+    }
+  }
+
+  @visibleForTesting
+  void applyServerConfig(Map<String, dynamic>? cfg, List<Map<String, dynamic>> markups) {
+    if (cfg != null) {
+      final age = cfg['quote_max_age_seconds'];
+      if (age is num && age > 0) _quoteMaxAgeSeconds = age.toInt();
+      final mult = cfg['spread_multiplier'];
+      if (mult != null) _spreadMultiplier = double.tryParse(mult.toString())?.clamp(1.0, 10.0) ?? 1.0;
+    }
+    for (final m in markups) {
+      final sym = m['symbol']?.toString();
+      final pts = m['spread_markup_points'];
+      if (sym != null && pts is num) _markupPoints[sym] = pts.toInt();
+    }
+    // Re-label every instrument with the server's effective markup.
+    for (final sym in _instruments.keys.toList()) {
+      _instruments[sym] = _instruments[sym]!.copyWith(spreadMarkupPips: _effectiveMarkup(sym));
+    }
+  }
+
+  /// Display a published quote so that the shown bid/ask equal the server's
+  /// exactly (InstrumentEntity re-applies half the markup to each raw side).
+  @visibleForTesting
+  void applyServerQuote(Map<String, dynamic> row) {
+    final sym = row['symbol']?.toString();
+    if (sym == null || row['source'] != 'publisher') return;
+    final inst = _instruments[sym];
+    if (inst == null) return;
+    final updatedAt = DateTime.tryParse(row['updated_at']?.toString() ?? '');
+    if (updatedAt == null) return;
+
+    // Crypto keeps the real-time Binance stream while that stream is healthy.
+    if (inst.category == 'crypto' && !isStale(sym)) return;
+
+    final prev = _lastLiveAt[sym];
+    if (prev != null && !updatedAt.isAfter(prev) && inst.category != 'crypto') return;
+
+    final markup = _effectiveMarkup(sym);
+    final half = MoneyMath.divide(
+        MoneyMath.pointSize(inst.decimals) * Decimal.fromInt(markup), Decimal.fromInt(2),
+        scale: inst.decimals + 2);
+    final bid = MoneyMath.toDec(row['bid']);
+    final ask = MoneyMath.toDec(row['ask']);
+    if (bid <= Decimal.zero || ask < bid) return;
+
+    final updated = inst.copyWith(
+      rawBid: bid + half,
+      rawAsk: ask - half,
+      spreadMarkupPips: markup,
+      high24h: MoneyMath.toDec(max(inst.high24h.toDouble(), ask.toDouble())),
+      low24h: MoneyMath.toDec(min(inst.low24h.toDouble(), bid.toDouble())),
+    );
+    _instruments[sym] = updated;
+    _lastLiveAt[sym] = updatedAt.toUtc();
+    _tickController.add(updated);
+    _updateLiveCandlesAcrossTimeframes(sym, updated.midPrice.toDouble());
   }
 
   void _addInst(
@@ -275,7 +494,7 @@ class MarketFeedService {
       category: category,
       rawBid: MoneyMath.toDec(bid),
       rawAsk: MoneyMath.toDec(ask),
-      spreadMarkupPips: _spreadMarkupMap[symbol] ?? 15,
+      spreadMarkupPips: _markupPoints[symbol] ?? 15,
       decimals: decimals,
       contractSize: contractSize,
       change24h: change24h,
@@ -305,10 +524,11 @@ class MarketFeedService {
       _applyIncomingKline(entry.key, entry.value);
     });
 
-    // Initial Live Global Market Sync (Forex, Metals, Commodities, Stocks, Indices)
-    _syncAllLiveMarkets();
+    if (!kDemoMode) return; // live non-crypto prices come from the server book
 
-    // Periodic Continuous Live Global Market Sync every 15 seconds
+    // DEMO: approximate quotes from public sources (daily FX rates, delayed
+    // Yahoo quotes) smoothed by the simulator. Never used for real money.
+    _syncAllLiveMarkets();
     _liveMarketSyncTimer?.cancel();
     _liveMarketSyncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       _syncAllLiveMarkets();
@@ -370,9 +590,13 @@ class MarketFeedService {
           final inst = _instruments[sym];
           if (inst == null) return;
           final pipStep = pow(10, -decimals).toDouble();
-          final markup = _spreadMarkupMap[sym] ?? 12;
-          final bid = price;
-          final ask = price + (markup * pipStep);
+          final markup = _markupPoints[sym] ?? 12;
+
+          _anchorPrices[sym] = price;
+          final currentBid = inst.rawBid.toDouble();
+          final diff = (price - currentBid).abs();
+          final bid = diff < 0.002 ? price : currentBid + ((price - currentBid) * 0.15);
+          final ask = bid + (markup * pipStep);
 
           final high = max(inst.high24h.toDouble(), ask);
           final low = min(inst.low24h.toDouble(), bid);
@@ -452,21 +676,28 @@ class MarketFeedService {
               final low24 = (meta['regularMarketDayLow'] ?? curPrice) as num;
               final change24h = prevClose > 0 ? ((curPrice - prevClose) / prevClose) * 100 : 0.0;
 
+              _anchorPrices[appSymbol] = curPrice;
+
               final pipStep = pow(10, -inst.decimals).toDouble();
-              final markup = _spreadMarkupMap[appSymbol] ?? 10;
-              final bid = curPrice;
-              final ask = curPrice + (markup * pipStep);
+              final markup = _markupPoints[appSymbol] ?? 10;
+              final currentBid = inst.rawBid.toDouble();
+              final diff = (curPrice - currentBid).abs();
+
+              // Smoothly glide towards anchor without shock
+              final targetBid = diff < (curPrice * 0.005)
+                  ? curPrice
+                  : currentBid + ((curPrice - currentBid) * 0.15);
+              final targetAsk = targetBid + (markup * pipStep);
 
               final updated = inst.copyWith(
-                rawBid: MoneyMath.toDec(bid),
-                rawAsk: MoneyMath.toDec(ask),
+                rawBid: MoneyMath.toDec(targetBid),
+                rawAsk: MoneyMath.toDec(targetAsk),
                 high24h: MoneyMath.toDec(high24.toDouble()),
                 low24h: MoneyMath.toDec(low24.toDouble()),
                 change24h: double.parse(change24h.toStringAsFixed(2)),
               );
 
               _instruments[appSymbol] = updated;
-              _anchorPrices[appSymbol] = curPrice;
               _tickController.add(updated);
 
               _updateLiveCandlesAcrossTimeframes(appSymbol, updated.midPrice.toDouble());
@@ -477,28 +708,10 @@ class MarketFeedService {
     } catch (_) {}
   }
 
-  DateTime _getCandlePeriodStart(DateTime time, ChartTimeframe tf) {
-    switch (tf) {
-      case ChartTimeframe.m1:
-        return DateTime(time.year, time.month, time.day, time.hour, time.minute);
-      case ChartTimeframe.m5:
-        final m = (time.minute ~/ 5) * 5;
-        return DateTime(time.year, time.month, time.day, time.hour, m);
-      case ChartTimeframe.m15:
-        final m = (time.minute ~/ 15) * 15;
-        return DateTime(time.year, time.month, time.day, time.hour, m);
-      case ChartTimeframe.m30:
-        final m = (time.minute ~/ 30) * 30;
-        return DateTime(time.year, time.month, time.day, time.hour, m);
-      case ChartTimeframe.h1:
-        return DateTime(time.year, time.month, time.day, time.hour);
-      case ChartTimeframe.h4:
-        final h = (time.hour ~/ 4) * 4;
-        return DateTime(time.year, time.month, time.day, h);
-      case ChartTimeframe.d1:
-        return DateTime(time.year, time.month, time.day);
-    }
-  }
+  // Candle buckets follow the FX session clock (rollover 17:00 New York), same as
+  // OANDA/TradingView, so the chart countdown and new-candle boundaries agree.
+  DateTime _getCandlePeriodStart(DateTime time, ChartTimeframe tf) =>
+      FxSession.periodStart(time, tf);
 
   void _updateLiveCandlesAcrossTimeframes(String symbol, double price) {
     final now = DateTime.now();
@@ -563,22 +776,24 @@ class MarketFeedService {
     }
   }
 
+  /// DEMO ONLY. Synthetic micro-ticks; never started in live mode.
   void _startLiveTickSimulation() {
+    if (!kDemoMode) return;
     _liveTickTimer?.cancel();
     final random = Random();
-    // Exness-grade high frequency market tick engine (every 350ms)
-    _liveTickTimer = Timer.periodic(const Duration(milliseconds: 350), (_) {
+    // Calm, steady institutional market cadence (every 4000ms = 4.0 seconds)
+    _liveTickTimer = Timer.periodic(const Duration(milliseconds: 4000), (_) {
       final symbols = _instruments.keys.toList();
       if (symbols.isEmpty) return;
 
-      // Always ensure Gold (XAU/USD) ticks with Exness-style continuous price action
+      // Ensure Gold (XAU/USD) ticks with calm, authentic market motion
       final targetSymbols = <String>{'XAU/USD'};
 
       // Add 1 priority pair per cycle (Forex or Crypto)
       const extraPriority = ['EUR/USD', 'GBP/USD', 'BTC/USD', 'USD/JPY', 'XAG/USD', 'ETH/USD'];
       targetSymbols.add(extraPriority[random.nextInt(extraPriority.length)]);
 
-      // Add 1 random asset across all 68 markets
+      // Add 1 random asset across all markets
       targetSymbols.add(symbols[random.nextInt(symbols.length)]);
 
       for (final sym in targetSymbols) {
@@ -586,15 +801,32 @@ class MarketFeedService {
         if (inst == null) continue;
 
         final pipStep = pow(10, -inst.decimals).toDouble();
-        // Authentic micro-pip delta: Gold moves ~0.04-0.16 per tick like Exness
-        final multiplier = sym.contains('XAU') ? 7 : (inst.category == 'crypto' ? 4 : (sym.contains('XAG') ? 3 : 1.5));
-        final rawNoise = (random.nextDouble() - 0.5) * (pipStep * multiplier);
         
-        // Gentle mean reversion pull to keep price centered around real market anchor (TradingView)
+        // Micro-movements: Very gentle and authentic price steps (sub-cent precision)
+        double stepMagnitude;
+        if (sym.contains('XAU')) {
+          stepMagnitude = 0.005 + (random.nextDouble() * 0.010); // 0.5 to 1.5 cents max (ultra-calm!)
+        } else if (sym.contains('XAG')) {
+          stepMagnitude = 0.001 + (random.nextDouble() * 0.002);
+        } else if (inst.category == 'crypto') {
+          stepMagnitude = sym.contains('BTC') ? (0.5 + random.nextDouble() * 1.0) : (pipStep * 0.5);
+        } else {
+          stepMagnitude = pipStep * (0.15 + random.nextDouble() * 0.25); // 0.15 to 0.4 pip
+        }
+
+        final rawNoise = (random.nextDouble() - 0.5) * 2.0 * stepMagnitude;
+        
+        // Momentum persistence: 80% previous direction, 20% new noise (smooth wave, no ping-pong jitter!)
+        final prevVel = _priceVelocity[sym] ?? 0.0;
+        final smoothedDelta = (prevVel * 0.80) + (rawNoise * 0.20);
+        _priceVelocity[sym] = smoothedDelta;
+
+        // Stable mean reversion pull to keep price centered around real market anchor
         final anchor = _anchorPrices[sym] ?? inst.rawBid.toDouble();
         final drift = inst.rawBid.toDouble() - anchor;
-        final pull = -drift * 0.05;
-        final delta = rawNoise + pull;
+        final pullFactor = (drift.abs() > anchor * 0.001) ? 0.35 : 0.12;
+        final pull = -drift * pullFactor;
+        final delta = smoothedDelta + pull;
         
         // Preserve raw liquidity spread so spread markup does not compound
         final baseSpread = (inst.rawAsk - inst.rawBid).toDouble();
@@ -606,7 +838,7 @@ class MarketFeedService {
         final newAsk = MoneyMath.toDec(newRawAskNum);
         final newHigh = MoneyMath.toDec(max(inst.high24h.toDouble(), newRawAskNum));
         final newLow = MoneyMath.toDec(min(inst.low24h.toDouble(), newRawBidNum));
-        final changeDelta = (random.nextDouble() - 0.5) * 0.015;
+        final changeDelta = (random.nextDouble() - 0.5) * 0.002;
         final newChange = double.parse((inst.change24h + changeDelta).clamp(-15.0, 25.0).toStringAsFixed(2));
 
         final updated = inst.copyWith(
@@ -620,7 +852,7 @@ class MarketFeedService {
         _instruments[sym] = updated;
         _tickController.add(updated);
 
-        // Update latest candle and form new candles in real time
+        // Update latest candle smoothly
         _updateLiveCandlesAcrossTimeframes(sym, updated.midPrice.toDouble());
       }
     });
@@ -628,7 +860,8 @@ class MarketFeedService {
 
   void _applyIncomingQuote(InstrumentEntity quote) {
     final symbol = quote.symbol;
-    final markup = _spreadMarkupMap[symbol] ?? 15;
+    final markup = _effectiveMarkup(symbol);
+    _lastLiveAt[symbol] = DateTime.now().toUtc();
     final mid = quote.midPrice.toDouble();
 
     final updated = quote.copyWith(
@@ -666,20 +899,63 @@ class MarketFeedService {
     }
   }
 
-  void updateSpreadMarkup(String symbol, int markupPips) {
-    _spreadMarkupMap[symbol] = markupPips;
+  /// Mirror a markup the SERVER has accepted (rpc_admin_set_markup).
+  void updateSpreadMarkup(String symbol, int markupPoints) {
+    _markupPoints[symbol] = markupPoints;
     final current = _instruments[symbol];
     if (current != null) {
-      _instruments[symbol] = current.copyWith(spreadMarkupPips: markupPips);
+      _instruments[symbol] = current.copyWith(spreadMarkupPips: _effectiveMarkup(symbol));
       _tickController.add(_instruments[symbol]!);
     }
   }
 
-  int getSpreadMarkup(String symbol) => _spreadMarkupMap[symbol] ?? 10;
+  /// Mirror a spread multiplier the server has accepted.
+  void updateSpreadMultiplier(double multiplier) {
+    _spreadMultiplier = multiplier.clamp(1.0, 10.0);
+    for (final sym in _instruments.keys.toList()) {
+      _instruments[sym] = _instruments[sym]!.copyWith(spreadMarkupPips: _effectiveMarkup(sym));
+    }
+  }
+
+  /// Configured (un-multiplied) markup points for [symbol].
+  int getSpreadMarkup(String symbol) => _markupPoints[symbol] ?? 10;
 
   List<InstrumentEntity> getAllInstruments() => _instruments.values.toList();
 
   InstrumentEntity? getInstrument(String symbol) => _instruments[symbol];
+
+  /// USD value of one unit of [currencyCode], resolved from the live book.
+  ///
+  /// Needed because margin and PnL are first computed in the instrument's quote
+  /// currency. Without this conversion a 1-lot USD/JPY trade reported its PnL
+  /// and margin in yen while the account is denominated in USD.
+  Decimal usdPerCurrency(String currencyCode) {
+    final code = currencyCode.toUpperCase();
+    if (code.isEmpty || code == 'USD') return Decimal.one;
+
+    final direct = _instruments['$code/USD'];
+    if (direct != null && direct.midPrice > Decimal.zero) return direct.midPrice;
+
+    final inverse = _instruments['USD/$code'];
+    if (inverse != null && inverse.midPrice > Decimal.zero) {
+      return MoneyMath.divide(Decimal.one, inverse.midPrice);
+    }
+
+    // Unknown quote currency: fall back to 1:1 rather than zeroing the position.
+    return Decimal.one;
+  }
+
+  /// USD per 1 unit of [symbol]'s quote currency (1 for every `XXX/USD` pair).
+  Decimal quoteToUsdRate(String symbol) {
+    final inst = _instruments[symbol];
+    final quote = inst?.quoteCode ??
+        (symbol.contains('/') ? symbol.split('/').last.toUpperCase() : 'USD');
+    return usdPerCurrency(quote);
+  }
+
+  /// Convenience overload for a quote object that may not be in the cache yet.
+  Decimal quoteToUsdRateFor(InstrumentEntity instrument) =>
+      usdPerCurrency(instrument.quoteCode);
 
   /// Emit a custom or simulated tick into the live market feed stream (useful for tests & simulation)
   void emitTick(InstrumentEntity instrument) {
@@ -714,6 +990,9 @@ class MarketFeedService {
     final requiredCount = getHistoryCountForTimeframe(timeframe);
 
     final list = _candleHistory[key];
+    if ((list == null || list.isEmpty) && !kDemoMode) {
+      return const []; // live: real history arrives via fetchCandlesAsync
+    }
     if (list == null || list.isEmpty) {
       final generated = _generateRealisticCandles(
         curPrice,
@@ -736,6 +1015,31 @@ class MarketFeedService {
     }
   }
 
+  static bool _isSpotMetal(String sym) => sym == 'XAU/USD' || sym == 'XAG/USD' || sym == 'XPT/USD';
+
+  /// Proxy history (PAXG token / COMEX futures) -> spot chart: drop candles from
+  /// closed sessions (weekends) and shift the series so its last close equals the
+  /// live published spot mid, removing the proxy's premium / futures basis.
+  /// Without a live price yet, the series is only filtered.
+  @visibleForTesting
+  List<CandleStickModel> alignMetalHistory(String sym, List<CandleStickModel> raw, ChartTimeframe tf) =>
+      _alignMetalHistory(sym, raw, tf);
+
+  List<CandleStickModel> _alignMetalHistory(String sym, List<CandleStickModel> raw, ChartTimeframe tf) {
+    final half = Duration(seconds: tf.duration.inSeconds ~/ 2);
+    final open = raw.where((c) => FxSession.isMarketOpen(c.time.add(half))).toList();
+    if (open.isEmpty) return raw;
+
+    final inst = _instruments[sym];
+    if (inst == null || _lastLiveAt[sym] == null) return open;
+    final basis = inst.midPrice.toDouble() - open.last.close;
+    if (basis == 0) return open;
+    return [
+      for (final c in open)
+        c.copyWith(open: c.open + basis, high: c.high + basis, low: c.low + basis, close: c.close + basis),
+    ];
+  }
+
   Future<List<CandleStickModel>> fetchCandlesAsync([String? symbol, ChartTimeframe? timeframe]) async {
     final sym = symbol ?? 'XAU/USD';
     final tf = timeframe ?? ChartTimeframe.h1;
@@ -745,12 +1049,28 @@ class MarketFeedService {
     final curPrice = inst != null ? inst.midPrice.toDouble() : 4480.0;
     final requiredCount = getHistoryCountForTimeframe(tf);
 
-    // 1. Fetch from real Binance source if crypto
-    final binanceCandles = await _binanceSource.fetchKlines(sym, tf, limit: 1000);
-    if (binanceCandles.isNotEmpty && binanceCandles.length >= 60) {
-      _candleHistory[key] = binanceCandles;
-      _candleHistory[sym] = binanceCandles;
-      return binanceCandles;
+    // 1. Crypto: real Binance history.
+    if (inst?.category == 'crypto') {
+      final binanceCandles = await _binanceSource.fetchKlines(sym, tf, limit: 1000);
+      if (binanceCandles.isNotEmpty && binanceCandles.length >= 60) {
+        _candleHistory[key] = binanceCandles;
+        _candleHistory[sym] = binanceCandles;
+        return binanceCandles;
+      }
+    }
+
+    // 1b. Gold: PAX Gold klines give a real-time, minute-level history shape
+    //     (Yahoo only has COMEX futures, delayed ~10 min). PAXG trades at its own
+    //     premium and through the weekend, so the series is re-based onto the
+    //     live spot price and closed-market candles are dropped.
+    if (sym == 'XAU/USD') {
+      final paxg = await _binanceSource.fetchKlines('PAXG/USD', tf, limit: 1000);
+      if (paxg.length >= 60) {
+        final candles = _alignMetalHistory(sym, paxg, tf);
+        _candleHistory[key] = candles;
+        _candleHistory[sym] = candles;
+        return candles;
+      }
     }
 
     // 2. Fetch from real Yahoo Finance source for Metals, Commodities, Forex, Stocks, Indices
@@ -758,9 +1078,10 @@ class MarketFeedService {
     if (yahooSym != null) {
       final yahooCandles = await _fetchYahooCandles(sym, yahooSym, tf);
       if (yahooCandles.isNotEmpty && yahooCandles.length >= 20) {
-        // Anchor and scale Yahoo series cleanly to current live price so there is zero disjointed jump
+        // DEMO ONLY: rescale history onto the simulated price. Live mode shows
+        // the real series untouched.
         final lastClose = yahooCandles.last.close;
-        if (lastClose > 0 && curPrice > 0 && (lastClose - curPrice).abs() / curPrice > 0.01) {
+        if (kDemoMode && lastClose > 0 && curPrice > 0 && (lastClose - curPrice).abs() / curPrice > 0.01) {
           final scale = curPrice / lastClose;
           for (int i = 0; i < yahooCandles.length; i++) {
             final c = yahooCandles[i];
@@ -772,14 +1093,20 @@ class MarketFeedService {
             );
           }
         }
-        _candleHistory[key] = yahooCandles;
-        _candleHistory[sym] = yahooCandles;
-        return yahooCandles;
+        // Silver / platinum history is COMEX futures: re-base onto live spot.
+        final series = _isSpotMetal(sym) && !kDemoMode
+            ? _alignMetalHistory(sym, yahooCandles, tf)
+            : yahooCandles;
+        _candleHistory[key] = series;
+        _candleHistory[sym] = series;
+        return series;
       }
     }
 
-    // 3. Fallback: High quality deterministic realistic candlestick series
+    // 3. No real history available.
     final existing = _candleHistory[key];
+    if (!kDemoMode) return existing ?? const [];
+    // DEMO ONLY: deterministic synthetic series.
     if (existing == null || existing.isEmpty) {
       final fallback = _generateRealisticCandles(
         curPrice,
@@ -1009,6 +1336,9 @@ class MarketFeedService {
 
   void dispose() {
     _liveTickTimer?.cancel();
+    _liveMarketSyncTimer?.cancel();
+    _serverQuoteTimer?.cancel();
+    _closeQuotesChannel();
     _binanceTickSub?.cancel();
     _binanceKlineSub?.cancel();
     _tickController.close();

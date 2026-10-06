@@ -358,7 +358,7 @@ void main() {
 
       final closedTrade = cubit.state.closedTrades.first;
       expect(closedTrade.status, equals(OrderStatus.closed));
-      expect(closedTrade.closeReason, equals('take_profit'));
+      expect(closedTrade.closeReason, equals(AppConstants.closeReasonTakeProfit));
       expect(closedTrade.realizedPnl.toDouble(), greaterThan(0));
     });
 
@@ -391,7 +391,7 @@ void main() {
 
       final closedTrade = cubit.state.closedTrades.first;
       expect(closedTrade.status, equals(OrderStatus.closed));
-      expect(closedTrade.closeReason, equals('stop_loss'));
+      expect(closedTrade.closeReason, equals(AppConstants.closeReasonStopLoss));
       expect(closedTrade.realizedPnl.toDouble(), lessThan(0));
     });
 
@@ -418,7 +418,7 @@ void main() {
       final closed = cubit.state.closedTrades.first;
       expect(closed.id, equals(tradeId));
       expect(closed.status, equals(OrderStatus.closed));
-      expect(closed.closeReason, equals('manual'));
+      expect(closed.closeReason, equals(AppConstants.closeReasonManual));
 
       // Used margin must be released back to 0
       expect(cubit.state.accountState.usedMargin, equals(Decimal.zero));

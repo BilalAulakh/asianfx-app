@@ -31,7 +31,9 @@ class BinanceMarketDataSource {
   bool _isConnected = false;
   Timer? _reconnectTimer;
 
-  // Mapping from app symbol (or raw pair) to Binance pair string
+  // Mapping from app symbol (or raw pair) to Binance pair string. CRYPTO ONLY:
+  // metals and FX are priced from the server's published book (spot), never from
+  // Binance tokens such as PAXG or EURUSDT, which trade at their own premium.
   static const Map<String, String> _appToBinanceSymbol = {
     'BTC/USD': 'BTCUSDT',
     'BTCUSD': 'BTCUSDT',
@@ -57,14 +59,6 @@ class BinanceMarketDataSource {
     'NEARUSD': 'NEARUSDT',
     'LTC/USD': 'LTCUSDT',
     'LTCUSD': 'LTCUSDT',
-    'XAU/USD': 'PAXGUSDT', // PAX Gold as direct institutional Binance spot proxy for Gold
-    'XAUUSD': 'PAXGUSDT',
-    'EUR/USD': 'EURUSDT',
-    'EURUSD': 'EURUSDT',
-    'GBP/USD': 'GBPUSDT',
-    'GBPUSD': 'GBPUSDT',
-    'AUD/USD': 'AUDUSDT',
-    'AUDUSD': 'AUDUSDT',
   };
 
   // Mapping from Binance pair string to standard app display symbol
@@ -81,10 +75,6 @@ class BinanceMarketDataSource {
     'DOTUSDT': 'DOT/USD',
     'NEARUSDT': 'NEAR/USD',
     'LTCUSDT': 'LTC/USD',
-    'PAXGUSDT': 'XAU/USD',
-    'EURUSDT': 'EUR/USD',
-    'GBPUSDT': 'GBP/USD',
-    'AUDUSDT': 'AUD/USD',
   };
 
   static const List<String> _streamPairs = [
@@ -100,10 +90,6 @@ class BinanceMarketDataSource {
     'dotusdt',
     'nearusdt',
     'ltcusdt',
-    'paxgusdt',
-    'eurusdt',
-    'gbpusdt',
-    'audusdt',
   ];
 
   Stream<InstrumentEntity> get cryptoStream {
@@ -168,8 +154,6 @@ class BinanceMarketDataSource {
         'XRPUSDT',
         'BNBUSDT',
         'ADAUSDT',
-        'PAXGUSDT',
-        'EURUSDT',
       ]);
 
       final response = await _dio.get(
@@ -188,7 +172,7 @@ class BinanceMarketDataSource {
       }
     } catch (e) {
       // Fallback per-symbol fetch if multi-symbol fails
-      for (final pair in ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XAU/USD', 'EUR/USD', 'XRP/USD', 'BNB/USD', 'ADA/USD']) {
+      for (final pair in ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'BNB/USD', 'ADA/USD']) {
         final inst = await fetch24hrTicker(pair);
         if (inst != null) results.add(inst);
       }

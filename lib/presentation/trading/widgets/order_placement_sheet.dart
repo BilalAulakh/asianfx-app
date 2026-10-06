@@ -440,18 +440,22 @@ class _OrderPlacementSheetState extends State<OrderPlacementSheet> {
                   backgroundColor: isBuy ? const Color(0xFF0ECB81) : const Color(0xFFF6465D),
                   foregroundColor: isBuy ? Colors.black : Colors.white,
                   elevation: 6,
-                  shadowColor: isBuy ? const Color(0xFF0ECB81).withOpacity(0.4) : const Color(0xFFF6465D).withOpacity(0.4),
+                  shadowColor: isBuy ? const Color(0xFF0ECB81).withValues(alpha: 0.4) : const Color(0xFFF6465D).withValues(alpha: 0.4),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 onPressed: _isSubmitting
                     ? null
                     : () async {
                         setState(() => _isSubmitting = true);
+                        // Resolve context-bound objects before the await.
+                        final engine = context.read<TradingEngineBloc>();
+                        final navigator = Navigator.of(context);
+                        final messenger = ScaffoldMessenger.of(context);
 
                         final sl = _enableSl ? double.tryParse(_slController.text) : null;
                         final tp = _enableTp ? double.tryParse(_tpController.text) : null;
 
-                        final success = await context.read<TradingEngineBloc>().placeOrder(
+                        final success = await engine.placeOrder(
                               instrument: live,
                               side: _selectedSide,
                               type: OrderType.market,
@@ -464,8 +468,8 @@ class _OrderPlacementSheetState extends State<OrderPlacementSheet> {
                         setState(() => _isSubmitting = false);
 
                         if (success) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          navigator.pop();
+                          messenger.showSnackBar(
                             SnackBar(
                               backgroundColor: isBuy ? const Color(0xFF0ECB81) : const Color(0xFFF6465D),
                               behavior: SnackBarBehavior.floating,

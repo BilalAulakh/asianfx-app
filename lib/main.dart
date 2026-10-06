@@ -4,11 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'blocs/blocs.dart';
+import 'core/constants/feature_flags.dart';
 import 'core/router/app_router.dart';
 import 'core/security/app_lock_gate.dart';
 import 'core/theme/app_theme.dart';
 import 'data/datasources/market_feed_service.dart';
 import 'presentation/common/widgets/network_status_overlay.dart';
+import 'presentation/common/widgets/update_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -96,8 +98,18 @@ class FXAsianApp extends StatelessWidget {
                   MediaQuery.of(context).textScaler.scale(1.0).clamp(0.8, 1.2),
                 ),
               ),
-              child: NetworkStatusOverlay(
-                child: AppLockGate(child: child!),
+              child: UpdateGate(
+                child: NetworkStatusOverlay(
+                  child: kDemoMode
+                      // Simulated prices must be unmistakable on every screen.
+                      ? Banner(
+                          message: 'DEMO PRICES',
+                          location: BannerLocation.topEnd,
+                          color: const Color(0xFFFF9F43),
+                          child: AppLockGate(child: child!),
+                        )
+                      : AppLockGate(child: child!),
+                ),
               ),
             );
           },

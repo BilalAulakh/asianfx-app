@@ -5,7 +5,10 @@ import '../../core/constants/app_constants.dart';
 
 enum OrderSide { buy, sell }
 enum OrderType { market, limit, stop, stopLimit }
-enum OrderStatus { pending, open, closed, cancelled, liquidated }
+/// Mirrors the `trades.status` CHECK constraint in Postgres. `rejected` is set
+/// when a resting order triggers but the account can no longer fund it;
+/// `expired` when it outlives `expires_at`.
+enum OrderStatus { pending, open, closed, cancelled, liquidated, rejected, expired }
 enum ExecutionRouting { bBookInternal, aBookStp, hybrid }
 
 /// Market Financial Instrument with high-precision Decimal pricing
@@ -42,37 +45,49 @@ class InstrumentEntity extends Equatable {
     this.isFavorite = false,
   });
 
-  /// Bid price offered to client (rawBid - markup/2)
-  Decimal get bid {
-    return MoneyMath.applySpreadMarkup(
-      rawPrice: rawBid,
-      markupPips: (spreadMarkupPips / 2).round(),
-      pipDecimals: decimals,
-      isAsk: false,
-    );
+  /// Size of one quoted price point (10^-decimals).
+  Decimal get pointSize => MoneyMath.pointSize(decimals);
+
+  /// Base currency / asset code of the symbol (`XAU` in `XAU/USD`).
+  String get baseCode {
+    final i = symbol.indexOf('/');
+    return i <= 0 ? symbol : symbol.substring(0, i);
   }
 
-  /// Ask price offered to client (rawAsk + markup/2)
-  Decimal get ask {
-    return MoneyMath.applySpreadMarkup(
-      rawPrice: rawAsk,
-      markupPips: (spreadMarkupPips / 2).round(),
-      pipDecimals: decimals,
-      isAsk: true,
-    );
+  /// Quote currency code of the symbol (`USD` in `XAU/USD`, `JPY` in `USD/JPY`).
+  /// PnL and margin are denominated in this currency before FX conversion.
+  String get quoteCode {
+    final i = symbol.indexOf('/');
+    return (i < 0 || i == symbol.length - 1) ? 'USD' : symbol.substring(i + 1);
   }
+
+  /// Bid price offered to client (rawBid - markup/2), split exactly in Decimal.
+  Decimal get bid => MoneyMath.applyHalfSpreadMarkup(
+        rawPrice: rawBid,
+        markupPoints: spreadMarkupPips,
+        decimals: decimals,
+        isAsk: false,
+      );
+
+  /// Ask price offered to client (rawAsk + markup/2), split exactly in Decimal.
+  Decimal get ask => MoneyMath.applyHalfSpreadMarkup(
+        rawPrice: rawAsk,
+        markupPoints: spreadMarkupPips,
+        decimals: decimals,
+        isAsk: true,
+      );
 
   /// Mid Price
-  Decimal get midPrice => MoneyMath.toDec((bid.toDouble() + ask.toDouble()) / 2.0);
+  Decimal get midPrice => MoneyMath.divide(bid + ask, Decimal.fromInt(2), scale: decimals + 2);
 
   /// Spread in price units
   Decimal get spread => ask - bid;
 
-  /// Spread in pips
-  double get spreadPips {
-    final factor = decimals == 2 ? 0.01 : (decimals == 4 ? 0.0001 : 0.001);
-    return spread.toDouble() / factor;
-  }
+  /// Spread expressed in quoted price points.
+  double get spreadPoints => MoneyMath.divide(spread, pointSize, scale: 2).toDouble();
+
+  /// Deprecated alias kept for existing UI call sites.
+  double get spreadPips => spreadPoints;
 
   double get changePercent => change24h;
   double get changeAmount => (change24h / 100.0) * midPrice.toDouble();
@@ -145,6 +160,21 @@ class TradeEntity extends Equatable {
   final DateTime? closeTime;
   final String? closeReason;
 
+  /// Idempotency key sent with the authoritative open/close RPC so a retried or
+  /// double-tapped request can never produce two financial transactions.
+  final String? clientRequestId;
+
+  /// FX rate (USD per 1 unit of the instrument's quote currency) captured at
+  /// open time. Required to keep margin stable and to audit the PnL conversion.
+  final Decimal quoteToUsdRate;
+
+  /// Price the client asked for, kept alongside the filled [openPrice] so
+  /// slippage and spread are auditable after the fact.
+  final Decimal? requestedPrice;
+
+  /// Dealer spread (in price units) at the moment of execution.
+  final Decimal? spreadAtOpen;
+
   TradeEntity({
     required this.id,
     required this.orderId,
@@ -170,15 +200,33 @@ class TradeEntity extends Equatable {
     required this.openTime,
     this.closeTime,
     this.closeReason,
+    this.clientRequestId,
+    Decimal? quoteToUsdRate,
+    this.requestedPrice,
+    this.spreadAtOpen,
   })  : realizedPnl = realizedPnl ?? Decimal.zero,
         commission = commission ?? Decimal.zero,
-        swap = swap ?? Decimal.zero;
+        swap = swap ?? Decimal.zero,
+        quoteToUsdRate = quoteToUsdRate ?? Decimal.one;
 
   bool get isOpen => status == OrderStatus.open;
   bool get isClosed => status == OrderStatus.closed || status == OrderStatus.liquidated;
   bool get isPending => status == OrderStatus.pending;
+  bool get isCancelled => status == OrderStatus.cancelled;
+
+  /// No further financial event can occur on this order.
+  bool get isTerminal =>
+      status == OrderStatus.closed ||
+      status == OrderStatus.liquidated ||
+      status == OrderStatus.cancelled ||
+      status == OrderStatus.rejected ||
+      status == OrderStatus.expired;
   bool get isBuy => side == OrderSide.buy;
   bool get isSell => side == OrderSide.sell;
+
+  /// Price level a pending order triggers at (falls back to the stored open
+  /// price for legacy rows written before target_price was persisted).
+  Decimal get triggerPrice => targetPrice ?? openPrice;
 
   double get floatingPl => unrealizedPnl.toDouble();
   double get lotSize => lots.toDouble();
@@ -204,11 +252,17 @@ class TradeEntity extends Equatable {
     Decimal? requiredMargin,
     Decimal? stopLoss,
     Decimal? takeProfit,
+    Decimal? commission,
+    Decimal? swap,
     Decimal? leverage,
     ExecutionRouting? routing,
     DateTime? openTime,
     DateTime? closeTime,
     String? closeReason,
+    String? clientRequestId,
+    Decimal? quoteToUsdRate,
+    Decimal? requestedPrice,
+    Decimal? spreadAtOpen,
   }) {
     return TradeEntity(
       id: id ?? this.id,
@@ -228,20 +282,25 @@ class TradeEntity extends Equatable {
       unrealizedPnl: unrealizedPnl ?? this.unrealizedPnl,
       realizedPnl: realizedPnl ?? this.realizedPnl,
       requiredMargin: requiredMargin ?? this.requiredMargin,
-      commission: commission,
-      swap: swap,
+      commission: commission ?? this.commission,
+      swap: swap ?? this.swap,
       leverage: leverage ?? this.leverage,
       routing: routing ?? this.routing,
       openTime: openTime ?? this.openTime,
       closeTime: closeTime ?? this.closeTime,
       closeReason: closeReason ?? this.closeReason,
+      clientRequestId: clientRequestId ?? this.clientRequestId,
+      quoteToUsdRate: quoteToUsdRate ?? this.quoteToUsdRate,
+      requestedPrice: requestedPrice ?? this.requestedPrice,
+      spreadAtOpen: spreadAtOpen ?? this.spreadAtOpen,
     );
   }
 
   @override
   List<Object?> get props => [
-        id, orderId, symbol, side, status, lots, openPrice, currentPrice,
-        unrealizedPnl, requiredMargin, closePrice,
+        id, orderId, symbol, side, type, status, lots, openPrice, targetPrice,
+        currentPrice, unrealizedPnl, realizedPnl, requiredMargin, closePrice,
+        stopLoss, takeProfit, commission, swap, closeReason, closeTime,
       ];
 }
 

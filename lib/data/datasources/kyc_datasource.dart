@@ -170,10 +170,25 @@ class KycDatasource {
     final client = _client;
     if (client != null) {
       try {
-        await client.from('kyc_profiles').upsert(profile.toMap());
-        // Save documents
+        // `documents` is a nested list for the local JSON cache, not a column on
+        // kyc_profiles. Leaving it in made PostgREST reject the whole upsert
+        // (PGRST204), which the catch below swallowed — so KYC records only ever
+        // reached on-device storage and never Supabase.
+        final row = Map<String, dynamic>.from(profile.toMap())..remove('documents');
+
+        // Verdict columns are owned by the server (trigger fx_kyc_guard_verdict
+        // ignores them anyway); sending them only invites confusion.
+        row.remove('status');
+        row.remove('submitted_at');
+        row.remove('reviewed_at');
+        row.remove('reviewed_by');
+        row.remove('rejection_reason');
+        row.remove('resubmission_notes');
+
+        await client.from('kyc_profiles').upsert(row, onConflict: 'id');
+
         for (final doc in profile.documents) {
-          await client.from('kyc_documents').upsert(doc.toMap());
+          await client.from('kyc_documents').upsert(doc.toMap(), onConflict: 'id');
         }
       } catch (e) {
         debugPrint('Save KYC profile to Supabase fallback: $e');
@@ -218,6 +233,59 @@ class KycDatasource {
       } catch (_) {}
     }
     return [];
+  }
+
+  // ── Server-side verdict transitions ────────────────────────────────────────
+
+  /// Submit the signed-in user's application for manual compliance review.
+  ///
+  /// The status transition happens inside `rpc_submit_kyc`, which checks that a
+  /// profile exists, that at least one document was uploaded, and that it is not
+  /// already approved or queued. The applicant cannot set the status directly.
+  ///
+  /// Throws with a readable message on rejection — deliberately, so a failed
+  /// submission is never mistaken for a successful one.
+  /// Returned when no Supabase client exists at all (offline preview, unit
+  /// tests). Callers fall back to a local PENDING_REVIEW — never to APPROVED.
+  static const Map<String, dynamic> offlineResult = {'status': 'offline'};
+
+  Future<Map<String, dynamic>> submitForReview() async {
+    final client = _client;
+    if (client == null) return offlineResult;
+    try {
+      final res = await client.rpc('rpc_submit_kyc');
+      return res is Map ? Map<String, dynamic>.from(res) : <String, dynamic>{};
+    } on PostgrestException catch (e) {
+      throw Exception(_readableRpcError(e.message));
+    }
+  }
+
+  /// Administrator verdict. [decision] is `APPROVE`, `REJECT` or `RESUBMIT`.
+  /// Requires a row in `broker_admins` (or an admin JWT claim) — the database
+  /// checks, not the app.
+  Future<Map<String, dynamic>> reviewProfile({
+    required String kycId,
+    required String decision,
+    String? notes,
+  }) async {
+    final client = _client;
+    if (client == null) return offlineResult;
+    try {
+      final res = await client.rpc('rpc_review_kyc', params: {
+        'p_kyc_id': kycId,
+        'p_decision': decision,
+        'p_notes': notes,
+      });
+      return res is Map ? Map<String, dynamic>.from(res) : <String, dynamic>{};
+    } on PostgrestException catch (e) {
+      throw Exception(_readableRpcError(e.message));
+    }
+  }
+
+  /// RPCs raise `CODE: explanation`; show the explanation, drop the code.
+  static String _readableRpcError(String raw) {
+    final m = RegExp(r'^[A-Z][A-Z0-9_]{2,}:\s*(.+)$', dotAll: true).firstMatch(raw.trim());
+    return m != null ? m.group(1)!.trim() : raw;
   }
 
   // ── Audit Logging ──────────────────────────────────────────────────────────

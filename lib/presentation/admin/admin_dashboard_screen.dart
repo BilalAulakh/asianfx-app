@@ -46,7 +46,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFD600).withOpacity(0.2),
+                color: const Color(0xFFFFD600).withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: const Color(0xFFFFD600), width: 1),
               ),
@@ -155,7 +155,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFF6465D).withOpacity(0.15),
+                color: const Color(0xFFF6465D).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFF6465D)),
               ),
@@ -290,7 +290,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         decoration: BoxDecoration(
           color: const Color(0xFF1E232A),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.4)),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
         child: Row(
           children: [
@@ -373,7 +373,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               ),
               Switch(
                 value: admin.autoApproveTransactions,
-                activeColor: const Color(0xFF0ECB81),
+                activeThumbColor: const Color(0xFF0ECB81),
                 onChanged: (_) => notifier.toggleAutoApproveTransactions(),
               ),
             ],
@@ -519,7 +519,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     decoration: BoxDecoration(
                       color: const Color(0xFF14171A),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF0ECB81).withOpacity(0.4)),
+                      border: Border.all(color: const Color(0xFF0ECB81).withValues(alpha: 0.4)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -556,23 +556,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         ),
                         icon: const Icon(Icons.check_rounded, size: 18),
                         label: const Text('Approve', style: TextStyle(fontWeight: FontWeight.bold)),
-                        onPressed: () {
-                          notifier.approveTransaction(tx.id);
-                          if (tx.type == 'DEPOSIT') {
-                            context.read<TradingEngineCubit>().depositFunds(
-                              tx.userId,
-                              MoneyMath.toDec(tx.amount),
+                        onPressed: () async {
+                          // Money moves server-side through the audited admin RPC;
+                          // the request is only marked approved once it succeeds.
+                          final messenger = ScaffoldMessenger.of(context);
+                          final engine = context.read<TradingEngineCubit>();
+                          final walletCubit = context.read<WalletCubit>();
+                          final walletBloc = context.read<WalletBloc>();
+                          final isDeposit = tx.type == 'DEPOSIT';
+                          final amt = MoneyMath.toDec(tx.amount);
+
+                          try {
+                            await engine.adminAdjustBalance(
+                              userId: tx.userId,
+                              amount: isDeposit ? amt : -amt,
+                              reason: '${tx.type} #${tx.id} approved via admin dashboard',
+                              requestId: 'admin-tx-${tx.id}',
                             );
-                            context.read<WalletCubit>().creditDeposit(tx.amount, tx.method);
-                            context.read<WalletBloc>().creditDeposit(tx.amount, tx.method, txId: tx.id);
-                          } else {
-                            context.read<TradingEngineCubit>().withdrawFunds(
-                              tx.userId,
-                              MoneyMath.toDec(tx.amount),
+                          } catch (e) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text('${tx.type} #${tx.id} NOT settled: $e'),
+                                backgroundColor: const Color(0xFFF6465D),
+                              ),
                             );
-                            context.read<WalletCubit>().debitWithdrawal(tx.amount, tx.method);
+                            return;
                           }
-                          ScaffoldMessenger.of(context).showSnackBar(
+
+                          notifier.approveTransaction(tx.id);
+                          if (isDeposit) {
+                            walletCubit.creditDeposit(tx.amount, tx.method);
+                            walletBloc.creditDeposit(tx.amount, tx.method, txId: tx.id);
+                          } else {
+                            walletCubit.debitWithdrawal(tx.amount, tx.method);
+                          }
+                          messenger.showSnackBar(
                             SnackBar(
                               content: Text('${tx.type} #${tx.id} for \$${tx.amount} APPROVED & CREDITED!'),
                               backgroundColor: const Color(0xFF0ECB81),
@@ -606,7 +624,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: tx.status == AdminTxStatus.approved ? const Color(0xFF0ECB81).withOpacity(0.15) : const Color(0xFFF6465D).withOpacity(0.15),
+                    color: tx.status == AdminTxStatus.approved ? const Color(0xFF0ECB81).withValues(alpha: 0.15) : const Color(0xFFF6465D).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -639,7 +657,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: admin.kycRequests.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, i) {
         final kyc = admin.kycRequests[i];
         final isPending = kyc.status == AdminKycStatus.pending;
@@ -650,7 +668,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             color: const Color(0xFF1E232A),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isPending ? const Color(0xFFFFD600).withOpacity(0.5) : const Color(0xFF2B313A),
+              color: isPending ? const Color(0xFFFFD600).withValues(alpha: 0.5) : const Color(0xFF2B313A),
             ),
           ),
           child: Column(
@@ -666,7 +684,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isPending ? const Color(0xFFFFD600).withOpacity(0.2) : const Color(0xFF0ECB81).withOpacity(0.2),
+                      color: isPending ? const Color(0xFFFFD600).withValues(alpha: 0.2) : const Color(0xFF0ECB81).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -795,7 +813,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: filtered.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, i) {
               final user = filtered[i];
               final isFrozen = user.status == AdminUserStatus.frozen;
@@ -833,7 +851,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: isFrozen ? const Color(0xFFF6465D).withOpacity(0.2) : const Color(0xFF0ECB81).withOpacity(0.2),
+                            color: isFrozen ? const Color(0xFFF6465D).withValues(alpha: 0.2) : const Color(0xFF0ECB81).withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -981,7 +999,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 ),
                 Switch(
                   value: admin.isTradingHalted,
-                  activeColor: const Color(0xFFF6465D),
+                  activeThumbColor: const Color(0xFFF6465D),
                   onChanged: (_) => notifier.toggleTradingHalt(),
                 ),
               ],

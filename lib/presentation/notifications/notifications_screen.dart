@@ -46,7 +46,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => setState(() { for (var n in _notifications) n.isRead = true; }),
+            onPressed: () => setState(() { for (var n in _notifications) {
+              n.isRead = true;
+            } }),
             child: const Text('Mark all read', style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: AppColors.brandPrimary)),
           ),
         ],
@@ -54,7 +56,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: _notifications.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, i) {
           final n = _notifications[i];
           final color = _typeColor(n.type);

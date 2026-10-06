@@ -11,7 +11,7 @@ class FxCard extends StatelessWidget {
   final bool hasBorder;
   final VoidCallback? onTap;
 
-  FxCard({
+  const FxCard({
     super.key,
     required this.child,
     this.padding,

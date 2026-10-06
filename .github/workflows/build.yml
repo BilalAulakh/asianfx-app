@@ -3,7 +3,14 @@ name: Build Apps (Android APK & iOS)
 on:
   push:
     branches: [ main, master ]
+    # Pushing a version tag (e.g. v1.0.2) publishes a GitHub Release with
+    # FXAsian.apk. Download link that never changes:
+    # https://github.com/BilalAulakh/asianfx-app/releases/latest/download/FXAsian.apk
+    tags: [ 'v*' ]
   workflow_dispatch:
+
+permissions:
+  contents: write   # create the GitHub Release on version tags
 
 jobs:
   build-android:
@@ -24,17 +31,74 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # The release key comes from repository secrets (Settings > Secrets and
+      # variables > Actions). Every APK users install must be signed with the
+      # SAME key, otherwise Android refuses the in-app update.
+      - name: Restore release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::Signing secrets are not set - this APK is signed with a debug key and must NOT be given to users."
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "::error::A release needs the ANDROID_* signing secrets (Settings > Secrets and variables > Actions)."
+              exit 1
+            fi
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          {
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "storeFile=upload-keystore.jks"
+          } > android/key.properties
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build Android APK
         run: flutter build apk --release
 
+      - name: Name the APK and print its details
+        id: apk
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk FXAsian.apk
+          VERSION_LINE=$(grep -E '^version:' pubspec.yaml | head -1 | awk '{print $2}')
+          SHA=$(sha256sum FXAsian.apk | awk '{print $1}')
+          echo "version_name=${VERSION_LINE%%+*}" >> "$GITHUB_OUTPUT"
+          echo "build_number=${VERSION_LINE##*+}" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Enter in Admin > App Update"
+            echo "- Version: \`${VERSION_LINE%%+*}\`"
+            echo "- Build number: \`${VERSION_LINE##*+}\`"
+            echo "- APK link: \`https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/FXAsian.apk\`"
+            echo "- SHA-256: \`$SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: FXAsian.apk
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FXAsian.apk
+          name: FXAsian ${{ steps.apk.outputs.version_name }}
+          body: |
+            Download: https://github.com/${{ github.repository }}/releases/latest/download/FXAsian.apk
+
+            **Admin > App Update**
+            - Version: `${{ steps.apk.outputs.version_name }}`
+            - Build number: `${{ steps.apk.outputs.build_number }}`
+            - SHA-256: `${{ steps.apk.outputs.sha256 }}`
 
   build-ios:
     name: Build iOS App

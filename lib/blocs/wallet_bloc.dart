@@ -89,7 +89,7 @@ class WalletCubit extends Cubit<WalletState> {
     ));
   }
 
-  void debitWithdrawal(double amount, String method, {String? txId, bool autoApprove = true}) {
+  void debitWithdrawal(double amount, String method, {String? txId, bool autoApprove = false}) {
     final newBal = (state.balance - amount).clamp(0.0, 1000000000.0);
     final newEquity = (state.equity - amount).clamp(0.0, 1000000000.0);
     final newFree = (state.freeMargin - amount).clamp(0.0, 1000000000.0);

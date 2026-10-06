@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/fx_session.dart';
 import '../../domain/entities/chart_entities.dart';
 
 /// Institutional Candlestick Canvas with Interactive Zoom, Drag-Pan, Mouse Wheel, and Touch Pinch
@@ -14,10 +16,14 @@ class CandlestickChartCanvas extends StatefulWidget {
   final double currentPrice;
   final double scale;
   final ValueChanged<double>? onScaleChanged;
+  final ChartTimeframe? timeframe;
+  final String? symbol;
 
   const CandlestickChartCanvas({
     super.key,
     required this.candles,
+    this.timeframe,
+    this.symbol,
     this.style = ChartStyle.candlestick,
     this.priceDecimals = 2,
     required this.currentPrice,
@@ -36,10 +42,42 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
   Offset? _crosshairPosition;
   CandleStickModel? _inspectedCandle;
 
+  Timer? _countdownTimer;
+
   @override
   void initState() {
     super.initState();
     _scale = widget.scale;
+    // Tick every second so the candle-close countdown under the price badge stays live
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Time remaining until the current candle closes, TradingView-style, using the
+  /// FX session clock (daily rollover 17:00 New York). "Closed" outside trading hours.
+  String? _candleCloseCountdown() {
+    final tf = widget.timeframe ?? _inferTimeframe();
+    if (tf == null) return null;
+    final remaining = FxSession.timeToCandleClose(DateTime.now(), tf, symbol: widget.symbol);
+    if (remaining == null) return 'Closed';
+    return FxSession.formatCountdown(remaining);
+  }
+
+  ChartTimeframe? _inferTimeframe() {
+    final candles = widget.candles;
+    if (candles.length < 2) return null;
+    final gap = candles.last.time.difference(candles[candles.length - 2].time).abs();
+    for (final tf in ChartTimeframe.values) {
+      if (tf.duration == gap) return tf;
+    }
+    return null;
   }
 
   @override
@@ -77,8 +115,23 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
   @override
   Widget build(BuildContext context) {
     if (widget.candles.isEmpty) {
+      // Live mode never fabricates history: wait for real candles.
       return const Center(
-        child: CircularProgressIndicator(color: AppColors.brandPrimary),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brandPrimary),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Waiting for live chart data…',
+              style: TextStyle(fontFamily: 'Inter', fontSize: 11, color: Color(0xFF848E9C)),
+            ),
+          ],
+        ),
       );
     }
 
@@ -153,6 +206,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                       crosshairPosition: _crosshairPosition,
                       priceDecimals: widget.priceDecimals,
                       currentPrice: widget.currentPrice,
+                      countdownText: _candleCloseCountdown(),
                     ),
                   ),
 
@@ -163,12 +217,12 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF151D28).withOpacity(0.95),
+                        color: const Color(0xFF151D28).withValues(alpha: 0.95),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: const Color(0xFF2B384E), width: 1),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.4),
+                            color: Colors.black.withValues(alpha: 0.4),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
@@ -229,7 +283,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF151D28).withOpacity(0.96),
+                          color: const Color(0xFF151D28).withValues(alpha: 0.96),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFF2B384E)),
                         ),
@@ -334,6 +388,7 @@ class _InstitutionalChartPainter extends CustomPainter {
   final Offset? crosshairPosition;
   final int priceDecimals;
   final double currentPrice;
+  final String? countdownText;
 
   _InstitutionalChartPainter({
     required this.candles,
@@ -343,6 +398,7 @@ class _InstitutionalChartPainter extends CustomPainter {
     this.crosshairPosition,
     required this.priceDecimals,
     required this.currentPrice,
+    this.countdownText,
   });
 
   @override
@@ -395,8 +451,8 @@ class _InstitutionalChartPainter extends CustomPainter {
       maxPrice = max(maxPrice, currentPrice);
     }
 
-    // 8% vertical padding for clean breathing room
-    final pricePadding = max((maxPrice - minPrice) * 0.08, minPrice * 0.001);
+    // 18% vertical padding for rock-solid visual stability (prevents sudden jumping)
+    final pricePadding = max((maxPrice - minPrice) * 0.18, minPrice * 0.002);
     minPrice -= pricePadding;
     maxPrice += pricePadding;
     final priceRange = max(0.0001, maxPrice - minPrice);
@@ -405,6 +461,15 @@ class _InstitutionalChartPainter extends CustomPainter {
       final norm = (price - minPrice) / priceRange;
       return chartHeight - (norm * chartHeight);
     }
+
+    // Live price badge geometry (needed up front so axis labels can avoid it)
+    final currentY = getY(currentPrice).clamp(0.0, chartHeight);
+    final hasCountdown = countdownText != null;
+    const priceRowHeight = 18.0;
+    const countdownRowHeight = 15.0;
+    final badgeHeight = hasCountdown ? priceRowHeight + countdownRowHeight : priceRowHeight;
+    final double badgeTop =
+        (currentY - priceRowHeight / 2).clamp(0.0, max(0.0, chartHeight - badgeHeight)).toDouble();
 
     // 2. Draw Grid Lines & Right Price Axis
     final gridPaint = Paint()
@@ -427,7 +492,12 @@ class _InstitutionalChartPainter extends CustomPainter {
         ),
       );
       final tp = TextPainter(text: textSpan, textDirection: ui.TextDirection.ltr)..layout();
-      tp.paint(canvas, Offset(chartWidth + 6, y - (tp.height / 2)));
+      final labelTop = y - (tp.height / 2);
+      // Hide axis labels the live-price badge would overlap (TradingView behaviour)
+      final hiddenByBadge = labelTop + tp.height > badgeTop - 2 && labelTop < badgeTop + badgeHeight + 2;
+      if (!hiddenByBadge) {
+        tp.paint(canvas, Offset(chartWidth + 6, labelTop));
+      }
     }
 
     final bullColor = const Color(0xFF00D68F);
@@ -471,7 +541,7 @@ class _InstitutionalChartPainter extends CustomPainter {
           );
           canvas.drawRect(
             volRect,
-            Paint()..color = (isBull ? bullColor : bearColor).withOpacity(0.22),
+            Paint()..color = (isBull ? bullColor : bearColor).withValues(alpha: 0.22),
           );
         }
 
@@ -596,8 +666,8 @@ class _InstitutionalChartPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            const Color(0xFF00C896).withOpacity(0.35),
-            const Color(0xFF00C896).withOpacity(0.0),
+            const Color(0xFF00C896).withValues(alpha: 0.35),
+            const Color(0xFF00C896).withValues(alpha: 0.0),
           ],
         );
 
@@ -613,39 +683,74 @@ class _InstitutionalChartPainter extends CustomPainter {
       }
     }
 
-    // 4. Draw Current Live Price Dashed Line & Badge
-    final currentY = getY(currentPrice).clamp(0.0, chartHeight);
+    // 4. Draw Current Live Price Line & TradingView-style Badge
+    // Line + badge take the live candle's direction colour (green up / red down).
+    final liveColor = currentPrice >= candles.last.open ? bullColor : bearColor;
 
     final dashPaint = Paint()
-      ..color = const Color(0xFFFFD600)
+      ..color = liveColor.withValues(alpha: 0.9)
       ..strokeWidth = 1.0;
 
-    const dashWidth = 4.0;
-    const dashSpace = 3.0;
+    const dashWidth = 2.0;
+    const dashSpace = 2.0;
     double startX = 0;
     while (startX < chartWidth) {
       canvas.drawLine(Offset(startX, currentY), Offset(startX + dashWidth, currentY), dashPaint);
       startX += dashWidth + dashSpace;
     }
 
-    // Price badge on right axis
+    // Badge: price row centred on the price line, countdown row underneath
+    final badgeLeft = chartWidth + 1;
+    final badgeWidth = rightPriceAxisWidth - 2;
     final badgeRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(chartWidth + 2, currentY - 9, rightPriceAxisWidth - 4, 18),
-      const Radius.circular(4),
+      Rect.fromLTWH(badgeLeft, badgeTop, badgeWidth, badgeHeight),
+      const Radius.circular(3),
     );
-    canvas.drawRRect(badgeRect, Paint()..color = const Color(0xFFFFD600));
+    canvas.drawRRect(badgeRect, Paint()..color = liveColor);
 
-    final curPriceSpan = TextSpan(
-      text: currentPrice.toStringAsFixed(priceDecimals),
-      style: const TextStyle(
-        fontFamily: 'Inter',
-        color: Colors.black,
-        fontSize: 10,
-        fontWeight: FontWeight.bold,
+    final curPricePainter = TextPainter(
+      text: TextSpan(
+        text: currentPrice.toStringAsFixed(priceDecimals),
+        style: const TextStyle(
+          fontFamily: 'Inter',
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          fontFeatures: [ui.FontFeature.tabularFigures()],
+        ),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    )..layout();
+    curPricePainter.paint(
+      canvas,
+      Offset(
+        badgeLeft + (badgeWidth - curPricePainter.width) / 2,
+        badgeTop + (priceRowHeight - curPricePainter.height) / 2,
       ),
     );
-    final curPricePainter = TextPainter(text: curPriceSpan, textDirection: ui.TextDirection.ltr)..layout();
-    curPricePainter.paint(canvas, Offset(chartWidth + 6, currentY - (curPricePainter.height / 2)));
+
+    if (hasCountdown) {
+      final countdownPainter = TextPainter(
+        text: TextSpan(
+          text: countdownText,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            color: Colors.white.withValues(alpha: 0.88),
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            fontFeatures: const [ui.FontFeature.tabularFigures()],
+          ),
+        ),
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+      countdownPainter.paint(
+        canvas,
+        Offset(
+          badgeLeft + (badgeWidth - countdownPainter.width) / 2,
+          badgeTop + priceRowHeight + (countdownRowHeight - countdownPainter.height) / 2 - 1,
+        ),
+      );
+    }
 
     // 5. Draw Crosshair if active
     if (crosshairPosition != null) {

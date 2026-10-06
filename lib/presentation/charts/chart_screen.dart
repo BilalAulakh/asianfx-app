@@ -246,6 +246,8 @@ class _ChartScreenState extends State<ChartScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: CandlestickChartCanvas(
                   candles: candles,
+                  timeframe: currentTf,
+                  symbol: widget.symbol,
                   style: _chartStyle,
                   priceDecimals: live.decimals,
                   currentPrice: live.midPrice.toDouble(),

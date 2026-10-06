@@ -13,7 +13,7 @@ class FxButton extends StatelessWidget {
   final IconData? icon;
   final double? width;
 
-  FxButton({
+  const FxButton({
     super.key,
     String? label,
     String? text,

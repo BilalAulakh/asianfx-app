@@ -106,6 +106,7 @@ class KycRepository {
     );
 
     await _datasource.saveKycProfile(updated);
+
     return updated;
   }
 
@@ -193,6 +194,7 @@ class KycRepository {
     final updatedDocs = profile.documents.where((d) => d.id != documentId).toList();
     final updated = profile.copyWith(documents: updatedDocs, updatedAt: DateTime.now());
     await _datasource.saveKycProfile(updated);
+
     return updated;
   }
 
@@ -225,31 +227,45 @@ class KycRepository {
       throw Exception('Both Front and Back sides are required for ${profile.identityDocType.displayName}.');
     }
 
-    // Process submission status
-    final submitted = profile.copyWith(
-      status: autoApprove ? KycVerificationStatus.approved : KycVerificationStatus.pendingReview,
+    // Persist the applicant's own data first, then ask the server to move the
+    // status. The applicant never decides the verdict: rpc_submit_kyc only ever
+    // produces PENDING_REVIEW, and a compliance officer takes it from there.
+    //
+    // `autoApprove` is retained for call-site compatibility but is ignored —
+    // self-approval from the client is exactly what manual review replaces.
+    final pending = profile.copyWith(
       submittedAt: DateTime.now(),
-      reviewedAt: autoApprove ? DateTime.now() : null,
-      reviewedBy: autoApprove ? 'AsianFX AI Auto-Engine (Fast-Track)' : null,
-      rejectionReason: null,
-      resubmissionNotes: null,
       updatedAt: DateTime.now(),
     );
+    await _datasource.saveKycProfile(pending);
+    final result = await _datasource.submitForReview();
+    final serverApplied = result['status'] != 'offline';
+
+    // Offline, the cached row still carries the old status, so only a genuine
+    // server round trip is allowed to define the outcome.
+    final confirmed = serverApplied ? await _datasource.fetchKycProfile(userId) : null;
+    final submitted = confirmed ??
+        pending.copyWith(
+          status: KycVerificationStatus.pendingReview,
+          rejectionReason: null,
+          resubmissionNotes: null,
+        );
 
     await _datasource.saveKycProfile(submitted);
 
-    // Audit log
-    await _datasource.logAuditAction(KycAuditLogEntry(
-      id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
-      kycId: profile.id,
-      userId: userId,
-      action: autoApprove ? 'AUTO_APPROVED_AI' : 'SUBMITTED',
-      performedBy: autoApprove ? 'AsianFX AI Auto-Engine (Fast-Track)' : profile.fullName,
-      timestamp: DateTime.now(),
-      notes: autoApprove
-          ? 'KYC verified and approved automatically (Fast-Track Auto-Approval). Level 2 Full Access Unlocked.'
-          : 'KYC application submitted for Level 2 verification review.',
-    ));
+    // Online, rpc_submit_kyc writes the audit row. Offline there is no server to
+    // do it, so keep the local trail intact rather than losing the event.
+    if (!serverApplied) {
+      await _datasource.logAuditAction(KycAuditLogEntry(
+        id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
+        kycId: profile.id,
+        userId: userId,
+        action: 'SUBMITTED',
+        performedBy: profile.fullName,
+        timestamp: DateTime.now(),
+        notes: 'KYC application submitted for compliance review.',
+      ));
+    }
 
     return submitted;
   }
@@ -263,30 +279,36 @@ class KycRepository {
       return submitKycApplication(userId, autoApprove: autoApprove);
     }
 
-    final resubmitted = profile.copyWith(
-      status: autoApprove ? KycVerificationStatus.approved : KycVerificationStatus.pendingReview,
-      submittedAt: DateTime.now(),
-      reviewedAt: autoApprove ? DateTime.now() : null,
-      reviewedBy: autoApprove ? 'AsianFX AI Auto-Engine (Fast-Track)' : null,
-      rejectionReason: null,
-      resubmissionNotes: null,
-      updatedAt: DateTime.now(),
+    // Identical path to a first submission: the server records RESUBMITTED in
+    // the audit trail and returns the application to the review queue.
+    await _datasource.saveKycProfile(
+      profile.copyWith(submittedAt: DateTime.now(), updatedAt: DateTime.now()),
     );
+    final result = await _datasource.submitForReview();
+    final confirmed =
+        result['status'] != 'offline' ? await _datasource.fetchKycProfile(userId) : null;
+    final resubmitted = confirmed ??
+        profile.copyWith(
+          status: KycVerificationStatus.pendingReview,
+          submittedAt: DateTime.now(),
+          rejectionReason: null,
+          resubmissionNotes: null,
+          updatedAt: DateTime.now(),
+        );
 
     await _datasource.saveKycProfile(resubmitted);
 
-    // Audit log
-    await _datasource.logAuditAction(KycAuditLogEntry(
-      id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
-      kycId: profile.id,
-      userId: userId,
-      action: autoApprove ? 'AUTO_APPROVED_AI' : 'RESUBMITTED',
-      performedBy: autoApprove ? 'AsianFX AI Auto-Engine (Fast-Track)' : profile.fullName,
-      timestamp: DateTime.now(),
-      notes: autoApprove
-          ? 'Resubmitted KYC application auto-approved instantly.'
-          : 'Resubmitted corrected documents for compliance officer re-evaluation.',
-    ));
+    if (result['status'] == 'offline') {
+      await _datasource.logAuditAction(KycAuditLogEntry(
+        id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
+        kycId: profile.id,
+        userId: userId,
+        action: 'RESUBMITTED',
+        performedBy: profile.fullName,
+        timestamp: DateTime.now(),
+        notes: 'Resubmitted corrected documents for compliance re-evaluation.',
+      ));
+    }
 
     return resubmitted;
   }
@@ -322,10 +344,19 @@ class KycRepository {
       ..sort((a, b) => (b.submittedAt ?? b.createdAt).compareTo(a.submittedAt ?? a.createdAt));
   }
 
-  /// Admin approves KYC application
-  Future<KycProfileEntity> adminApproveKyc({
+  /// Shared path for every administrator verdict.
+  ///
+  /// `rpc_review_kyc` is what actually decides: it verifies the caller is an
+  /// administrator (a row in `broker_admins` or an admin JWT claim), requires a
+  /// written reason for anything other than an approval, moves the status inside
+  /// a transaction and writes the audit entry. This method only mirrors the
+  /// result into the local cache.
+  Future<KycProfileEntity> _applyReview({
     required String kycId,
+    required String decision,
+    required KycVerificationStatus resultingStatus,
     required String reviewerEmail,
+    String? notes,
   }) async {
     final all = await _datasource.fetchAllKycProfiles();
     final profile = all.firstWhere(
@@ -333,149 +364,111 @@ class KycRepository {
       orElse: () => throw Exception('KYC profile $kycId not found.'),
     );
 
-    final approved = profile.copyWith(
-      status: KycVerificationStatus.approved,
-      reviewedAt: DateTime.now(),
-      reviewedBy: reviewerEmail,
-      rejectionReason: null,
-      resubmissionNotes: null,
-      updatedAt: DateTime.now(),
-    );
-
-    await _datasource.saveKycProfile(approved);
-
-    await _datasource.logAuditAction(KycAuditLogEntry(
-      id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
+    // Throws when the caller is not an administrator, so a failed review can
+    // never look like a successful one.
+    final result = await _datasource.reviewProfile(
       kycId: kycId,
-      userId: profile.userId,
-      action: 'APPROVED',
-      performedBy: reviewerEmail,
-      timestamp: DateTime.now(),
-      notes: 'KYC verified and approved by Compliance Officer $reviewerEmail.',
-    ));
-
-    return approved;
-  }
-
-  /// Instant automated KYC verification (Exness-Speed AI Fast-Track engine)
-  Future<KycProfileEntity> autoApproveKyc(String userId) async {
-    final all = await _datasource.fetchAllKycProfiles();
-    var profile = all.firstWhere(
-      (p) => p.userId == userId,
-      orElse: () => throw Exception('KYC profile for user $userId not found.'),
+      decision: decision,
+      notes: notes,
     );
 
-    // If application was not yet submitted to queue, submit first
-    if (profile.status != KycVerificationStatus.pendingReview &&
-        profile.status != KycVerificationStatus.approved) {
-      profile = profile.copyWith(
-        status: KycVerificationStatus.pendingReview,
-        submittedAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      await _datasource.saveKycProfile(profile);
+    final reviewer = (result['reviewed_by'] as String?) ?? reviewerEmail;
+    final serverApplied = result['status'] != 'offline';
+
+    final refreshed =
+        serverApplied ? await _datasource.fetchKycProfile(profile.userId) : null;
+    final updated = refreshed ??
+        profile.copyWith(
+          status: resultingStatus,
+          reviewedAt: DateTime.now(),
+          reviewedBy: reviewer,
+          rejectionReason:
+              resultingStatus == KycVerificationStatus.rejected ? notes?.trim() : null,
+          resubmissionNotes: resultingStatus ==
+                  KycVerificationStatus.resubmissionRequired
+              ? notes?.trim()
+              : null,
+          updatedAt: DateTime.now(),
+        );
+
+    await _datasource.saveKycProfile(updated);
+
+    if (!serverApplied) {
+      await _datasource.logAuditAction(KycAuditLogEntry(
+        id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
+        kycId: kycId,
+        userId: profile.userId,
+        action: switch (decision) {
+          'APPROVE' => 'APPROVED',
+          'REJECT' => 'REJECTED',
+          _ => 'RESUBMISSION_REQUESTED',
+        },
+        performedBy: reviewerEmail,
+        timestamp: DateTime.now(),
+        notes: notes?.trim().isNotEmpty == true
+            ? notes!.trim()
+            : 'Application reviewed by $reviewerEmail.',
+      ));
     }
 
-    final approved = profile.copyWith(
-      status: KycVerificationStatus.approved,
-      reviewedAt: DateTime.now(),
-      reviewedBy: 'AsianFX AI Auto-Engine (Fast-Track)',
-      rejectionReason: null,
-      resubmissionNotes: null,
-      updatedAt: DateTime.now(),
-    );
-
-    await _datasource.saveKycProfile(approved);
-
-    await _datasource.logAuditAction(KycAuditLogEntry(
-      id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
-      kycId: profile.id,
-      userId: userId,
-      action: 'AUTO_APPROVED_AI',
-      performedBy: 'AsianFX AI Auto-Engine (Fast-Track)',
-      timestamp: DateTime.now(),
-      notes: 'Instant biometric & AML clearance passed automatically in 2.8s (Exness-Speed Fast-Track). Approved Level 2.',
-    ));
-
-    return approved;
+    return updated;
   }
 
-  /// Admin rejects KYC application with mandatory reason
+  /// Admin approves a KYC application.
+  Future<KycProfileEntity> adminApproveKyc({
+    required String kycId,
+    required String reviewerEmail,
+  }) {
+    return _applyReview(
+      kycId: kycId,
+      decision: 'APPROVE',
+      reviewerEmail: reviewerEmail,
+      resultingStatus: KycVerificationStatus.approved,
+    );
+  }
+
+  /// Admin rejects a KYC application with a mandatory reason.
   Future<KycProfileEntity> adminRejectKyc({
     required String kycId,
     required String reviewerEmail,
     required String reason,
-  }) async {
+  }) {
     if (reason.trim().isEmpty) {
       throw Exception('A valid rejection reason is required by regulatory compliance rules.');
     }
-
-    final all = await _datasource.fetchAllKycProfiles();
-    final profile = all.firstWhere(
-      (p) => p.id == kycId,
-      orElse: () => throw Exception('KYC profile $kycId not found.'),
-    );
-
-    final rejected = profile.copyWith(
-      status: KycVerificationStatus.rejected,
-      rejectionReason: reason.trim(),
-      reviewedAt: DateTime.now(),
-      reviewedBy: reviewerEmail,
-      updatedAt: DateTime.now(),
-    );
-
-    await _datasource.saveKycProfile(rejected);
-
-    await _datasource.logAuditAction(KycAuditLogEntry(
-      id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
+    return _applyReview(
       kycId: kycId,
-      userId: profile.userId,
-      action: 'REJECTED',
-      performedBy: reviewerEmail,
-      timestamp: DateTime.now(),
-      notes: 'KYC application rejected by $reviewerEmail. Reason: $reason',
-    ));
-
-    return rejected;
+      decision: 'REJECT',
+      reviewerEmail: reviewerEmail,
+      resultingStatus: KycVerificationStatus.rejected,
+      notes: reason.trim(),
+    );
   }
 
-  /// Admin requests resubmission for specific documents
+  /// Admin asks the applicant to resubmit specific documents.
   Future<KycProfileEntity> adminRequestResubmission({
     required String kycId,
     required String reviewerEmail,
     required String notes,
-  }) async {
+  }) {
     if (notes.trim().isEmpty) {
       throw Exception('Please specify what documents or information need resubmission.');
     }
-
-    final all = await _datasource.fetchAllKycProfiles();
-    final profile = all.firstWhere(
-      (p) => p.id == kycId,
-      orElse: () => throw Exception('KYC profile $kycId not found.'),
-    );
-
-    final resubmission = profile.copyWith(
-      status: KycVerificationStatus.resubmissionRequired,
-      resubmissionNotes: notes.trim(),
-      reviewedAt: DateTime.now(),
-      reviewedBy: reviewerEmail,
-      updatedAt: DateTime.now(),
-    );
-
-    await _datasource.saveKycProfile(resubmission);
-
-    await _datasource.logAuditAction(KycAuditLogEntry(
-      id: 'audit_${DateTime.now().millisecondsSinceEpoch}',
+    return _applyReview(
       kycId: kycId,
-      userId: profile.userId,
-      action: 'RESUBMISSION_REQUESTED',
-      performedBy: reviewerEmail,
-      timestamp: DateTime.now(),
-      notes: 'Resubmission requested by $reviewerEmail. Instructions: $notes',
-    ));
+      decision: 'RESUBMIT',
+      reviewerEmail: reviewerEmail,
+      resultingStatus: KycVerificationStatus.resubmissionRequired,
+      notes: notes.trim(),
+    );
+  }
 
-    return resubmission;
+  /// Verification is manual: an application can only be queued from the client,
+  /// never approved. Retained so existing call sites keep compiling, and now
+  /// simply submits for compliance review.
+  @Deprecated('Verification is reviewed by an administrator. Use submitKycApplication().')
+  Future<KycProfileEntity> autoApproveKyc(String userId) {
+    return submitKycApplication(userId);
   }
 
   /// Retrieve audit logs for compliance tracking

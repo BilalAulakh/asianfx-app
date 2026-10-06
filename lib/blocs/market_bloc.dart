@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../data/datasources/market_feed_service.dart';
 import '../domain/entities/chart_entities.dart';
 import '../domain/entities/trading_entities.dart';
+import '../core/utils/fx_session.dart';
 
 // ── Events ────────────────────────────────────────────────────────────────────
 abstract class MarketEvent {}
@@ -172,28 +173,10 @@ class MarketBloc extends Bloc<MarketEvent, MarketState> {
     ));
   }
 
-  DateTime _getCandlePeriodStart(DateTime time, ChartTimeframe tf) {
-    switch (tf) {
-      case ChartTimeframe.m1:
-        return DateTime(time.year, time.month, time.day, time.hour, time.minute);
-      case ChartTimeframe.m5:
-        final m = (time.minute ~/ 5) * 5;
-        return DateTime(time.year, time.month, time.day, time.hour, m);
-      case ChartTimeframe.m15:
-        final m = (time.minute ~/ 15) * 15;
-        return DateTime(time.year, time.month, time.day, time.hour, m);
-      case ChartTimeframe.m30:
-        final m = (time.minute ~/ 30) * 30;
-        return DateTime(time.year, time.month, time.day, time.hour, m);
-      case ChartTimeframe.h1:
-        return DateTime(time.year, time.month, time.day, time.hour);
-      case ChartTimeframe.h4:
-        final h = (time.hour ~/ 4) * 4;
-        return DateTime(time.year, time.month, time.day, h);
-      case ChartTimeframe.d1:
-        return DateTime(time.year, time.month, time.day);
-    }
-  }
+  // Candle buckets follow the FX session clock (rollover 17:00 New York), same as
+  // OANDA/TradingView, so the chart countdown and new-candle boundaries agree.
+  DateTime _getCandlePeriodStart(DateTime time, ChartTimeframe tf) =>
+      FxSession.periodStart(time, tf);
 
   void _onTickReceived(
     MarketTickReceivedEvent event,
@@ -237,7 +220,7 @@ class MarketBloc extends Bloc<MarketEvent, MarketState> {
           close: curPrice,
           high: max(lastCandle.high, curPrice),
           low: min(lastCandle.low, curPrice),
-          volume: lastCandle.volume + 1.0,
+          volume: lastCandle.volume + 0.1,
         );
         updatedCandles[updatedCandles.length - 1] = updatedLast;
       }

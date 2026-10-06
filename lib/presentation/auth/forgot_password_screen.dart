@@ -1,8 +1,6 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../blocs/auth_bloc.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
@@ -24,7 +22,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   int _step = 0; // 0: Request Code, 1: Enter Code & New Password, 2: Success
   bool _isLoading = false;
-  String? _generatedCode;
   String? _errorMessage;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
@@ -50,33 +47,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _errorMessage = null;
     });
 
-    try {
-      // Generate 6-digit verification code
-      final random = Random();
-      final code = (100000 + random.nextInt(900000)).toString();
-      _generatedCode = code;
-
-      // Attempt Supabase reset email dispatch
-      try {
-        await Supabase.instance.client.auth.resetPasswordForEmail(email);
-      } catch (_) {}
-
-      await Future.delayed(const Duration(milliseconds: 700));
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
+    final authBloc = context.read<AuthBloc>();
+    final sent = await authBloc.requestPasswordReset(email);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (sent) {
         _step = 1;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Could not request password reset. Please try again.';
-      });
-    }
+      } else {
+        _errorMessage = authBloc.state.error ?? 'Could not request password reset. Please try again.';
+      }
+    });
   }
 
+  /// The code is verified by Supabase (OtpType.recovery). There is no local
+  /// fallback: a code the server does not accept never changes a password.
   Future<void> _resetPassword() async {
     final email = _emailController.text.trim();
     final enteredCode = _codeController.text.trim();
@@ -84,15 +69,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final confirmPassword = _confirmPasswordController.text;
 
     if (enteredCode.isEmpty) {
-      setState(() => _errorMessage = 'Please enter the 6-digit verification code.');
+      setState(() => _errorMessage = 'Please enter the verification code from your email.');
       return;
     }
-
     if (newPassword.length < 6) {
       setState(() => _errorMessage = 'Password must be at least 6 characters long.');
       return;
     }
-
     if (newPassword != confirmPassword) {
       setState(() => _errorMessage = 'Passwords do not match.');
       return;
@@ -103,49 +86,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _errorMessage = null;
     });
 
-    // 1. Attempt Supabase Auth recovery OTP verification
-    bool verifiedWithSupabase = false;
-    try {
-      final res = await Supabase.instance.client.auth.verifyOTP(
-        email: email,
-        token: enteredCode,
-        type: OtpType.recovery,
-      );
-      if (res.session != null || res.user != null) {
-        verifiedWithSupabase = true;
-      }
-    } catch (_) {
-      // If email OTP failed or rate-limited, fallback to local generated code check
-    }
-
-    // 2. Validate against either Supabase or the generated test code
-    final bool isLocalValid = _generatedCode != null && enteredCode == _generatedCode;
-    if (!verifiedWithSupabase && !isLocalValid) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Invalid or expired 6-digit verification code.';
-      });
-      return;
-    }
-
-    final success = await context.read<AuthBloc>().resetPassword(
+    final authBloc = context.read<AuthBloc>();
+    final success = await authBloc.completePasswordRecovery(
       email: email,
+      code: enteredCode,
       newPassword: newPassword,
     );
-
     if (!mounted) return;
 
-    if (success) {
-      setState(() {
-        _isLoading = false;
-        _step = 2; // Success
-      });
-    } else {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Failed to reset password. Please try again.';
-      });
-    }
+    setState(() {
+      _isLoading = false;
+      if (success) {
+        _step = 2;
+      } else {
+        _errorMessage = authBloc.state.error ?? 'Failed to reset password. Please try again.';
+      }
+    });
   }
 
   @override
@@ -338,46 +294,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.verified_rounded, color: Color(0xFFFFD600), size: 24),
+              const Icon(Icons.mark_email_read_rounded, color: Color(0xFFFFD600), size: 24),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Your 6-Digit Reset Code:',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      _generatedCode ?? '',
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 4,
-                        color: Color(0xFFFFD600),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (_generatedCode != null) {
-                    _codeController.text = _generatedCode!;
-                  }
-                },
-                child: const Text(
-                  'Auto-fill',
-                  style: TextStyle(
-                    color: Color(0xFFFFD600),
-                    fontWeight: FontWeight.bold,
+                child: Text(
+                  'We sent a verification code to ${_emailController.text.trim()}. '
+                  'Enter it below to choose a new password.',
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
                     fontSize: 12,
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ),
@@ -389,7 +315,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         // Code Input
         FxTextField(
           controller: _codeController,
-          label: '6-Digit Reset Code',
+          label: 'Verification Code',
           hint: '123456',
           keyboardType: TextInputType.number,
           prefixIcon: Icons.security_rounded,
