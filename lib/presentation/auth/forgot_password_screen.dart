@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -26,8 +28,44 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
+  /// Supabase allows one reset e-mail per address per 60 seconds.
+  static const _resendAfter = 60;
+  int _resendIn = 0;
+  Timer? _resendTimer;
+
+  void _startResendCooldown() {
+    _resendTimer?.cancel();
+    setState(() => _resendIn = _resendAfter);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      setState(() => _resendIn--);
+      if (_resendIn <= 0) t.cancel();
+    });
+  }
+
+  Future<void> _resendCode() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    final authBloc = context.read<AuthBloc>();
+    final sent = await authBloc.requestPasswordReset(_emailController.text.trim());
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (!sent) _errorMessage = authBloc.state.error ?? 'Could not send a new code. Please try again.';
+    });
+    if (sent) {
+      _startResendCooldown();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A new code has been sent to your email.')),
+      );
+    }
+  }
+
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _emailController.dispose();
     _codeController.dispose();
     _newPasswordController.dispose();
@@ -54,10 +92,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _isLoading = false;
       if (sent) {
         _step = 1;
+        _codeController.clear();
       } else {
         _errorMessage = authBloc.state.error ?? 'Could not request password reset. Please try again.';
       }
     });
+    if (sent) _startResendCooldown();
   }
 
   /// The code is verified by Supabase (OtpType.recovery). There is no local
@@ -207,7 +247,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          "Enter your registered account email and we'll generate your verification code to reset your password.",
+          "Enter your registered account email and we'll send you a verification code to reset your password.",
           style: TextStyle(
             fontFamily: 'Inter',
             fontSize: 14,
@@ -316,7 +356,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         FxTextField(
           controller: _codeController,
           label: 'Verification Code',
-          hint: '123456',
+          hint: 'Code from the email',
           keyboardType: TextInputType.number,
           prefixIcon: Icons.security_rounded,
         ),
@@ -370,6 +410,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           label: 'Confirm & Reset Password',
           isLoading: _isLoading,
           onPressed: _resetPassword,
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: TextButton(
+            onPressed: _isLoading || _resendIn > 0 ? null : _resendCode,
+            child: Text(
+              _resendIn > 0 ? "Didn't get the code? Resend in ${_resendIn}s" : "Didn't get the code? Resend",
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _resendIn > 0 ? AppColors.textSecondary : AppColors.brandPrimary,
+              ),
+            ),
+          ),
+        ),
+        const Center(
+          child: Text(
+            'Also check your Spam / Junk folder.',
+            style: TextStyle(fontFamily: 'Inter', fontSize: 11, color: AppColors.textSecondary),
+          ),
         ),
       ],
     );

@@ -1,7 +1,7 @@
 name: asianfxapp
 description: "FXAsianApp – Professional Trading Platform"
 publish_to: 'none'
-version: 1.0.4+5
+version: 1.0.5+6
 
 environment:
   sdk: ^3.12.2

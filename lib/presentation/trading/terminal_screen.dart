@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../blocs/blocs.dart';
 import '../../core/router/app_router.dart';
+import '../../core/theme/app_theme.dart';
 
 import '../../core/math/money_math.dart';
 import '../../domain/entities/chart_entities.dart';
@@ -39,8 +40,18 @@ class _TerminalScreenState extends State<TerminalScreen> {
     final account = engineState.accountState;
     final authUser = context.watch<AuthBloc>().state.user;
 
+    // Palette for the active theme (light / dark).
+    final isDark = context.isDarkMode;
+    final textPrimary = context.textPrimaryColor;
+    final textSecondary = context.textSecondaryColor;
+    final cardBg = context.cardBg;
+    final border = context.subtleBorderColor;
+    final toolBg = isDark ? const Color(0xFF162030) : const Color(0xFFF1F5F9);
+    final rowBg = isDark ? const Color(0xFF0F1520) : const Color(0xFFF8FAFC);
+    final accent = isDark ? const Color(0xFFFFD600) : const Color(0xFFB7791F);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E17),
+      backgroundColor: context.scaffoldBg,
       body: SafeArea(
         child: Column(
           children: [
@@ -72,13 +83,13 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Text(
+                          Text(
                             'FXAsian Terminal',
                             style: TextStyle(
                               fontFamily: 'Inter',
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: textPrimary,
                             ),
                           ),
                         ],
@@ -89,7 +100,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 10,
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: textSecondary,
                         ),
                       ),
                     ],
@@ -104,17 +115,19 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF2A2000), Color(0xFF181300)],
+                  gradient: LinearGradient(
+                    colors: isDark
+                        ? const [Color(0xFF2A2000), Color(0xFF181300)]
+                        : const [Color(0xFFFFF8E1), Color(0xFFFFF1C2)],
                   ),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFFFD600), width: 1.2),
+                  border: Border.all(color: accent, width: 1.2),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFFFD600), size: 22),
+                    Icon(Icons.admin_panel_settings_rounded, color: accent, size: 22),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -124,13 +137,14 @@ class _TerminalScreenState extends State<TerminalScreen> {
                               fontFamily: 'Inter',
                               fontSize: 12,
                               fontWeight: FontWeight.w900,
-                              color: Color(0xFFFFD600),
+                              color: accent,
                               letterSpacing: 0.5,
                             ),
                           ),
                           Text(
                             'Dealing Desk • Spread Control • KYC Approvals',
-                            style: TextStyle(fontSize: 10, color: Color(0xFFE5C158)),
+                            style: TextStyle(
+                                fontSize: 10, color: isDark ? const Color(0xFFE5C158) : const Color(0xFF8A6D00)),
                           ),
                         ],
                       ),
@@ -199,11 +213,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF1E2838) : Colors.transparent,
+                          color: isSelected
+                              ? (isDark ? const Color(0xFF1E2838) : const Color(0xFFFFF8E1))
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF1C2535),
-                          ),
+                          border: Border.all(color: isSelected ? accent : border),
                         ),
                         child: Row(
                           children: [
@@ -213,7 +227,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                                 fontFamily: 'Inter',
                                 fontSize: 12,
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                color: isSelected ? Colors.white : const Color(0xFF848E9C),
+                                color: isSelected ? textPrimary : textSecondary,
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -244,9 +258,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF151D28),
+                  color: cardBg,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF1C2535)),
+                  border: Border.all(color: border),
                 ),
                 child: Row(
                   children: [
@@ -255,11 +269,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
                       children: [
                         Text(
                           MoneyMath.formatDec(live.midPrice, live.decimals),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'Inter',
                             fontSize: 22,
                             fontWeight: FontWeight.w900,
-                            color: Colors.white,
+                            color: textPrimary,
                           ),
                         ),
                         Row(
@@ -267,16 +281,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF0F141C),
+                                color: context.inputBg,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 'Spread: ${live.spreadPips.toStringAsFixed(1)} pips',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontFamily: 'Inter',
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFFFFD600),
+                                  color: accent,
                                 ),
                               ),
                             ),
@@ -285,10 +299,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             const SizedBox(width: 8),
                             Text(
                               'Markup: +${live.spreadMarkupPips}p',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 10,
-                                color: Color(0xFF848E9C),
+                                color: textSecondary,
                               ),
                             ),
                           ],
@@ -301,20 +315,20 @@ class _TerminalScreenState extends State<TerminalScreen> {
                       children: [
                         Row(
                           children: [
-                            const Text('24h H: ', style: TextStyle(fontSize: 10, color: Color(0xFF848E9C))),
+                            Text('24h H: ', style: TextStyle(fontSize: 10, color: textSecondary)),
                             Text(
                               MoneyMath.formatDec(live.high24h, live.decimals),
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textPrimary),
                             ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Text('24h L: ', style: TextStyle(fontSize: 10, color: Color(0xFF848E9C))),
+                            Text('24h L: ', style: TextStyle(fontSize: 10, color: textSecondary)),
                             Text(
                               MoneyMath.formatDec(live.low24h, live.decimals),
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textPrimary),
                             ),
                           ],
                         ),
@@ -375,7 +389,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                               fontFamily: 'Inter',
                               fontSize: 11,
                               fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                              color: isSel ? Colors.black : const Color(0xFF848E9C),
+                              color: isSel ? Colors.black : textSecondary,
                             ),
                           ),
                         ),
@@ -395,16 +409,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
                         margin: const EdgeInsets.only(right: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF162030),
+                          color: toolBg,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF2B384E)),
+                          border: Border.all(color: border),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.zoom_in_rounded, color: Color(0xFFFFD600), size: 14),
-                            SizedBox(width: 2),
-                            Text('+', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                            Icon(Icons.zoom_in_rounded, color: accent, size: 14),
+                            const SizedBox(width: 2),
+                            Text('+', style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 11)),
                           ],
                         ),
                       ),
@@ -422,16 +436,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
                         margin: const EdgeInsets.only(right: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF162030),
+                          color: toolBg,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF2B384E)),
+                          border: Border.all(color: border),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.zoom_out_rounded, color: Color(0xFFFFD600), size: 14),
-                            SizedBox(width: 2),
-                            Text('-', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                            Icon(Icons.zoom_out_rounded, color: accent, size: 14),
+                            const SizedBox(width: 2),
+                            Text('-', style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 11)),
                           ],
                         ),
                       ),
@@ -449,11 +463,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                         margin: const EdgeInsets.only(right: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF162030),
+                          color: toolBg,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF2B384E)),
+                          border: Border.all(color: border),
                         ),
-                        child: const Icon(Icons.fit_screen_rounded, color: Colors.white70, size: 14),
+                        child: Icon(Icons.fit_screen_rounded, color: textSecondary, size: 14),
                       ),
                     ),
 
@@ -470,15 +484,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF162030),
+                          color: toolBg,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF2B384E)),
+                          border: Border.all(color: border),
                         ),
                         child: Icon(
                           _chartStyle == ChartStyle.candlestick
                               ? Icons.candlestick_chart_rounded
                               : Icons.show_chart_rounded,
-                          color: const Color(0xFFFFD600),
+                          color: accent,
                           size: 14,
                         ),
                       ),
@@ -494,9 +508,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF162030),
+                  color: toolBg,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF2B384E)),
+                  border: Border.all(color: border),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -506,17 +520,17 @@ class _TerminalScreenState extends State<TerminalScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.show_chart_rounded, color: Color(0xFFFFD600), size: 16),
+                            Icon(Icons.show_chart_rounded, color: accent, size: 16),
                             const SizedBox(width: 6),
                             Text(
                               engineState.pendingOrders.isNotEmpty
                                   ? 'Trades (${engineState.openPositions.length}) • Pending (${engineState.pendingOrders.length})'
                                   : 'Live Trades (${engineState.openPositions.length})',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                                color: textPrimary,
                               ),
                             ),
                           ],
@@ -534,12 +548,12 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             ),
                           )
                         else
-                          const Text(
+                          Text(
                             'Orders Waiting Fill',
                             style: TextStyle(
                               fontFamily: 'Inter',
                               fontSize: 11,
-                              color: Color(0xFFFFD600),
+                              color: accent,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -552,7 +566,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         margin: const EdgeInsets.only(top: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F1520),
+                          color: rowBg,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: trade.isBuy
@@ -584,8 +598,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             const SizedBox(width: 8),
                             Text(
                               '${trade.symbol} (${trade.lots} lots)',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: textPrimary,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 11,
                               ),
@@ -629,10 +643,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         margin: const EdgeInsets.only(top: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F1520),
+                          color: rowBg,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: const Color(0xFFFFD600).withValues(alpha: 0.4),
+                            color: accent.withValues(alpha: 0.4),
                           ),
                         ),
                         child: Row(
@@ -640,13 +654,13 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFFD600).withValues(alpha: 0.18),
+                                color: accent.withValues(alpha: 0.18),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 '${order.type.name.toUpperCase()} ${order.side.name.toUpperCase()}',
-                                style: const TextStyle(
-                                  color: Color(0xFFFFD600),
+                                style: TextStyle(
+                                  color: accent,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 10,
                                 ),
@@ -655,8 +669,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             const SizedBox(width: 8),
                             Text(
                               '${order.symbol} (${order.lots} lots)',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: textPrimary,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 11,
                               ),
@@ -664,8 +678,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
                             const Spacer(),
                             Text(
                               'Target: \$${MoneyMath.formatDec(order.targetPrice ?? order.openPrice, 2)}',
-                              style: const TextStyle(
-                                color: Color(0xFFFFD600),
+                              style: TextStyle(
+                                color: accent,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 11,
                               ),
@@ -701,10 +715,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
             // ── Bottom Order Execution Dock ───────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-              decoration: const BoxDecoration(
-                color: Color(0xFF151D28),
+              decoration: BoxDecoration(
+                color: cardBg,
                 border: Border(
-                  top: BorderSide(color: Color(0xFF1C2535), width: 1),
+                  top: BorderSide(color: border, width: 1),
                 ),
               ),
               child: Row(

@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/fx_session.dart';
 import '../../domain/entities/chart_entities.dart';
 
@@ -207,6 +208,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                       priceDecimals: widget.priceDecimals,
                       currentPrice: widget.currentPrice,
                       countdownText: _candleCloseCountdown(),
+                      isDark: context.isDarkMode,
                     ),
                   ),
 
@@ -217,12 +219,12 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF151D28).withValues(alpha: 0.95),
+                        color: context.cardBg.withValues(alpha: 0.95),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF2B384E), width: 1),
+                        border: Border.all(color: context.subtleBorderColor, width: 1),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.4),
+                            color: Colors.black.withValues(alpha: context.isDarkMode ? 0.4 : 0.08),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
@@ -242,16 +244,16 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0F141C),
+                              color: context.inputBg,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               '${(_scale * 100).toInt()}%',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFFFFD600),
+                                color: context.isDarkMode ? const Color(0xFFFFD600) : const Color(0xFFB7791F),
                               ),
                             ),
                           ),
@@ -283,9 +285,9 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF151D28).withValues(alpha: 0.96),
+                          color: context.cardBg.withValues(alpha: 0.96),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF2B384E)),
+                          border: Border.all(color: context.subtleBorderColor),
                         ),
                         child: Wrap(
                           spacing: 12,
@@ -325,10 +327,10 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
           child: Container(
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E2A3A),
+              color: context.isDarkMode ? const Color(0xFF1E2A3A) : const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Icon(icon, size: 15, color: Colors.white),
+            child: Icon(icon, size: 15, color: context.textPrimaryColor),
           ),
         ),
       ),
@@ -354,7 +356,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
             fontFamily: 'Inter',
             fontSize: 11,
             fontWeight: FontWeight.bold,
-            color: color ?? Colors.white,
+            color: color ?? context.textPrimaryColor,
           ),
         ),
       ],
@@ -389,8 +391,10 @@ class _InstitutionalChartPainter extends CustomPainter {
   final int priceDecimals;
   final double currentPrice;
   final String? countdownText;
+  final bool isDark;
 
   _InstitutionalChartPainter({
+    this.isDark = true,
     required this.candles,
     required this.style,
     required this.scale,
@@ -473,7 +477,7 @@ class _InstitutionalChartPainter extends CustomPainter {
 
     // 2. Draw Grid Lines & Right Price Axis
     final gridPaint = Paint()
-      ..color = const Color(0xFF1B2332)
+      ..color = isDark ? const Color(0xFF1B2332) : const Color(0xFFE2E8F0)
       ..strokeWidth = 0.8;
 
     const gridLinesCount = 5;
@@ -755,7 +759,7 @@ class _InstitutionalChartPainter extends CustomPainter {
     // 5. Draw Crosshair if active
     if (crosshairPosition != null) {
       final chPaint = Paint()
-        ..color = Colors.white60
+        ..color = isDark ? Colors.white60 : Colors.black45
         ..strokeWidth = 0.8;
 
       canvas.drawLine(
