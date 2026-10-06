@@ -1185,27 +1185,35 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
 
           const SizedBox(height: 4),
 
-          // Compliance & AML Declarations
-          CheckboxListTile(
-            value: _agreedToAccuracy,
-            onChanged: (v) => setState(() => _agreedToAccuracy = v ?? true),
-            activeColor: const Color(0xFFFFC700),
-            checkColor: Colors.black,
-            contentPadding: EdgeInsets.zero,
-            title: const Text(
-              'I certify that all personal information and documents provided are genuine, unaltered, and belong to me.',
-              style: TextStyle(fontSize: 12, color: Color(0xFFB0BAC9)),
-            ),
-          ),
-          CheckboxListTile(
-            value: _agreedToTerms,
-            onChanged: (v) => setState(() => _agreedToTerms = v ?? true),
-            activeColor: const Color(0xFFFFC700),
-            checkColor: Colors.black,
-            contentPadding: EdgeInsets.zero,
-            title: const Text(
-              'I agree to the institutional AML (Anti-Money Laundering) verification terms and regulatory data processing policy.',
-              style: TextStyle(fontSize: 12, color: Color(0xFFB0BAC9)),
+          // Compliance & AML Declarations (transparent Material: the tiles sit
+          // on this card's colour, so their ink must paint above it).
+          Material(
+            type: MaterialType.transparency,
+            child: Column(
+              children: [
+                CheckboxListTile(
+                  value: _agreedToAccuracy,
+                  onChanged: (v) => setState(() => _agreedToAccuracy = v ?? true),
+                  activeColor: const Color(0xFFFFC700),
+                  checkColor: Colors.black,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'I certify that all personal information and documents provided are genuine, unaltered, and belong to me.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFFB0BAC9)),
+                  ),
+                ),
+                CheckboxListTile(
+                  value: _agreedToTerms,
+                  onChanged: (v) => setState(() => _agreedToTerms = v ?? true),
+                  activeColor: const Color(0xFFFFC700),
+                  checkColor: Colors.black,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'I agree to the institutional AML (Anti-Money Laundering) verification terms and regulatory data processing policy.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFFB0BAC9)),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 24),

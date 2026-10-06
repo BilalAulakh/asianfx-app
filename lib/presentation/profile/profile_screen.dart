@@ -337,45 +337,54 @@ class ProfileScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: const Color(0xFFFFD600), width: 1.2),
                 ),
-                child: ListTile(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const AdminPortalScreen()),
-                    );
-                  },
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFD600).withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
+                // Transparent Material so the ListTile's ink splash paints
+                // above the gradient.
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AdminPortalScreen()),
+                      );
+                    },
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFD600).withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFFFD600)),
                     ),
-                    child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFFFD600)),
-                  ),
-                  title: const Text(
-                    'Multi-Desk Admin & Risk Portal',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                    title: const Text(
+                      'Multi-Desk Admin & Risk Portal',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
+                    subtitle: const Text(
+                      'Super Administrator Controls',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF848E9C)),
+                    ),
+                    trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFFFD600), size: 16),
                   ),
-                  subtitle: const Text(
-                    'Super Administrator Controls',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF848E9C)),
-                  ),
-                  trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFFFD600), size: 16),
                 ),
               ),
               const SizedBox(height: 16),
             ],
 
             // ── Security & System Actions ──────────────────────────────────
-            Container(
-              decoration: BoxDecoration(
-                color: context.cardBg,
+            // A Material (not a decorated Container) so the ListTiles' ink
+            // splashes paint on the card.
+            Material(
+              color: context.cardBg,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: context.borderColor),
+                side: BorderSide(color: context.borderColor),
               ),
               child: Column(
                 children: [

@@ -248,14 +248,17 @@ class _AppReleaseTabState extends State<AppReleaseTab> {
               _field('APK download link', _apkUrl, 'https://your-site.com/FXAsian.apk', keyboard: TextInputType.url),
               _field("What's new (shown to users)", _notes, '- Faster prices\n- Bug fixes', maxLines: 4),
               _field('SHA-256 of the APK (optional)', _sha, 'printed by the release build script'),
-              SwitchListTile(
-                value: _force,
-                onChanged: (v) => setState(() => _force = v),
-                activeThumbColor: _green,
-                contentPadding: EdgeInsets.zero,
-                title: Text('Required update', style: TextStyle(color: _textPrimary, fontSize: 13)),
-                subtitle: Text('Older versions cannot be used until they update.',
-                    style: TextStyle(color: _textSecondary, fontSize: 11)),
+              Material(
+                type: MaterialType.transparency,
+                child: SwitchListTile(
+                  value: _force,
+                  onChanged: (v) => setState(() => _force = v),
+                  activeThumbColor: _green,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Required update', style: TextStyle(color: _textPrimary, fontSize: 13)),
+                  subtitle: Text('Older versions cannot be used until they update.',
+                      style: TextStyle(color: _textSecondary, fontSize: 11)),
+                ),
               ),
               const SizedBox(height: 12),
               ElevatedButton.icon(
