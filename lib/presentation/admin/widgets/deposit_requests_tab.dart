@@ -92,16 +92,36 @@ class _DepositRequestsTabState extends State<DepositRequestsTab> {
           ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            sliver: SliverList.builder(
-              itemCount: cards.length,
-              itemBuilder: (context, i) => RepaintBoundary(
-                child: _DepositReviewCard(
-                  key: ValueKey(cards[i].id),
-                  deposit: cards[i],
-                  service: _service,
-                  onReviewed: _load,
-                ),
-              ),
+            // Grid: 2 cards per row on wide screens, 1 on phones. Rows are built
+            // lazily; cards in a row keep their own height (top-aligned).
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) {
+                final cols = constraints.crossAxisExtent >= _twoColumnMinWidth ? 2 : 1;
+                final rows = (cards.length / cols).ceil();
+                return SliverList.builder(
+                  itemCount: rows,
+                  itemBuilder: (context, r) => Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var c = 0; c < cols; c++) ...[
+                        if (c > 0) const SizedBox(width: 12),
+                        Expanded(
+                          child: r * cols + c < cards.length
+                              ? RepaintBoundary(
+                                  child: _DepositReviewCard(
+                                    key: ValueKey(cards[r * cols + c].id),
+                                    deposit: cards[r * cols + c],
+                                    service: _service,
+                                    onReviewed: _load,
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -163,6 +183,9 @@ class _DepositRequestsTabState extends State<DepositRequestsTab> {
   ];
 }
 
+/// Below this width the deposit cards are shown one per row.
+const double _twoColumnMinWidth = 900;
+
 class _DepositReviewCard extends StatefulWidget {
   final DepositRequest deposit;
   final DepositService service;
@@ -185,7 +208,9 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
   static const _green = Color(0xFF00D68F);
   static const _red = Color(0xFFFF4757);
   static const _amber = Color(0xFFFFB300);
-  static const double _thumbHeight = 260;
+  // Small preview tile; tapping opens the full-resolution zoom viewer.
+  static const double _thumbHeight = 150;
+  static const double _thumbWidth = 120;
 
   bool get _isDark => context.watch<ThemeCubit>().state;
   Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
@@ -392,8 +417,8 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
     final fmt = DateFormat('yyyy-MM-dd HH:mm');
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _cardBg,
         borderRadius: BorderRadius.circular(14),
@@ -458,144 +483,174 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
                 style: TextStyle(color: _green, fontSize: 11.5, fontWeight: FontWeight.bold),
               ),
             ),
-          _kv('Submitted', fmt.format(d.createdAt.toLocal())),
-          _kv('User ID', d.userId, mono: true),
-          _kv('TXID', d.hasTxid ? d.txid : 'Not provided — verify via screenshot', mono: d.hasTxid),
-          if (d.fromAddress != null) _kv('From', d.fromAddress!, mono: true),
-          if (d.payToAddress != null) _kv('To (company)', d.payToAddress!, mono: true),
-          if (d.onchainAmount != null) _kv('On-chain amount', '${MoneyMath.formatCurrency(d.onchainAmount!)} USDT'),
-          if (d.status == DepositStatus.approved) ...[
-            _kv('Credited', MoneyMath.formatCurrency(d.amountCredited ?? Decimal.zero)),
-            _kv('Reviewed', '${d.reviewedBy ?? ''} ${d.reviewedAt != null ? fmt.format(d.reviewedAt!.toLocal()) : ''}'),
-          ],
-          if (d.status == DepositStatus.rejected) ...[
-            _kv('Reason', d.rejectReason ?? ''),
-            _kv('Reviewed', '${d.reviewedBy ?? ''} ${d.reviewedAt != null ? fmt.format(d.reviewedAt!.toLocal()) : ''}'),
-          ],
-          if ((d.adminNote ?? '').isNotEmpty) _kv('Admin note', d.adminNote!),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
+          // Details on the left, screenshot preview on the right: a short card.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (d.hasTxid)
-                OutlinedButton.icon(
-                  onPressed: () => launchUrl(d.tronscanUrl, mode: LaunchMode.externalApplication),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 14),
-                  label: const Text('Verify on Tronscan'),
-                ),
-              if (d.hasTxid)
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: d.txid));
-                    _snack('TXID copied.', _green);
-                  },
-                  icon: const Icon(Icons.copy_rounded, size: 14),
-                  label: const Text('Copy TXID'),
-                ),
-            ],
-          ),
-          if (_proofUrl != null) ...[
-            const SizedBox(height: 8),
-            FutureBuilder<String?>(
-              future: _proofUrl,
-              builder: (context, snap) {
-                final url = snap.data;
-                if (snap.connectionState == ConnectionState.done && url == null) {
-                  return Text('Screenshot unavailable.', style: TextStyle(fontSize: 11, color: _textSecondary));
-                }
-                // Fixed height whether loading or loaded: the card never changes
-                // size under the user's finger while scrolling.
-                return InkWell(
-                  onTap: url == null ? null : () => _openProof(url),
-                  child: Container(
-                    height: _thumbHeight,
-                    decoration: BoxDecoration(
-                      color: _subCardBg,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _border),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _kv('Submitted', fmt.format(d.createdAt.toLocal())),
+                    _kv('User ID', d.userId, mono: true),
+                    _kv('TXID', d.hasTxid ? d.txid : 'Not provided — verify via screenshot', mono: d.hasTxid),
+                    if (d.fromAddress != null) _kv('From', d.fromAddress!, mono: true),
+                    if (d.payToAddress != null) _kv('To (company)', d.payToAddress!, mono: true),
+                    if (d.onchainAmount != null)
+                      _kv('On-chain amount', '${MoneyMath.formatCurrency(d.onchainAmount!)} USDT'),
+                    if (d.status == DepositStatus.approved) ...[
+                      _kv('Credited', MoneyMath.formatCurrency(d.amountCredited ?? Decimal.zero)),
+                      _kv(
+                        'Reviewed',
+                        '${d.reviewedBy ?? ''} ${d.reviewedAt != null ? fmt.format(d.reviewedAt!.toLocal()) : ''}',
+                      ),
+                    ],
+                    if (d.status == DepositStatus.rejected) ...[
+                      _kv('Reason', d.rejectReason ?? ''),
+                      _kv(
+                        'Reviewed',
+                        '${d.reviewedBy ?? ''} ${d.reviewedAt != null ? fmt.format(d.reviewedAt!.toLocal()) : ''}',
+                      ),
+                    ],
+                    if ((d.adminNote ?? '').isNotEmpty) _kv('Admin note', d.adminNote!),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if (d.hasTxid)
+                          OutlinedButton.icon(
+                            onPressed: () => launchUrl(d.tronscanUrl, mode: LaunchMode.externalApplication),
+                            icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                            label: const Text('Verify on Tronscan'),
+                          ),
+                        if (d.hasTxid)
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: d.txid));
+                              _snack('TXID copied.', _green);
+                            },
+                            icon: const Icon(Icons.copy_rounded, size: 14),
+                            label: const Text('Copy TXID'),
+                          ),
+                      ],
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: url == null
-                        ? const Center(
-                            child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
-                          )
-                        : Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              // Decoded at thumbnail size (not the full photo) so the
-                              // list stays light; the viewer loads full resolution.
-                              Image(
-                                image: ResizeImage(
-                                  NetworkImage(url),
-                                  height: (_thumbHeight * MediaQuery.devicePixelRatioOf(context)).round(),
-                                  policy: ResizeImagePolicy.fit,
-                                ),
-                                fit: BoxFit.contain,
-                                gaplessPlayback: true,
-                                errorBuilder: (_, _, _) => Center(
-                                  child: Text('Could not load screenshot', style: TextStyle(color: _textSecondary)),
-                                ),
-                              ),
-                              Positioned(
-                                right: 8,
-                                bottom: 8,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.7),
-                                    borderRadius: BorderRadius.circular(20),
+                  ],
+                ),
+              ),
+              if (_proofUrl != null) ...[
+                const SizedBox(width: 12),
+                FutureBuilder<String?>(
+                  future: _proofUrl,
+                  builder: (context, snap) {
+                    final url = snap.data;
+                    if (snap.connectionState == ConnectionState.done && url == null) {
+                      return SizedBox(
+                        width: _thumbWidth,
+                        child: Text('Screenshot unavailable.', style: TextStyle(fontSize: 11, color: _textSecondary)),
+                      );
+                    }
+                    // Fixed height whether loading or loaded: the card never changes
+                    // size under the user's finger while scrolling.
+                    return Align(
+                      alignment: Alignment.centerLeft,
+                      child: InkWell(
+                        onTap: url == null ? null : () => _openProof(url),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          width: _thumbWidth,
+                          height: _thumbHeight,
+                          decoration: BoxDecoration(
+                            color: _subCardBg,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: _border),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: url == null
+                              ? const Center(
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
                                   ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.zoom_in_rounded, size: 16, color: Colors.white),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Tap to zoom',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w600,
+                                )
+                              : Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    // Decoded at thumbnail size (not the full photo) so the
+                                    // list stays light; the viewer loads full resolution.
+                                    Image(
+                                      image: ResizeImage(
+                                        NetworkImage(url),
+                                        height: (_thumbHeight * MediaQuery.devicePixelRatioOf(context)).round(),
+                                        policy: ResizeImagePolicy.fit,
+                                      ),
+                                      fit: BoxFit.cover,
+                                      alignment: Alignment.topCenter,
+                                      gaplessPlayback: true,
+                                      errorBuilder: (_, _, _) =>
+                                          Center(child: Icon(Icons.broken_image_outlined, color: _textSecondary)),
+                                    ),
+                                    Positioned(
+                                      right: 4,
+                                      bottom: 4,
+                                      child: Tooltip(
+                                        message: 'Tap to zoom',
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(alpha: 0.7),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.zoom_in_rounded, size: 16, color: Colors.white),
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ],
-                          ),
-                  ),
-                );
-              },
-            ),
-          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
           if (d.isPending) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            // Amount and note side by side keep the card short.
             Row(
               children: [
-                Expanded(
+                SizedBox(
+                  width: 170,
                   child: TextField(
                     controller: _amountController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,4}'))],
-                    style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
                     decoration: const InputDecoration(
-                      labelText: 'Amount credited (as seen on-chain)',
+                      labelText: 'Amount received',
                       prefixText: '\$ ',
                       isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _noteController,
+                    style: TextStyle(color: _textPrimary, fontSize: 12),
+                    decoration: const InputDecoration(
+                      labelText: 'Admin note (optional)',
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _noteController,
-              style: TextStyle(color: _textPrimary, fontSize: 12),
-              decoration: const InputDecoration(labelText: 'Internal admin note (optional)', isDense: true),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -604,7 +659,8 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _red,
                       side: const BorderSide(color: _red),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      minimumSize: const Size(0, 38),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
                     child: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
@@ -616,7 +672,8 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _green,
                       foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      minimumSize: const Size(0, 38),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
                     child: _busy
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
