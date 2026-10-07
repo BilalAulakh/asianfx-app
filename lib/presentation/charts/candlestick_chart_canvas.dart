@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
@@ -7,28 +6,49 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/candle_math.dart';
-import '../../core/utils/fx_session.dart';
 import '../../domain/entities/chart_entities.dart';
 
-/// Institutional Candlestick Canvas with Interactive Zoom, Drag-Pan, Mouse Wheel, and Touch Pinch
+/// Exness-style chart palette (sampled from the Exness Trade app).
+class ExnessChartColors {
+  ExnessChartColors._();
+
+  static const bull = Color(0xFF2390F3); // blue: up candle, Buy / Ask
+  static const bear = Color(0xFFDB363D); // red: down candle, Sell / Bid
+  static const darkBg = Color(0xFF141B21);
+  static const darkGrid = Color(0xFF232B33);
+  static const lightGrid = Color(0xFFE6E9ED);
+  static const axisText = Color(0xFF7F8790);
+}
+
+/// Candles visible across the default viewport (Exness shows ~30 on a phone).
+const double _kDefaultVisibleCandles = 30.0;
+const double _kAxisWidth = 64.0;
+const double _kTimeAxisHeight = 22.0;
+const double _kRightMargin = 14.0;
+
+/// Exness-style candlestick chart: blue/red joined candles, round price levels,
+/// Bid (red) and Ask (blue) tags on the price axis, pinch / wheel zoom, drag pan
+/// and a round "fit" button to snap back to the latest candles.
 class CandlestickChartCanvas extends StatefulWidget {
   final List<CandleStickModel> candles;
   final ChartStyle style;
   final int priceDecimals;
   final double currentPrice;
+  final double? bid;
+  final double? ask;
   final double scale;
   final ValueChanged<double>? onScaleChanged;
   final ChartTimeframe? timeframe;
-  final String? symbol;
 
   const CandlestickChartCanvas({
     super.key,
     required this.candles,
     this.timeframe,
-    this.symbol,
     this.style = ChartStyle.candlestick,
     this.priceDecimals = 2,
     required this.currentPrice,
+    this.bid,
+    this.ask,
     this.scale = 1.0,
     this.onScaleChanged,
   });
@@ -37,41 +57,24 @@ class CandlestickChartCanvas extends StatefulWidget {
   State<CandlestickChartCanvas> createState() => _CandlestickChartCanvasState();
 }
 
-/// Candles visible across the default viewport (Exness shows ~30 on a phone).
-const double _kDefaultVisibleCandles = 30.0;
-
 class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
   late double _scale;
   double _previousScale = 1.0;
   double _panOffset = 0.0;
   Offset? _crosshairPosition;
 
-  Timer? _countdownTimer;
-
   @override
   void initState() {
     super.initState();
     _scale = widget.scale;
-    // Tick every second so the candle-close countdown under the price badge stays live
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
   }
 
   @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    super.dispose();
-  }
-
-  /// Time remaining until the current candle closes, TradingView-style, using the
-  /// FX session clock (daily rollover 17:00 New York). "Closed" outside trading hours.
-  String? _candleCloseCountdown() {
-    final tf = widget.timeframe ?? _inferTimeframe();
-    if (tf == null) return null;
-    final remaining = FxSession.timeToCandleClose(DateTime.now(), tf, symbol: widget.symbol);
-    if (remaining == null) return 'Closed';
-    return FxSession.formatCountdown(remaining);
+  void didUpdateWidget(covariant CandlestickChartCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scale != widget.scale) {
+      _scale = widget.scale;
+    }
   }
 
   ChartTimeframe? _inferTimeframe() {
@@ -84,35 +87,25 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
     return null;
   }
 
-  @override
-  void didUpdateWidget(covariant CandlestickChartCanvas oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.scale != widget.scale) {
-      _scale = widget.scale;
-    }
+  /// Candles joined body-to-body (open = previous close) like Exness.
+  List<CandleStickModel> _joinedCandles() {
+    final tf = widget.timeframe ?? _inferTimeframe();
+    final maxGap = tf == null ? const Duration(hours: 4) : tf.duration * 3;
+    return CandleMath.joinGaps(widget.candles, maxGap);
   }
 
-  void _zoomIn() {
-    setState(() {
-      _scale = (_scale * 1.3).clamp(0.25, 6.0);
-      widget.onScaleChanged?.call(_scale);
-    });
+  void _setScale(double s) {
+    setState(() => _scale = s.clamp(0.3, 5.0));
+    widget.onScaleChanged?.call(_scale);
   }
 
-  void _zoomOut() {
-    setState(() {
-      _scale = (_scale / 1.3).clamp(0.25, 6.0);
-      widget.onScaleChanged?.call(_scale);
-    });
-  }
-
-  void _resetZoom() {
+  void _fitToScreen() {
     setState(() {
       _scale = 1.0;
       _panOffset = 0.0;
       _crosshairPosition = null;
-      widget.onScaleChanged?.call(_scale);
     });
+    widget.onScaleChanged?.call(_scale);
   }
 
   @override
@@ -131,12 +124,15 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
             SizedBox(height: 10),
             Text(
               'Waiting for live chart data…',
-              style: TextStyle(fontFamily: 'Inter', fontSize: 11, color: Color(0xFF848E9C)),
+              style: TextStyle(fontFamily: 'Inter', fontSize: 11, color: ExnessChartColors.axisText),
             ),
           ],
         ),
       );
     }
+
+    final isDark = context.isDarkMode;
+    final showFit = _scale != 1.0 || _panOffset.abs() > 1;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -145,61 +141,37 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
 
         return MouseRegion(
           cursor: SystemMouseCursors.precise,
-          onHover: (event) {
-            _handleCrosshair(event.localPosition, width);
-          },
-          onExit: (_) {
-            setState(() {
-              _crosshairPosition = null;
-            });
-          },
+          onHover: (event) => setState(() => _crosshairPosition = event.localPosition),
+          onExit: (_) => setState(() => _crosshairPosition = null),
           child: Listener(
             behavior: HitTestBehavior.opaque,
-            onPointerSignal: (pointerSignal) {
-              if (pointerSignal is PointerScrollEvent) {
-                if (pointerSignal.scrollDelta.dy < 0) {
-                  _zoomIn();
-                } else if (pointerSignal.scrollDelta.dy > 0) {
-                  _zoomOut();
-                }
+            onPointerSignal: (signal) {
+              if (signal is PointerScrollEvent && signal.scrollDelta.dy != 0) {
+                _setScale(signal.scrollDelta.dy < 0 ? _scale * 1.2 : _scale / 1.2);
               }
             },
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onScaleStart: (_) {
-                _previousScale = _scale;
-              },
+              onScaleStart: (_) => _previousScale = _scale,
               onScaleUpdate: (details) {
+                if (details.scale != 1.0) _setScale(_previousScale * details.scale);
                 setState(() {
-                  if (details.scale != 1.0) {
-                    _scale = (_previousScale * details.scale).clamp(0.3, 5.0);
-                    widget.onScaleChanged?.call(_scale);
-                  }
                   _panOffset += details.focalPointDelta.dx;
-                  final totalCandles = widget.candles.length;
-                  final slotWidth = max(5.0, ((width - 68.0) / _kDefaultVisibleCandles) * _scale);
-                  final maxPan = max(0.0, (totalCandles * slotWidth) - (width - 68.0));
-                  _panOffset = _panOffset.clamp(-80.0, maxPan + 200.0);
+                  final plotWidth = width - _kAxisWidth - _kRightMargin;
+                  final slotWidth = max(5.0, (plotWidth / _kDefaultVisibleCandles) * _scale);
+                  final maxPan = max(0.0, widget.candles.length * slotWidth - plotWidth);
+                  _panOffset = _panOffset.clamp(-plotWidth * 0.5, maxPan + 40.0);
                 });
               },
-              onDoubleTap: _resetZoom,
-              onLongPressStart: (details) {
-                _handleCrosshair(details.localPosition, width);
-              },
-              onLongPressMoveUpdate: (details) {
-                _handleCrosshair(details.localPosition, width);
-              },
-              onLongPressEnd: (_) {
-                setState(() {
-                  _crosshairPosition = null;
-                });
-              },
+              onDoubleTap: _fitToScreen,
+              onLongPressStart: (d) => setState(() => _crosshairPosition = d.localPosition),
+              onLongPressMoveUpdate: (d) => setState(() => _crosshairPosition = d.localPosition),
+              onLongPressEnd: (_) => setState(() => _crosshairPosition = null),
               child: Stack(
                 children: [
-                  // 1. Candlestick Canvas
                   CustomPaint(
                     size: Size(width, height),
-                    painter: _InstitutionalChartPainter(
+                    painter: _ExnessChartPainter(
                       candles: _joinedCandles(),
                       style: widget.style,
                       scale: _scale,
@@ -207,74 +179,35 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                       crosshairPosition: _crosshairPosition,
                       priceDecimals: widget.priceDecimals,
                       currentPrice: widget.currentPrice,
-                      countdownText: _candleCloseCountdown(),
-                      isDark: context.isDarkMode,
+                      bid: widget.bid,
+                      ask: widget.ask,
+                      isDark: isDark,
                     ),
                   ),
-
-                  // 2. High-Visibility Floating Zoom Overlay (Top Right)
-                  Positioned(
-                    top: 8,
-                    right: 76,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: context.cardBg.withValues(alpha: 0.95),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: context.subtleBorderColor, width: 1),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: context.isDarkMode ? 0.4 : 0.08),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Zoom In (+)
-                          _zoomButton(
-                            icon: Icons.add_rounded,
-                            tooltip: 'Zoom In (Wheel Up)',
-                            onTap: _zoomIn,
-                          ),
-                          const SizedBox(width: 3),
-                          // Percentage Pill
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: context.inputBg,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '${(_scale * 100).toInt()}%',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: context.isDarkMode ? const Color(0xFFFFD600) : const Color(0xFFB7791F),
-                              ),
+                  // Round "fit" button (Exness): back to the latest candles at 100%.
+                  if (showFit)
+                    Positioned(
+                      right: _kAxisWidth + 10,
+                      bottom: _kTimeAxisHeight + 12,
+                      child: Material(
+                        color: isDark ? const Color(0xFF1F272E) : Colors.white,
+                        shape: CircleBorder(
+                          side: BorderSide(color: isDark ? const Color(0xFF2E373F) : const Color(0xFFD5DAE0)),
+                        ),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _fitToScreen,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.close_fullscreen_rounded,
+                              size: 16,
+                              color: isDark ? Colors.white70 : Colors.black54,
                             ),
                           ),
-                          const SizedBox(width: 3),
-                          // Zoom Out (-)
-                          _zoomButton(
-                            icon: Icons.remove_rounded,
-                            tooltip: 'Zoom Out (Wheel Down)',
-                            onTap: _zoomOut,
-                          ),
-                          const SizedBox(width: 3),
-                          // Reset Zoom (↺)
-                          _zoomButton(
-                            icon: Icons.fit_screen_rounded,
-                            tooltip: 'Reset Zoom (Double Tap)',
-                            onTap: _resetZoom,
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -283,46 +216,9 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
       },
     );
   }
-
-  Widget _zoomButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: context.isDarkMode ? const Color(0xFF1E2A3A) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(icon, size: 15, color: context.textPrimaryColor),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Candles joined body-to-body (open = previous close) like Exness.
-  List<CandleStickModel> _joinedCandles() {
-    final tf = widget.timeframe ?? _inferTimeframe();
-    final maxGap = tf == null ? const Duration(hours: 4) : tf.duration * 3;
-    return CandleMath.joinGaps(widget.candles, maxGap);
-  }
-
-  void _handleCrosshair(Offset localPos, double totalWidth) {
-    if (widget.candles.isEmpty) return;
-    setState(() => _crosshairPosition = localPos);
-  }
 }
 
-class _InstitutionalChartPainter extends CustomPainter {
+class _ExnessChartPainter extends CustomPainter {
   final List<CandleStickModel> candles;
   final ChartStyle style;
   final double scale;
@@ -330,11 +226,11 @@ class _InstitutionalChartPainter extends CustomPainter {
   final Offset? crosshairPosition;
   final int priceDecimals;
   final double currentPrice;
-  final String? countdownText;
+  final double? bid;
+  final double? ask;
   final bool isDark;
 
-  _InstitutionalChartPainter({
-    this.isDark = true,
+  _ExnessChartPainter({
     required this.candles,
     required this.style,
     required this.scale,
@@ -342,382 +238,202 @@ class _InstitutionalChartPainter extends CustomPainter {
     this.crosshairPosition,
     required this.priceDecimals,
     required this.currentPrice,
-    this.countdownText,
+    this.bid,
+    this.ask,
+    this.isDark = true,
   });
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (candles.isEmpty) return;
+  static const _bull = ExnessChartColors.bull;
+  static const _bear = ExnessChartColors.bear;
+  static const _tagH = 18.0;
 
-    const rightPriceAxisWidth = 68.0;
-    const rightMargin = 16.0;
-    final chartWidth = size.width - rightPriceAxisWidth;
-    final chartHeight = size.height - 22.0;
-
-    final totalCandles = candles.length;
-
-    // Slot width: ~30 candles visible across the default viewport (Exness)
-    final slotWidth = max(5.0, ((chartWidth - rightMargin) / _kDefaultVisibleCandles) * scale);
-    final candleBodyWidth = max(3.0, slotWidth * 0.72);
-
-    // 1. Calculate min and max prices strictly from candles VISIBLE on viewport
-    double minPrice = double.infinity;
-    double maxPrice = double.negativeInfinity;
-    int visibleCount = 0;
-    bool isLatestCandleVisible = false;
-
-    for (int i = 0; i < totalCandles; i++) {
-      final c = candles[i];
-      final x = (chartWidth - rightMargin) - ((totalCandles - 1 - i) * slotWidth) + panOffset;
-
-      if (x >= -slotWidth && x <= chartWidth + slotWidth) {
-        if (c.low > 0 && c.high > 0) {
-          minPrice = min(minPrice, c.low);
-          maxPrice = max(maxPrice, c.high);
-          visibleCount++;
-          if (i == totalCandles - 1) {
-            isLatestCandleVisible = true;
-          }
-        }
-      }
-    }
-
-    if (visibleCount == 0 || minPrice.isInfinite || minPrice == maxPrice) {
-      final fallbackRef = currentPrice > 0 ? currentPrice : candles.last.close;
-      minPrice = fallbackRef * 0.985;
-      maxPrice = fallbackRef * 1.015;
-    }
-
-    if (isLatestCandleVisible && currentPrice > 0) {
-      minPrice = min(minPrice, currentPrice);
-      maxPrice = max(maxPrice, currentPrice);
-    }
-
-    // Tight Exness-style fit: the visible candles fill the height, so moves
-    // read as big up/down swings instead of flat bodies.
-    final pricePadding = max((maxPrice - minPrice) * 0.08, minPrice * 0.00002);
-    minPrice -= pricePadding;
-    maxPrice += pricePadding;
-    final priceRange = max(0.0001, maxPrice - minPrice);
-
-    double getY(double price) {
-      final norm = (price - minPrice) / priceRange;
-      return chartHeight - (norm * chartHeight);
-    }
-
-    // Live price badge geometry (needed up front so axis labels can avoid it)
-    final currentY = getY(currentPrice).clamp(0.0, chartHeight);
-    final hasCountdown = countdownText != null;
-    const priceRowHeight = 18.0;
-    const countdownRowHeight = 15.0;
-    final badgeHeight = hasCountdown ? priceRowHeight + countdownRowHeight : priceRowHeight;
-    final double badgeTop =
-        (currentY - priceRowHeight / 2).clamp(0.0, max(0.0, chartHeight - badgeHeight)).toDouble();
-
-    // 2. Draw Grid Lines & Right Price Axis
-    final gridPaint = Paint()
-      ..color = isDark ? const Color(0xFF1B2332) : const Color(0xFFE2E8F0)
-      ..strokeWidth = 0.8;
-
-    // Round price levels (e.g. 4106 / 4108 / 4110) like Exness
-    final gridStep = CandleMath.niceStep(priceRange, 6);
-    for (double priceVal = (minPrice / gridStep).ceil() * gridStep;
-        priceVal <= maxPrice;
-        priceVal += gridStep) {
-      final y = getY(priceVal);
-      canvas.drawLine(Offset(0, y), Offset(chartWidth, y), gridPaint);
-
-      final textSpan = TextSpan(
-        text: priceVal.toStringAsFixed(priceDecimals),
-        style: const TextStyle(
-          fontFamily: 'Inter',
-          color: Color(0xFF848E9C),
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-      final tp = TextPainter(text: textSpan, textDirection: ui.TextDirection.ltr)..layout();
-      final labelTop = y - (tp.height / 2);
-      // Hide axis labels the live-price badge would overlap (TradingView behaviour)
-      final hiddenByBadge = labelTop + tp.height > badgeTop - 2 && labelTop < badgeTop + badgeHeight + 2;
-      if (!hiddenByBadge) {
-        tp.paint(canvas, Offset(chartWidth + 6, labelTop));
-      }
-    }
-
-    final bullColor = const Color(0xFF00D68F);
-    final bearColor = const Color(0xFFFF4757);
-
-    final bullPaint = Paint()..color = bullColor;
-    final bearPaint = Paint()..color = bearColor;
-
-    final wickWidth = max(1.1, min(1.8, slotWidth * 0.09));
-    final wickPaintBull = Paint()
-      ..color = bullColor
-      ..strokeWidth = wickWidth
-      ..strokeCap = StrokeCap.square;
-
-    final wickPaintBear = Paint()
-      ..color = bearColor
-      ..strokeWidth = wickWidth
-      ..strokeCap = StrokeCap.square;
-
-    // 3. Draw Candlesticks & Bottom Time Axis
-    int lastTimeMarkX = -100;
-    final timeMarkInterval = max(80.0, 120.0 / scale);
-
-    if (style == ChartStyle.candlestick) {
-      for (int i = 0; i < totalCandles; i++) {
-        final c = candles[i];
-        final x = (chartWidth - rightMargin) - ((totalCandles - 1 - i) * slotWidth) + panOffset;
-
-        if (x < -slotWidth || x > chartWidth + slotWidth) continue;
-
-        final isBull = c.close >= c.open;
-
-        final openY = getY(c.open);
-        final closeY = getY(c.close);
-        final highY = getY(c.high);
-        final lowY = getY(c.low);
-
-        final bodyTop = min(openY, closeY);
-        final bodyBottom = max(openY, closeY);
-        final rawHeight = bodyBottom - bodyTop;
-
-        // Upper Wick (clean segment from highY to bodyTop)
-        if (highY < bodyTop) {
-          canvas.drawLine(
-            Offset(x, highY),
-            Offset(x, bodyTop),
-            isBull ? wickPaintBull : wickPaintBear,
-          );
-        }
-
-        // Lower Wick (clean segment from bodyBottom to lowY)
-        if (lowY > bodyBottom) {
-          canvas.drawLine(
-            Offset(x, bodyBottom),
-            Offset(x, lowY),
-            isBull ? wickPaintBull : wickPaintBear,
-          );
-        }
-
-        // Candle Body
-        if (rawHeight < 1.5) {
-          // Doji: crisp horizontal bar
-          canvas.drawLine(
-            Offset(x - (candleBodyWidth / 2), bodyTop),
-            Offset(x + (candleBodyWidth / 2), bodyTop),
-            Paint()
-              ..color = isBull ? bullColor : bearColor
-              ..strokeWidth = 1.6
-              ..strokeCap = StrokeCap.square,
-          );
-        } else {
-          // Solid clean rectangle
-          final bodyRect = Rect.fromLTWH(
-            x - (candleBodyWidth / 2),
-            bodyTop,
-            candleBodyWidth,
-            rawHeight,
-          );
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(bodyRect, const Radius.circular(1.0)),
-            isBull ? bullPaint : bearPaint,
-          );
-        }
-
-        // Time mark on bottom axis
-        if (x - lastTimeMarkX > timeMarkInterval && x > 20 && x < chartWidth - 30) {
-          lastTimeMarkX = x.toInt();
-          final timeStr = _formatAxisTime(c.time);
-          final timeSpan = TextSpan(
-            text: timeStr,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              color: Color(0xFF848E9C),
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-            ),
-          );
-          final timePainter = TextPainter(text: timeSpan, textDirection: ui.TextDirection.ltr)..layout();
-          timePainter.paint(canvas, Offset(x - (timePainter.width / 2), chartHeight + 4));
-        }
-      }
-    } else {
-      // Line Area Chart
-      final linePath = Path();
-      final areaPath = Path();
-
-      bool first = true;
-      double firstX = 0;
-      double lastX = 0;
-
-      for (int i = 0; i < totalCandles; i++) {
-        final c = candles[i];
-        final x = (chartWidth - rightMargin) - ((totalCandles - 1 - i) * slotWidth) + panOffset;
-        final y = getY(c.close);
-
-        if (first) {
-          linePath.moveTo(x, y);
-          areaPath.moveTo(x, chartHeight);
-          areaPath.lineTo(x, y);
-          firstX = x;
-          first = false;
-        } else {
-          linePath.lineTo(x, y);
-          areaPath.lineTo(x, y);
-        }
-        lastX = x;
-
-        if (x - lastTimeMarkX > timeMarkInterval && x > 20 && x < chartWidth - 30) {
-          lastTimeMarkX = x.toInt();
-          final timeStr = _formatAxisTime(c.time);
-          final timeSpan = TextSpan(
-            text: timeStr,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              color: Color(0xFF848E9C),
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-            ),
-          );
-          final timePainter = TextPainter(text: timeSpan, textDirection: ui.TextDirection.ltr)..layout();
-          timePainter.paint(canvas, Offset(x - (timePainter.width / 2), chartHeight + 4));
-        }
-      }
-
-      if (!first) {
-        areaPath.lineTo(lastX, chartHeight);
-        areaPath.lineTo(firstX, chartHeight);
-        areaPath.close();
-
-        final areaGradient = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF00C896).withValues(alpha: 0.35),
-            const Color(0xFF00C896).withValues(alpha: 0.0),
-          ],
-        );
-
-        final areaPaint = Paint()
-          ..shader = areaGradient.createShader(Rect.fromLTWH(0, 0, chartWidth, chartHeight));
-        canvas.drawPath(areaPath, areaPaint);
-
-        final linePaint = Paint()
-          ..color = const Color(0xFF00C896)
-          ..strokeWidth = 2.2
-          ..style = PaintingStyle.stroke;
-        canvas.drawPath(linePath, linePaint);
-      }
-    }
-
-    // 4. Draw Current Live Price Line & TradingView-style Badge
-    // Line + badge take the live candle's direction colour (green up / red down).
-    final liveColor = currentPrice >= candles.last.open ? bullColor : bearColor;
-
-    final dashPaint = Paint()
-      ..color = liveColor.withValues(alpha: 0.9)
-      ..strokeWidth = 1.0;
-
-    const dashWidth = 2.0;
-    const dashSpace = 2.0;
-    double startX = 0;
-    while (startX < chartWidth) {
-      canvas.drawLine(Offset(startX, currentY), Offset(startX + dashWidth, currentY), dashPaint);
-      startX += dashWidth + dashSpace;
-    }
-
-    // Badge: price row centred on the price line, countdown row underneath
-    final badgeLeft = chartWidth + 1;
-    final badgeWidth = rightPriceAxisWidth - 2;
-    final badgeRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(badgeLeft, badgeTop, badgeWidth, badgeHeight),
-      const Radius.circular(3),
-    );
-    canvas.drawRRect(badgeRect, Paint()..color = liveColor);
-
-    final curPricePainter = TextPainter(
-      text: TextSpan(
-        text: currentPrice.toStringAsFixed(priceDecimals),
-        style: const TextStyle(
-          fontFamily: 'Inter',
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          fontFeatures: [ui.FontFeature.tabularFigures()],
-        ),
-      ),
-      textDirection: ui.TextDirection.ltr,
-    )..layout();
-    curPricePainter.paint(
-      canvas,
-      Offset(
-        badgeLeft + (badgeWidth - curPricePainter.width) / 2,
-        badgeTop + (priceRowHeight - curPricePainter.height) / 2,
-      ),
-    );
-
-    if (hasCountdown) {
-      final countdownPainter = TextPainter(
+  TextPainter _text(String s, {Color color = ExnessChartColors.axisText, double size = 10, FontWeight? weight}) =>
+      TextPainter(
         text: TextSpan(
-          text: countdownText,
+          text: s,
           style: TextStyle(
             fontFamily: 'Inter',
-            color: Colors.white.withValues(alpha: 0.88),
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
+            color: color,
+            fontSize: size,
+            fontWeight: weight ?? FontWeight.w500,
             fontFeatures: const [ui.FontFeature.tabularFigures()],
           ),
         ),
         textDirection: ui.TextDirection.ltr,
       )..layout();
-      countdownPainter.paint(
-        canvas,
-        Offset(
-          badgeLeft + (badgeWidth - countdownPainter.width) / 2,
-          badgeTop + priceRowHeight + (countdownRowHeight - countdownPainter.height) / 2 - 1,
-        ),
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (candles.isEmpty) return;
+
+    final chartWidth = size.width - _kAxisWidth;
+    final chartHeight = size.height - _kTimeAxisHeight;
+    final plotRight = chartWidth - _kRightMargin;
+    final total = candles.length;
+
+    final slotWidth = max(5.0, (plotRight / _kDefaultVisibleCandles) * scale);
+    final bodyWidth = max(2.0, slotWidth * 0.72);
+    double xOf(int i) => plotRight - (total - 1 - i) * slotWidth + panOffset;
+    bool onScreen(double x) => x >= -slotWidth && x <= chartWidth + slotWidth;
+
+    // 1. Price range from the visible candles only (tight Exness fit).
+    double lo = double.infinity, hi = double.negativeInfinity;
+    bool latestVisible = false;
+    for (int i = 0; i < total; i++) {
+      final c = candles[i];
+      if (!onScreen(xOf(i)) || c.low <= 0) continue;
+      lo = min(lo, c.low);
+      hi = max(hi, c.high);
+      if (i == total - 1) latestVisible = true;
+    }
+    final ref = currentPrice > 0 ? currentPrice : candles.last.close;
+    if (lo.isInfinite || lo == hi) {
+      lo = ref * 0.999;
+      hi = ref * 1.001;
+    }
+    if (latestVisible) {
+      for (final p in [currentPrice, bid ?? 0, ask ?? 0]) {
+        if (p > 0) {
+          lo = min(lo, p);
+          hi = max(hi, p);
+        }
+      }
+    }
+    final pad = max((hi - lo) * 0.08, lo * 0.00002);
+    final minPrice = lo - pad, maxPrice = hi + pad;
+    final range = max(1e-9, maxPrice - minPrice);
+    double yOf(double p) => chartHeight - (p - minPrice) / range * chartHeight;
+
+    // 2. Horizontal grid at round levels (labels drawn after the tags are placed).
+    final gridPaint = Paint()
+      ..color = isDark ? ExnessChartColors.darkGrid : ExnessChartColors.lightGrid
+      ..strokeWidth = 1;
+    final step = CandleMath.niceStep(range, 5);
+    final labels = <double, TextPainter>{};
+    for (double p = (minPrice / step).ceil() * step; p <= maxPrice; p += step) {
+      final y = yOf(p);
+      canvas.drawLine(Offset(0, y), Offset(chartWidth, y), gridPaint);
+      labels[y] = _text(p.toStringAsFixed(priceDecimals));
+    }
+
+    // 3. Candles (or line) + bottom time axis.
+    final bullPaint = Paint()..color = _bull;
+    final bearPaint = Paint()..color = _bear;
+    final wick = max(1.0, min(1.6, slotWidth * 0.08));
+    double lastTimeX = -1e9;
+    final timeGap = max(70.0, 110.0 / scale);
+
+    final line = Path();
+    bool lineStarted = false;
+    for (int i = 0; i < total; i++) {
+      final c = candles[i];
+      final x = xOf(i);
+      if (!onScreen(x)) continue;
+
+      if (style == ChartStyle.candlestick) {
+        final paint = c.close >= c.open ? bullPaint : bearPaint;
+        canvas.drawLine(Offset(x, yOf(c.high)), Offset(x, yOf(c.low)), paint..strokeWidth = wick);
+        final top = yOf(max(c.open, c.close));
+        final bottom = yOf(min(c.open, c.close));
+        canvas.drawRect(
+          Rect.fromLTRB(x - bodyWidth / 2, top, x + bodyWidth / 2, max(bottom, top + 1.2)),
+          paint,
+        );
+      } else {
+        final y = yOf(c.close);
+        lineStarted ? line.lineTo(x, y) : line.moveTo(x, y);
+        lineStarted = true;
+      }
+
+      if (x - lastTimeX > timeGap && x > 16 && x < chartWidth - 24) {
+        lastTimeX = x;
+        final tp = _text(_formatAxisTime(c.time));
+        tp.paint(canvas, Offset(x - tp.width / 2, chartHeight + 6));
+      }
+    }
+    if (lineStarted) {
+      canvas.drawPath(
+        line,
+        Paint()
+          ..color = _bull
+          ..strokeWidth = 1.8
+          ..style = PaintingStyle.stroke,
       );
     }
 
-    // 5. Draw Crosshair if active
-    if (crosshairPosition != null) {
-      final chPaint = Paint()
-        ..color = isDark ? Colors.white60 : Colors.black45
+    // 4. Ask (blue) above Bid (red): dotted lines and axis tags, Exness-style.
+    final tags = <(double, Color)>[];
+    if (ask != null && ask! > 0) tags.add((ask!, _bull));
+    if (bid != null && bid! > 0) tags.add((bid!, _bear));
+    if (tags.isEmpty) tags.add((currentPrice, currentPrice >= candles.last.open ? _bull : _bear));
+
+    // Tag tops: centred on their price, stacked so they never overlap.
+    final tops = <double>[];
+    for (final (p, _) in tags) {
+      var top = (yOf(p) - _tagH / 2).clamp(0.0, chartHeight - _tagH).toDouble();
+      if (tops.isNotEmpty) top = max(top, tops.last + _tagH);
+      tops.add(top);
+    }
+    final overflow = tops.last - (chartHeight - _tagH);
+    if (overflow > 0) {
+      for (int i = 0; i < tops.length; i++) {
+        tops[i] -= overflow;
+      }
+    }
+
+    // Axis labels hidden where a tag covers them.
+    labels.forEach((y, tp) {
+      final top = y - tp.height / 2;
+      final covered = tops.any((t) => top + tp.height > t - 1 && top < t + _tagH + 1);
+      if (!covered) tp.paint(canvas, Offset(chartWidth + 8, top));
+    });
+
+    for (int i = 0; i < tags.length; i++) {
+      final (price, color) = tags[i];
+      final y = yOf(price).clamp(0.0, chartHeight).toDouble();
+      final dash = Paint()
+        ..color = color.withValues(alpha: 0.85)
+        ..strokeWidth = 1;
+      for (double x = 0; x < chartWidth; x += 5) {
+        canvas.drawLine(Offset(x, y), Offset(min(x + 2, chartWidth), y), dash);
+      }
+      _axisTag(canvas, chartWidth, tops[i], color, price.toStringAsFixed(priceDecimals), Colors.white);
+    }
+
+    // 5. Crosshair with a price tag on the axis.
+    final ch = crosshairPosition;
+    if (ch != null && ch.dx < chartWidth && ch.dy < chartHeight) {
+      final p = Paint()
+        ..color = isDark ? Colors.white54 : Colors.black45
         ..strokeWidth = 0.8;
-
-      canvas.drawLine(
-        Offset(0, crosshairPosition!.dy),
-        Offset(chartWidth, crosshairPosition!.dy),
-        chPaint,
-      );
-      canvas.drawLine(
-        Offset(crosshairPosition!.dx, 0),
-        Offset(crosshairPosition!.dx, chartHeight),
-        chPaint,
-      );
+      canvas.drawLine(Offset(0, ch.dy), Offset(chartWidth, ch.dy), p);
+      canvas.drawLine(Offset(ch.dx, 0), Offset(ch.dx, chartHeight), p);
+      final price = maxPrice - ch.dy / chartHeight * range;
+      _axisTag(canvas, chartWidth, ch.dy - _tagH / 2, isDark ? Colors.white : Colors.black87,
+          price.toStringAsFixed(priceDecimals), isDark ? Colors.black : Colors.white);
     }
+  }
+
+  void _axisTag(Canvas canvas, double chartWidth, double top, Color bg, String text, Color fg) {
+    const w = _kAxisWidth - 3;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(chartWidth + 2, top, w, _tagH), const Radius.circular(3)),
+      Paint()..color = bg,
+    );
+    final tp = _text(text, color: fg, size: 10.5, weight: FontWeight.w600);
+    tp.paint(canvas, Offset(chartWidth + 2 + (w - tp.width) / 2, top + (_tagH - tp.height) / 2));
   }
 
   String _formatAxisTime(DateTime time) {
     if (candles.length > 1) {
       final spanDays = candles.last.time.difference(candles.first.time).inDays.abs();
-      if (spanDays > 180) {
-        // Multi-month / Multi-year: e.g. "Aug '24", "Jan '25"
-        return DateFormat("MMM ''yy").format(time);
-      } else if (spanDays > 5) {
-        // Multi-day / Multi-week: e.g. "Sep 09", "Aug 24"
-        return DateFormat('MMM dd').format(time);
-      } else if (spanDays > 1) {
-        // Cross-day: e.g. "09/08 14:00"
-        return DateFormat('MM/dd HH:mm').format(time);
-      }
+      if (spanDays > 180) return DateFormat("MMM ''yy").format(time);
+      if (spanDays > 5) return DateFormat('dd/MM').format(time);
+      if (spanDays > 1) return DateFormat('dd/MM, HH:mm').format(time);
     }
     return DateFormat('HH:mm').format(time);
   }
 
   @override
-  bool shouldRepaint(covariant _InstitutionalChartPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _ExnessChartPainter oldDelegate) => true;
 }
