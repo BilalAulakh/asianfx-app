@@ -41,7 +41,6 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
   double _previousScale = 1.0;
   double _panOffset = 0.0;
   Offset? _crosshairPosition;
-  CandleStickModel? _inspectedCandle;
 
   Timer? _countdownTimer;
 
@@ -108,7 +107,6 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
       _scale = 1.0;
       _panOffset = 0.0;
       _crosshairPosition = null;
-      _inspectedCandle = null;
       widget.onScaleChanged?.call(_scale);
     });
   }
@@ -149,7 +147,6 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
           onExit: (_) {
             setState(() {
               _crosshairPosition = null;
-              _inspectedCandle = null;
             });
           },
           child: Listener(
@@ -191,7 +188,6 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
               onLongPressEnd: (_) {
                 setState(() {
                   _crosshairPosition = null;
-                  _inspectedCandle = null;
                 });
               },
               child: Stack(
@@ -275,34 +271,6 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                       ),
                     ),
                   ),
-
-                  // 3. Crosshair HUD Card
-                  if (_inspectedCandle != null)
-                    Positioned(
-                      top: 8,
-                      left: 12,
-                      right: 220,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: context.cardBg.withValues(alpha: 0.96),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: context.subtleBorderColor),
-                        ),
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 4,
-                          children: [
-                            _hudItem('TIME', DateFormat('yyyy-MM-dd HH:mm').format(_inspectedCandle!.time)),
-                            _hudItem('O', _inspectedCandle!.open.toStringAsFixed(widget.priceDecimals)),
-                            _hudItem('H', _inspectedCandle!.high.toStringAsFixed(widget.priceDecimals), color: const Color(0xFF00D68F)),
-                            _hudItem('L', _inspectedCandle!.low.toStringAsFixed(widget.priceDecimals), color: const Color(0xFFFF4757)),
-                            _hudItem('C', _inspectedCandle!.close.toStringAsFixed(widget.priceDecimals)),
-                            _hudItem('VOL', _inspectedCandle!.volume.toStringAsFixed(0), color: const Color(0xFFFFD600)),
-                          ],
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -337,48 +305,9 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
     );
   }
 
-  Widget _hudItem(String label, String value, {Color? color}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$label: ',
-          style: const TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF848E9C),
-          ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: color ?? context.textPrimaryColor,
-          ),
-        ),
-      ],
-    );
-  }
-
   void _handleCrosshair(Offset localPos, double totalWidth) {
     if (widget.candles.isEmpty) return;
-    const rightAxis = 68.0;
-    const rightMargin = 16.0;
-    final chartWidth = totalWidth - rightAxis;
-    final totalCandles = widget.candles.length;
-    final slotWidth = max(5.0, ((chartWidth - rightMargin) / 45.0) * _scale);
-
-    final distFromRight = (chartWidth - rightMargin + _panOffset) - localPos.dx;
-    final indexFromRight = (distFromRight / slotWidth).round();
-    final candleIndex = (totalCandles - 1 - indexFromRight).clamp(0, totalCandles - 1);
-
-    setState(() {
-      _crosshairPosition = localPos;
-      _inspectedCandle = widget.candles[candleIndex];
-    });
+    setState(() => _crosshairPosition = localPos);
   }
 }
 

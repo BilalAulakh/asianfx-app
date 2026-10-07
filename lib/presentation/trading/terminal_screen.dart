@@ -10,7 +10,6 @@ import '../../domain/entities/chart_entities.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/user_entity.dart';
 import '../charts/candlestick_chart_canvas.dart';
-import '../common/widgets/price_staleness_chip.dart';
 import 'widgets/order_placement_modal.dart';
 
 class TerminalScreen extends StatefulWidget {
@@ -252,7 +251,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
             ),
             const SizedBox(height: 8),
 
-            // ── Live Quote Bar (Bid / Ask / High / Low) ─────────────────────
+            // ── Live price ─────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
@@ -262,79 +261,14 @@ class _TerminalScreenState extends State<TerminalScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: border),
                 ),
-                child: Row(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          MoneyMath.formatDec(live.midPrice, live.decimals),
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: textPrimary,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: context.inputBg,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                'Spread: ${live.spreadPips.toStringAsFixed(1)} pips',
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: accent,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            PriceStalenessChip(symbol: live.symbol),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Markup: +${live.spreadMarkupPips}p',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 10,
-                                color: textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Row(
-                          children: [
-                            Text('24h H: ', style: TextStyle(fontSize: 10, color: textSecondary)),
-                            Text(
-                              MoneyMath.formatDec(live.high24h, live.decimals),
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textPrimary),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Text('24h L: ', style: TextStyle(fontSize: 10, color: textSecondary)),
-                            Text(
-                              MoneyMath.formatDec(live.low24h, live.decimals),
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textPrimary),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
+                child: Text(
+                  MoneyMath.formatDec(live.midPrice, live.decimals),
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: textPrimary,
+                  ),
                 ),
               ),
             ),

@@ -10,6 +10,7 @@ import '../../core/math/money_math.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/chart_entities.dart';
 import 'binance_market_datasource.dart';
+import '../../core/utils/candle_math.dart';
 import '../../core/utils/fx_session.dart';
 
 /// Market data for DISPLAY.
@@ -1048,6 +1049,33 @@ class MarketFeedService {
     ];
   }
 
+  /// Intraday charts of spot metals use the broker's own minute candles
+  /// (built server-side from the published execution prices, every 3 s).
+  static bool _usesOwnCandles(String sym, ChartTimeframe tf) =>
+      !kDemoMode && _isSpotMetal(sym) && tf.duration <= const Duration(minutes: 30);
+
+  /// The broker's 1-minute candles for [sym], folded into [tf]. Empty when
+  /// signed out, offline, or before the price-candles migration is applied.
+  Future<List<CandleStickModel>> _ownCandles(String sym, ChartTimeframe tf) async {
+    final client = _supabase;
+    if (client == null) return const [];
+    try {
+      final minutes = min(3000, tf.duration.inMinutes * getHistoryCountForTimeframe(tf));
+      final rows = await client.rpc('rpc_get_price_candles', params: {'p_symbol': sym, 'p_limit': minutes});
+      return CandleMath.aggregate(CandleMath.fromServerRows(rows), tf);
+    } catch (e) {
+      debugPrint('Own candles unavailable for $sym: $e');
+      return const [];
+    }
+  }
+
+  /// [proxy] history with the broker's own candles laid over its recent part.
+  Future<List<CandleStickModel>> _withOwnCandles(
+      String sym, ChartTimeframe tf, List<CandleStickModel> proxy) async {
+    if (!_usesOwnCandles(sym, tf)) return proxy;
+    return CandleMath.merge(proxy, await _ownCandles(sym, tf));
+  }
+
   Future<List<CandleStickModel>> fetchCandlesAsync([String? symbol, ChartTimeframe? timeframe]) async {
     final sym = symbol ?? 'XAU/USD';
     final tf = timeframe ?? ChartTimeframe.h1;
@@ -1074,7 +1102,7 @@ class MarketFeedService {
     if (sym == 'XAU/USD') {
       final paxg = await _binanceSource.fetchKlines('PAXG/USD', tf, limit: 1000);
       if (paxg.length >= 60) {
-        final candles = _alignMetalHistory(sym, paxg, tf);
+        final candles = await _withOwnCandles(sym, tf, _alignMetalHistory(sym, paxg, tf));
         _candleHistory[key] = candles;
         _candleHistory[sym] = candles;
         return candles;
@@ -1103,7 +1131,7 @@ class MarketFeedService {
         }
         // Silver / platinum history is COMEX futures: re-base onto live spot.
         final series = _isSpotMetal(sym) && !kDemoMode
-            ? _alignMetalHistory(sym, yahooCandles, tf)
+            ? await _withOwnCandles(sym, tf, _alignMetalHistory(sym, yahooCandles, tf))
             : yahooCandles;
         _candleHistory[key] = series;
         _candleHistory[sym] = series;
@@ -1111,7 +1139,17 @@ class MarketFeedService {
       }
     }
 
-    // 3. No real history available.
+    // 3. No proxy history: the broker's own candles alone, if any.
+    if (_usesOwnCandles(sym, tf)) {
+      final own = await _ownCandles(sym, tf);
+      if (own.isNotEmpty) {
+        _candleHistory[key] = own;
+        _candleHistory[sym] = own;
+        return own;
+      }
+    }
+
+    // 4. No real history available.
     final existing = _candleHistory[key];
     if (!kDemoMode) return existing ?? const [];
     // DEMO ONLY: deterministic synthetic series.
