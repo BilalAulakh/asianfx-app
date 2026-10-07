@@ -224,7 +224,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
                         ),
                       ),
                       Text(
-                        topGainer.bid.toStringAsFixed(topGainer.decimals),
+                        topGainer.bid.toStringAsFixed(topGainer.displayDecimals),
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 11,
@@ -601,7 +601,7 @@ class _MarketCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    'H: ${live.high24h.toStringAsFixed(live.decimals)}',
+                    'H: ${live.high24h.toStringAsFixed(live.displayDecimals)}',
                     style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 10,
@@ -611,7 +611,7 @@ class _MarketCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'L: ${live.low24h.toStringAsFixed(live.decimals)}',
+                    'L: ${live.low24h.toStringAsFixed(live.displayDecimals)}',
                     style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 10,
@@ -648,7 +648,7 @@ class _MarketCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    live.bid.toStringAsFixed(live.decimals),
+                    live.bid.toStringAsFixed(live.displayDecimals),
                     style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 13,

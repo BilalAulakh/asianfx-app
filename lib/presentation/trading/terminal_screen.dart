@@ -262,7 +262,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                   border: Border.all(color: border),
                 ),
                 child: Text(
-                  MoneyMath.formatDec(live.midPrice, live.decimals),
+                  MoneyMath.formatDec(live.midPrice, live.displayDecimals),
                   style: TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 22,
@@ -283,7 +283,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                   timeframe: currentTf,
                   symbol: activeSymbol,
                   style: _chartStyle,
-                  priceDecimals: live.decimals,
+                  priceDecimals: live.displayDecimals,
                   currentPrice: live.midPrice.toDouble(),
                   scale: _chartScale,
                   onScaleChanged: (s) {

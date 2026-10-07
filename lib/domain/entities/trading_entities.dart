@@ -45,6 +45,11 @@ class InstrumentEntity extends Equatable {
     this.isFavorite = false,
   });
 
+  /// Digits shown on screen: one fractional digit beyond [decimals], like
+  /// Exness / TradingView (gold 4106.815, EUR/USD 1.12014). Display only:
+  /// points, pips and spread still use [decimals].
+  int get displayDecimals => decimals + 1;
+
   /// Size of one quoted price point (10^-decimals).
   Decimal get pointSize => MoneyMath.pointSize(decimals);
 

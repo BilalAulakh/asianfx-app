@@ -343,7 +343,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        'BUY\n${MoneyMath.formatDec(live.ask, live.decimals)}',
+                        'BUY\n${MoneyMath.formatDec(live.ask, live.displayDecimals)}',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Inter',
@@ -378,7 +378,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        'SELL\n${MoneyMath.formatDec(live.bid, live.decimals)}',
+                        'SELL\n${MoneyMath.formatDec(live.bid, live.displayDecimals)}',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Inter',
@@ -424,7 +424,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                         border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.5)),
                       ),
                       child: Text(
-                        'Live: ${MoneyMath.formatDec(execPrice, live.decimals)}',
+                        'Live: ${MoneyMath.formatDec(execPrice, live.displayDecimals)}',
                         style: const TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 11,
@@ -848,8 +848,8 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                               ? 'Market'
                               : (_orderType == OrderType.limit ? 'Limit' : 'Stop');
                           final priceStr = targetPrice != null
-                              ? ' @ \$${MoneyMath.formatDec(targetPrice, live.decimals)}'
-                              : ' @ \$${MoneyMath.formatDec(execPrice, live.decimals)}';
+                              ? ' @ \$${MoneyMath.formatDec(targetPrice, live.displayDecimals)}'
+                              : ' @ \$${MoneyMath.formatDec(execPrice, live.displayDecimals)}';
 
                           messenger.showSnackBar(
                             SnackBar(
