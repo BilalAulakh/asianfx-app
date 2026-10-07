@@ -98,6 +98,12 @@ class MarketFeedService {
     'USD/AED': 'AED=X',
   };
 
+  /// instruments.commission_per_lot (USD charged once when a trade opens), per
+  /// symbol, loaded with the server config. Missing = no commission.
+  final Map<String, Decimal> _commissionPerLot = {};
+
+  Decimal commissionPerLot(String symbol) => _commissionPerLot[symbol] ?? Decimal.zero;
+
   // Dealer markup in points, per symbol. Live mode overwrites these with
   // instruments.spread_markup_points from the database (the same values the
   // publisher uses); the literals below are only the seed / demo defaults and
@@ -400,7 +406,7 @@ class MarketFeedService {
             .select('*')
             .eq('id', 1)
             .maybeSingle();
-        final markups = await client.from('instruments').select('symbol, spread_markup_points');
+        final markups = await client.from('instruments').select('symbol, spread_markup_points, commission_per_lot');
         applyServerConfig(cfg, [for (final r in markups) Map<String, dynamic>.from(r)]);
         _lastServerConfigLoad = DateTime.now();
       }
@@ -429,6 +435,8 @@ class MarketFeedService {
       final sym = m['symbol']?.toString();
       final pts = m['spread_markup_points'];
       if (sym != null && pts is num) _markupPoints[sym] = pts.toInt();
+      final comm = m['commission_per_lot'];
+      if (sym != null && comm != null) _commissionPerLot[sym] = MoneyMath.toDec(comm);
     }
     // Re-label every instrument with the server's effective markup.
     for (final sym in _instruments.keys.toList()) {

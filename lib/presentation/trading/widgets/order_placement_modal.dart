@@ -187,10 +187,14 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
       quoteToUsdRate: MarketFeedService().quoteToUsdRateFor(live),
     );
 
+    // Charged once when the trade opens (server: commission_per_lot x lots).
+    final commission = MarketFeedService().commissionPerLot(live.symbol) * lotsDec;
+
     // A resting limit/stop order reserves no margin until it triggers, so it
-    // must not be blocked by the current free margin.
+    // must not be blocked by the current free margin. The server requires
+    // margin + commission to be free.
     final isMarginSufficient = _orderType != OrderType.market ||
-        (requiredMargin <= effectiveFreeMargin && effectiveFreeMargin > Decimal.zero);
+        (requiredMargin + commission <= effectiveFreeMargin && effectiveFreeMargin > Decimal.zero);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -752,6 +756,10 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
               child: Column(
                 children: [
                   _metricRow('Required Margin', MoneyMath.formatCurrency(requiredMargin)),
+                  if (commission > Decimal.zero) ...[
+                    const SizedBox(height: 6),
+                    _metricRow('Commission', MoneyMath.formatCurrency(commission)),
+                  ],
                   const SizedBox(height: 6),
                   _metricRow('Available Free Margin', MoneyMath.formatCurrency(effectiveFreeMargin)),
                   const SizedBox(height: 8),
