@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/candle_math.dart';
 import '../../core/utils/fx_session.dart';
 import '../../domain/entities/chart_entities.dart';
 
@@ -35,6 +36,9 @@ class CandlestickChartCanvas extends StatefulWidget {
   @override
   State<CandlestickChartCanvas> createState() => _CandlestickChartCanvasState();
 }
+
+/// Candles visible across the default viewport (Exness shows ~30 on a phone).
+const double _kDefaultVisibleCandles = 30.0;
 
 class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
   late double _scale;
@@ -173,7 +177,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                   }
                   _panOffset += details.focalPointDelta.dx;
                   final totalCandles = widget.candles.length;
-                  final slotWidth = max(5.0, ((width - 68.0) / 45.0) * _scale);
+                  final slotWidth = max(5.0, ((width - 68.0) / _kDefaultVisibleCandles) * _scale);
                   final maxPan = max(0.0, (totalCandles * slotWidth) - (width - 68.0));
                   _panOffset = _panOffset.clamp(-80.0, maxPan + 200.0);
                 });
@@ -196,7 +200,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                   CustomPaint(
                     size: Size(width, height),
                     painter: _InstitutionalChartPainter(
-                      candles: widget.candles,
+                      candles: _joinedCandles(),
                       style: widget.style,
                       scale: _scale,
                       panOffset: _panOffset,
@@ -305,6 +309,13 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
     );
   }
 
+  /// Candles joined body-to-body (open = previous close) like Exness.
+  List<CandleStickModel> _joinedCandles() {
+    final tf = widget.timeframe ?? _inferTimeframe();
+    final maxGap = tf == null ? const Duration(hours: 4) : tf.duration * 3;
+    return CandleMath.joinGaps(widget.candles, maxGap);
+  }
+
   void _handleCrosshair(Offset localPos, double totalWidth) {
     if (widget.candles.isEmpty) return;
     setState(() => _crosshairPosition = localPos);
@@ -345,14 +356,13 @@ class _InstitutionalChartPainter extends CustomPainter {
 
     final totalCandles = candles.length;
 
-    // Dynamically calculate slot width: 45 candles visible across default viewport
-    final slotWidth = max(5.0, ((chartWidth - rightMargin) / 45.0) * scale);
-    final candleBodyWidth = max(3.0, slotWidth * 0.70);
+    // Slot width: ~30 candles visible across the default viewport (Exness)
+    final slotWidth = max(5.0, ((chartWidth - rightMargin) / _kDefaultVisibleCandles) * scale);
+    final candleBodyWidth = max(3.0, slotWidth * 0.72);
 
     // 1. Calculate min and max prices strictly from candles VISIBLE on viewport
     double minPrice = double.infinity;
     double maxPrice = double.negativeInfinity;
-    double maxVolume = 0.0;
     int visibleCount = 0;
     bool isLatestCandleVisible = false;
 
@@ -364,7 +374,6 @@ class _InstitutionalChartPainter extends CustomPainter {
         if (c.low > 0 && c.high > 0) {
           minPrice = min(minPrice, c.low);
           maxPrice = max(maxPrice, c.high);
-          maxVolume = max(maxVolume, c.volume);
           visibleCount++;
           if (i == totalCandles - 1) {
             isLatestCandleVisible = true;
@@ -384,8 +393,9 @@ class _InstitutionalChartPainter extends CustomPainter {
       maxPrice = max(maxPrice, currentPrice);
     }
 
-    // 18% vertical padding for rock-solid visual stability (prevents sudden jumping)
-    final pricePadding = max((maxPrice - minPrice) * 0.18, minPrice * 0.002);
+    // Tight Exness-style fit: the visible candles fill the height, so moves
+    // read as big up/down swings instead of flat bodies.
+    final pricePadding = max((maxPrice - minPrice) * 0.08, minPrice * 0.00002);
     minPrice -= pricePadding;
     maxPrice += pricePadding;
     final priceRange = max(0.0001, maxPrice - minPrice);
@@ -409,12 +419,14 @@ class _InstitutionalChartPainter extends CustomPainter {
       ..color = isDark ? const Color(0xFF1B2332) : const Color(0xFFE2E8F0)
       ..strokeWidth = 0.8;
 
-    const gridLinesCount = 5;
-    for (int i = 0; i <= gridLinesCount; i++) {
-      final y = chartHeight * (i / gridLinesCount);
+    // Round price levels (e.g. 4106 / 4108 / 4110) like Exness
+    final gridStep = CandleMath.niceStep(priceRange, 6);
+    for (double priceVal = (minPrice / gridStep).ceil() * gridStep;
+        priceVal <= maxPrice;
+        priceVal += gridStep) {
+      final y = getY(priceVal);
       canvas.drawLine(Offset(0, y), Offset(chartWidth, y), gridPaint);
 
-      final priceVal = maxPrice - (priceRange * (i / gridLinesCount));
       final textSpan = TextSpan(
         text: priceVal.toStringAsFixed(priceDecimals),
         style: const TextStyle(
@@ -462,21 +474,6 @@ class _InstitutionalChartPainter extends CustomPainter {
         if (x < -slotWidth || x > chartWidth + slotWidth) continue;
 
         final isBull = c.close >= c.open;
-
-        // Volume histogram bar at bottom
-        if (maxVolume > 0 && c.volume > 0) {
-          final volHeight = (c.volume / maxVolume) * (chartHeight * 0.16);
-          final volRect = Rect.fromLTWH(
-            x - (candleBodyWidth / 2),
-            chartHeight - volHeight,
-            candleBodyWidth,
-            volHeight,
-          );
-          canvas.drawRect(
-            volRect,
-            Paint()..color = (isBull ? bullColor : bearColor).withValues(alpha: 0.22),
-          );
-        }
 
         final openY = getY(c.open);
         final closeY = getY(c.close);

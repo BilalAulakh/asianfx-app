@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:asianfxapp/core/utils/candle_math.dart';
 import 'package:asianfxapp/domain/entities/chart_entities.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,5 +53,20 @@ void main() {
     final merged = CandleMath.merge(proxy, own);
     expect(merged.map((c) => c.close), [1, 1, 2, 2, 2]);
     expect(CandleMath.merge(proxy, const []), proxy);
+  });
+
+  test('joinGaps opens each candle at the previous close, except across long gaps', () {
+    CandleStickModel at(int m, double o, double c) => CandleStickModel(
+        time: base.add(Duration(minutes: m)), open: o, high: max(o, c), low: min(o, c), close: c);
+    final joined = CandleMath.joinGaps(
+        [at(0, 100, 102), at(1, 103, 104), at(2, 103.5, 101), at(60, 90, 91)], const Duration(minutes: 3));
+    expect(joined.map((c) => c.open), [100, 102, 104, 90]);
+    expect((joined[2].high, joined[2].low), (104.0, 101.0));
+  });
+
+  test('niceStep picks round grid steps', () {
+    expect(CandleMath.niceStep(10, 6), 2);
+    expect(CandleMath.niceStep(0.9, 6), 0.2);
+    expect(CandleMath.niceStep(140, 6), 25);
   });
 }

@@ -60,6 +60,32 @@ class CandleMath {
     return out;
   }
 
+  /// Exness-style continuous candles: each candle opens at the previous close
+  /// (wicks widened to cover it), so bodies join with no gaps. Candles more than
+  /// [maxGap] apart (weekend / market close) keep their own open.
+  static List<CandleStickModel> joinGaps(List<CandleStickModel> candles, Duration maxGap) {
+    if (candles.length < 2) return candles;
+    final out = List<CandleStickModel>.of(candles);
+    for (int i = 1; i < out.length; i++) {
+      final prev = out[i - 1], c = out[i];
+      if (c.time.difference(prev.time) > maxGap || c.open == prev.close) continue;
+      final o = prev.close;
+      out[i] = c.copyWith(open: o, high: max(c.high, o), low: min(c.low, o));
+    }
+    return out;
+  }
+
+  /// "Nice" axis step (1/2/2.5/5 × 10^n) giving about [targetLines] grid lines.
+  static double niceStep(double range, int targetLines) {
+    if (range <= 0 || targetLines <= 0) return 1;
+    final raw = range / targetLines;
+    final mag = pow(10, (log(raw) / ln10).floor()).toDouble();
+    for (final m in const [1.0, 2.0, 2.5, 5.0, 10.0]) {
+      if (raw <= m * mag) return m * mag;
+    }
+    return 10 * mag;
+  }
+
   /// Older candles from a proxy series (PAXG / futures, already re-based onto
   /// spot) followed by the broker's own candles from their first bucket on.
   static List<CandleStickModel> merge(List<CandleStickModel> proxy, List<CandleStickModel> own) {
