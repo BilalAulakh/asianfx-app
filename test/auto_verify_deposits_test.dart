@@ -146,14 +146,15 @@ void main() {
   });
 
   group('admin', () {
-    testWidgets('Pending shows failed auto-verify with a reason; Auto-approved is read-only', (tester) async {
+    testWidgets('Pending shows failed auto-verify with a reason; auto-approved ones are read-only under Approved',
+        (tester) async {
       final backend = FakeDepositBackend();
       final calls = <String?>[];
       backend.onRpc = (fn, p) {
         if (fn == 'rpc_admin_list_deposit_addresses') return [_addr(_a, weight: 3, order: 1), _addr(_b, order: 2, auto: true)];
         if (fn == 'rpc_admin_list_deposit_requests') {
           calls.add(p['p_status'] as String?);
-          return p['p_status'] == 'AUTO_APPROVED'
+          return p['p_status'] == 'APPROVED'
               ? [_deposit(id: 'auto', status: 'APPROVED', verification: 'VERIFIED', system: true, credited: 98.5, onchain: 98.5, txid: _txid)]
               : [_deposit(id: 'f1', verification: 'FAILED', error: 'TIMEOUT'), _deposit(id: 'm1', address: _a, verification: 'NOT_REQUIRED', proof: 'user-1/p.png')];
         }
@@ -168,9 +169,10 @@ void main() {
       expect(find.textContaining('Advanced rotation settings'), findsNothing, reason: 'removed from the admin UI');
       expect(find.textContaining('checksum failed'), findsWidgets, reason: 'configured Address A is flagged');
 
-      await tester.tap(find.text('Auto-approved'));
+      expect(find.text('Auto-approved'), findsNothing, reason: 'the separate tab was removed');
+      await tester.tap(find.text('Approved'));
       await tester.pumpAndSettle();
-      expect(calls.last, 'AUTO_APPROVED');
+      expect(calls.last, 'APPROVED');
       expect(find.textContaining('Auto-approved by the system'), findsOneWidget);
       expect(find.textContaining('On-chain amount'), findsOneWidget);
       expect(find.text('APPROVE'), findsNothing, reason: 'no approve button on completed auto deposits');

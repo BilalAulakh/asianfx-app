@@ -137,7 +137,6 @@ class _DepositRequestsTabState extends State<DepositRequestsTab> {
         Expanded(
           child: Text(switch (_filter) {
             'PENDING' => 'Pending deposits ($pending) - need your review',
-            'AUTO_APPROVED' => 'Auto-approved deposits (read-only history)',
             _ => 'Deposit requests',
           }, style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: _textPrimary)),
         ),
@@ -158,7 +157,6 @@ class _DepositRequestsTabState extends State<DepositRequestsTab> {
           (null, 'All'),
           ('APPROVED', 'Approved'),
           ('REJECTED', 'Rejected'),
-          ('AUTO_APPROVED', 'Auto-approved'),
         ])
           ChoiceChip(
             label: Text(label, style: const TextStyle(fontSize: 11)),
