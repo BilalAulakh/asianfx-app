@@ -21,7 +21,7 @@ $buildNumber = $line.Matches[0].Groups[2].Value
 
 Write-Host "Building FXAsian $versionName (build $buildNumber)..." -ForegroundColor Cyan
 Push-Location $root
-try { flutter build apk --release } finally { Pop-Location }
+try { flutter build apk --release --obfuscate --split-debug-info=build/symbols } finally { Pop-Location }
 if ($LASTEXITCODE -ne 0) { throw 'flutter build failed' }
 
 $apk = Join-Path $root 'build\app\outputs\flutter-apk\app-release.apk'

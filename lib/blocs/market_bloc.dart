@@ -22,9 +22,10 @@ class MarketSelectTimeframeEvent extends MarketEvent {
   MarketSelectTimeframeEvent(this.timeframe);
 }
 
+/// Latest quotes since the previous batch (one entry per symbol).
 class MarketTickReceivedEvent extends MarketEvent {
-  final InstrumentEntity instrument;
-  MarketTickReceivedEvent(this.instrument);
+  final List<InstrumentEntity> instruments;
+  MarketTickReceivedEvent(this.instruments);
 }
 
 class MarketReloadCandlesEvent extends MarketEvent {
@@ -106,6 +107,25 @@ class MarketBloc extends Bloc<MarketEvent, MarketState> {
   final MarketFeedService feedService;
   StreamSubscription<InstrumentEntity>? _tickSub;
 
+  /// Ticks are coalesced: every quote arriving within this window is applied
+  /// in ONE state update, so screens rebuild at most ~4x/s instead of once per
+  /// tick (crypto streams deliver many ticks per second). Only each symbol's
+  /// latest quote is kept.
+  static const tickBatchWindow = Duration(milliseconds: 250);
+  final Map<String, InstrumentEntity> _pendingTicks = {};
+  Timer? _tickFlush;
+
+  void _queueTick(InstrumentEntity instrument) {
+    _pendingTicks[instrument.symbol] = instrument;
+    _tickFlush ??= Timer(tickBatchWindow, () {
+      _tickFlush = null;
+      if (_pendingTicks.isEmpty || isClosed) return;
+      final batch = _pendingTicks.values.toList();
+      _pendingTicks.clear();
+      add(MarketTickReceivedEvent(batch));
+    });
+  }
+
   MarketBloc({required this.feedService}) : super(const MarketState()) {
     on<MarketInitializeEvent>(_onInitialize);
     on<MarketSelectSymbolEvent>(_onSelectSymbol);
@@ -130,9 +150,7 @@ class MarketBloc extends Bloc<MarketEvent, MarketState> {
 
     // Cancel any previous tick subscription
     await _tickSub?.cancel();
-    _tickSub = feedService.tickStream.listen((instrument) {
-      add(MarketTickReceivedEvent(instrument));
-    });
+    _tickSub = feedService.tickStream.listen(_queueTick);
 
     // Asynchronously fetch real history from sources
     add(MarketReloadCandlesEvent(
@@ -182,17 +200,17 @@ class MarketBloc extends Bloc<MarketEvent, MarketState> {
     MarketTickReceivedEvent event,
     Emitter<MarketState> emit,
   ) {
-    final updatedQuotes = Map<String, InstrumentEntity>.from(state.liveQuotes);
-    updatedQuotes[event.instrument.symbol] = event.instrument;
+    if (event.instruments.isEmpty) return;
+    final bySymbol = {for (final i in event.instruments) i.symbol: i};
+    final updatedQuotes = {...state.liveQuotes, ...bySymbol};
 
     // Update instruments list in place
-    final updatedList = state.instruments.map((inst) {
-      return inst.symbol == event.instrument.symbol ? event.instrument : inst;
-    }).toList();
+    final updatedList = [for (final inst in state.instruments) bySymbol[inst.symbol] ?? inst];
 
     List<CandleStickModel> updatedCandles = state.candles;
-    if (event.instrument.symbol == state.activeSymbol && state.candles.isNotEmpty) {
-      final curPrice = event.instrument.midPrice.toDouble();
+    final active = bySymbol[state.activeSymbol];
+    if (active != null && state.candles.isNotEmpty) {
+      final curPrice = active.midPrice.toDouble();
       final now = DateTime.now();
       final currentPeriod = _getCandlePeriodStart(now, state.selectedTimeframe);
       final lastCandle = state.candles.last;
@@ -257,6 +275,7 @@ class MarketBloc extends Bloc<MarketEvent, MarketState> {
   @override
   Future<void> close() {
     _tickSub?.cancel();
+    _tickFlush?.cancel();
     return super.close();
   }
 }
