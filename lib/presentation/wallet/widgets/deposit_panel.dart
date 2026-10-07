@@ -229,8 +229,18 @@ class _DepositPanelState extends State<DepositPanel> {
       _snack('Please attach a screenshot of your payment.', _red);
       return;
     }
+    final amount = _parsedAmount;
+    if (amount == null || !_isAmountValid) {
+      _snack('Enter an amount of at least ${_config?.minDeposit ?? 10} USDT.', _red);
+      return;
+    }
     setState(() => _isBusy = true);
     try {
+      // Save an edited amount first: the server updates this same open request
+      // (no screenshot yet), so the claim matches what the user sent.
+      if (_amountChanged(r)) {
+        r = await _service.createRequest(amount: amount, minDeposit: _config?.minDeposit);
+      }
       try {
         await _service.attachProof(depositId: r.id, proofBytes: _proofBytes!, proofFileName: _proofFileName);
       } on DepositServiceException catch (e) {
@@ -428,33 +438,20 @@ class _DepositPanelState extends State<DepositPanel> {
   // ── Step 2: pay, then attach the screenshot ───────────────────────────────
   List<Widget> _paymentStep(DepositRequest r) => [
         _label('Amount you will send (USDT)'),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: TextField(
-                key: const Key('deposit_amount'),
-                controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,4}'))],
-                onChanged: (_) => setState(() {}),
-                style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
-                decoration: _inputDecoration(hint: '0.00', prefix: '\$ ', suffixText: 'USDT').copyWith(
-                  errorText: _amountController.text.isNotEmpty && !_isAmountValid
-                      ? 'Minimum deposit is ${_config?.minDeposit ?? 10} USDT'
-                      : null,
-                ),
-              ),
-            ),
-            if (_amountChanged(r)) ...[
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _isBusy || !_isAmountValid ? null : _getAddress,
-                style: _primaryStyle().copyWith(minimumSize: const WidgetStatePropertyAll(Size(0, 48))),
-                child: const Text('UPDATE AMOUNT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-              ),
-            ],
-          ],
+        // A changed amount is saved together with the screenshot when the user
+        // taps "I have sent the payment".
+        TextField(
+          key: const Key('deposit_amount'),
+          controller: _amountController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,4}'))],
+          onChanged: (_) => setState(() {}),
+          style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+          decoration: _inputDecoration(hint: '0.00', prefix: '\$ ', suffixText: 'USDT').copyWith(
+            errorText: _amountController.text.isNotEmpty && !_isAmountValid
+                ? 'Minimum deposit is ${_config?.minDeposit ?? 10} USDT'
+                : null,
+          ),
         ),
         const SizedBox(height: 14),
         _addressBox(r),
@@ -463,8 +460,7 @@ class _DepositPanelState extends State<DepositPanel> {
         _proofPicker(),
         const SizedBox(height: 16),
         ElevatedButton(
-          // An edited amount must be saved first, so the claim matches the payment.
-          onPressed: _isBusy || _proofBytes == null || _amountChanged(r) ? null : () => _confirmSent(r),
+          onPressed: _isBusy || _proofBytes == null || !_isAmountValid ? null : () => _confirmSent(r),
           style: _primaryStyle(),
           child: _isBusy
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))

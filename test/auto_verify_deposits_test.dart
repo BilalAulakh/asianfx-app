@@ -244,33 +244,19 @@ void main() {
       });
     }
 
-    testWidgets('open request: amount is shown and can be changed before paying', (tester) async {
+    testWidgets('open request: one amount field, no separate update button', (tester) async {
       final backend = FakeDepositBackend()..ownRows = [_deposit(address: _a, verification: 'NOT_REQUIRED')];
-      final sent = <Object?>[];
-      backend.onRpc = (fn, p) {
-        sent.add(p['p_amount']);
-        // The server updates the same open request (no new rotation slot).
-        final row = {..._deposit(address: _a, verification: 'NOT_REQUIRED'), 'amount_claimed': 25};
-        backend.ownRows = [row];
-        return {'status': 'existing', 'deposit': row};
-      };
       await _pumpThemed(tester, DepositPanel(service: DepositService(backend: backend)));
       await tester.pumpAndSettle();
 
       final field = find.byKey(const Key('deposit_amount'));
       expect(tester.widget<TextField>(field).controller!.text, '100', reason: 'shows the open amount');
-      expect(find.text('UPDATE AMOUNT'), findsNothing);
-
       await tester.enterText(field, '25');
       await tester.pump();
-      expect(find.text('UPDATE AMOUNT'), findsOneWidget);
-      await tester.tap(find.text('UPDATE AMOUNT'));
-      await tester.pumpAndSettle();
 
-      expect(sent.single.toString(), '25');
-      expect(tester.widget<TextField>(field).controller!.text, '25', reason: 'the field holds the saved amount');
+      expect(find.text('UPDATE AMOUNT'), findsNothing, reason: 'saved together with "I have sent the payment"');
       expect(find.textContaining('Send exactly'), findsNothing, reason: 'the amount is shown only in the field');
-      expect(find.text('UPDATE AMOUNT'), findsNothing);
+      expect(find.text('I HAVE SENT THE PAYMENT'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 
