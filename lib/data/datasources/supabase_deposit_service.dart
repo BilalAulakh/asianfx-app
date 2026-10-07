@@ -245,6 +245,7 @@ abstract class DepositBackend {
   Future<List<Map<String, dynamic>>> fetchOwnRequests(String userId);
   Future<void> uploadProof(String path, Uint8List bytes, String contentType);
   Future<String> signedProofUrl(String path, {int expiresInSeconds});
+  Future<void> removeProof(String path);
 }
 
 class SupabaseDepositBackend implements DepositBackend {
@@ -319,6 +320,9 @@ class SupabaseDepositBackend implements DepositBackend {
   @override
   Future<String> signedProofUrl(String path, {int expiresInSeconds = 600}) =>
       _client.storage.from(proofBucket).createSignedUrl(path, expiresInSeconds);
+
+  @override
+  Future<void> removeProof(String path) => _client.storage.from(proofBucket).remove([path]);
 }
 
 class DepositService {
@@ -695,6 +699,27 @@ class DepositService {
       );
     } catch (e) {
       throw toException(e);
+    }
+  }
+
+  /// Admin: delete a PENDING or REJECTED request (APPROVED ones are refused by
+  /// the server: they were credited). Its screenshot is removed afterwards;
+  /// failing to remove the file does not undo the deletion.
+  Future<void> adminDelete({required String depositId, String? reason}) async {
+    String? proofPath;
+    try {
+      final res = _asMap(await _backend.rpc('rpc_admin_delete_deposit_request', {
+        'p_deposit_id': depositId,
+        'p_reason': (reason == null || reason.trim().isEmpty) ? null : reason.trim(),
+      }));
+      proofPath = res['proof_path']?.toString();
+    } catch (e) {
+      throw toException(e);
+    }
+    if (proofPath != null && proofPath.isNotEmpty) {
+      try {
+        await _backend.removeProof(proofPath);
+      } catch (_) {}
     }
   }
 

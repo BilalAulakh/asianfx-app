@@ -178,6 +178,41 @@ void main() {
     });
   });
 
+  group('admin delete', () {
+    testWidgets('pending request can be deleted (with its screenshot); approved ones cannot', (tester) async {
+      final backend = FakeDepositBackend();
+      final deleted = <Object?>[];
+      var rows = [
+        _deposit(id: 'p1', address: _a, verification: 'NOT_REQUIRED', proof: 'user-1/p1.png'),
+        _deposit(id: 'ok', status: 'APPROVED', address: _a, verification: 'NOT_REQUIRED', credited: 100),
+      ];
+      backend.onRpc = (fn, p) {
+        if (fn == 'rpc_admin_list_deposit_addresses') return [_addr(_a, weight: 3), _addr(_b, order: 2, auto: true)];
+        if (fn == 'rpc_admin_list_deposit_requests') return rows;
+        if (fn == 'rpc_admin_delete_deposit_request') {
+          deleted.add(p['p_deposit_id']);
+          rows = rows.where((r) => r['id'] != p['p_deposit_id']).toList();
+          return {'status': 'success', 'deleted': p['p_deposit_id'], 'proof_path': 'user-1/p1.png'};
+        }
+        return null;
+      };
+      await _pumpThemed(tester, SizedBox(height: 2300, child: DepositRequestsTab(service: DepositService(backend: backend))));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Delete request'), findsOneWidget, reason: 'only the pending one; approved was credited');
+      await tester.tap(find.byTooltip('Delete request'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete deposit request?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(deleted, ['p1']);
+      expect(backend.removedProofs, ['user-1/p1.png'], reason: 'screenshot removed from storage');
+      expect(find.text('Deposit request deleted.'), findsOneWidget);
+      expect(find.byTooltip('Delete request'), findsNothing, reason: 'list reloaded without it');
+    });
+  });
+
   group('user deposit panel (automatic verification is invisible to users)', () {
     void expectNothingAutomatic() {
       for (final hidden in ['blockchain', 'AUTO', 'automatic', 'on-chain', 'no screenshot', 'VERIFYING']) {

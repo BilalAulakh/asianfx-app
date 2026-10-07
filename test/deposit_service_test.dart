@@ -47,6 +47,11 @@ class FakeDepositBackend implements DepositBackend {
   @override
   Future<String> signedProofUrl(String path, {int expiresInSeconds = 600}) async =>
       'https://signed.example/$path?ttl=$expiresInSeconds';
+
+  final List<String> removedProofs = [];
+
+  @override
+  Future<void> removeProof(String path) async => removedProofs.add(path);
 }
 
 final _proof = Uint8List.fromList(List.filled(16, 1));

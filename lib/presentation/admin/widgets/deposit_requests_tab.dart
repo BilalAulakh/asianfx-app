@@ -76,74 +76,91 @@ class _DepositRequestsTabState extends State<DepositRequestsTab> {
   @override
   Widget build(BuildContext context) {
     final pending = _items.where((d) => d.isPending).length;
+    final cards = _error == null ? _items : const <DepositRequest>[];
+    // The header stays mounted; the cards are a lazy list (only those on screen
+    // are built and painted, each behind its own RepaintBoundary), so long
+    // queues scroll smoothly.
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          AddressACard(service: _service),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  switch (_filter) {
-                    'PENDING' => 'Pending deposits ($pending) - need your review',
-                    'AUTO_APPROVED' => 'Auto-approved deposits (read-only history)',
-                    _ => 'Deposit requests',
-                  },
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: _textPrimary),
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _header(pending)),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            sliver: SliverList.builder(
+              itemCount: cards.length,
+              itemBuilder: (context, i) => RepaintBoundary(
+                child: _DepositReviewCard(
+                  key: ValueKey(cards[i].id),
+                  deposit: cards[i],
+                  service: _service,
+                  onReviewed: _load,
                 ),
               ),
-              IconButton(
-                tooltip: 'Refresh',
-                onPressed: _loading ? null : _load,
-                icon: _loading
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Icon(Icons.refresh_rounded, color: _textSecondary),
-              ),
-            ],
+            ),
           ),
-          Wrap(
-            spacing: 6,
-            children: [
-              for (final (value, label) in const [
-                ('PENDING', 'Pending'),
-                (null, 'All'),
-                ('APPROVED', 'Approved'),
-                ('REJECTED', 'Rejected'),
-                ('AUTO_APPROVED', 'Auto-approved'),
-              ])
-                ChoiceChip(
-                  label: Text(label, style: const TextStyle(fontSize: 11)),
-                  selected: _filter == value,
-                  onSelected: (_) => _setFilter(value),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(_error!, style: const TextStyle(color: Color(0xFFFF4757))),
-            )
-          else if (_items.isEmpty && !_loading)
-            Padding(
-              padding: const EdgeInsets.all(30),
-              child: Center(child: Text('No deposit requests in this queue.', style: TextStyle(color: _textSecondary))),
-            )
-          else
-            for (final d in _items)
-              _DepositReviewCard(
-                key: ValueKey(d.id),
-                deposit: d,
-                service: _service,
-                onReviewed: _load,
-              ),
         ],
       ),
     );
   }
+
+  List<Widget> _header(int pending) => [
+    AddressACard(service: _service),
+    const SizedBox(height: 18),
+    Row(
+      children: [
+        Expanded(
+          child: Text(switch (_filter) {
+            'PENDING' => 'Pending deposits ($pending) - need your review',
+            'AUTO_APPROVED' => 'Auto-approved deposits (read-only history)',
+            _ => 'Deposit requests',
+          }, style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: _textPrimary)),
+        ),
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _loading ? null : _load,
+          icon: _loading
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : Icon(Icons.refresh_rounded, color: _textSecondary),
+        ),
+      ],
+    ),
+    Wrap(
+      spacing: 6,
+      children: [
+        for (final (value, label) in const [
+          ('PENDING', 'Pending'),
+          (null, 'All'),
+          ('APPROVED', 'Approved'),
+          ('REJECTED', 'Rejected'),
+          ('AUTO_APPROVED', 'Auto-approved'),
+        ])
+          ChoiceChip(
+            label: Text(label, style: const TextStyle(fontSize: 11)),
+            selected: _filter == value,
+            onSelected: (_) => _setFilter(value),
+          ),
+      ],
+    ),
+    const SizedBox(height: 12),
+    if (_error != null)
+      Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(_error!, style: const TextStyle(color: Color(0xFFFF4757))),
+      )
+    else if (_items.isEmpty && !_loading)
+      Padding(
+        padding: const EdgeInsets.all(30),
+        child: Center(
+          child: Text('No deposit requests in this queue.', style: TextStyle(color: _textSecondary)),
+        ),
+      ),
+  ];
 }
 
 class _DepositReviewCard extends StatefulWidget {
@@ -151,20 +168,16 @@ class _DepositReviewCard extends StatefulWidget {
   final DepositService service;
   final Future<void> Function() onReviewed;
 
-  const _DepositReviewCard({
-    super.key,
-    required this.deposit,
-    required this.service,
-    required this.onReviewed,
-  });
+  const _DepositReviewCard({super.key, required this.deposit, required this.service, required this.onReviewed});
 
   @override
   State<_DepositReviewCard> createState() => _DepositReviewCardState();
 }
 
 class _DepositReviewCardState extends State<_DepositReviewCard> {
-  late final TextEditingController _amountController =
-      TextEditingController(text: widget.deposit.amountClaimed.toString());
+  late final TextEditingController _amountController = TextEditingController(
+    text: widget.deposit.amountClaimed.toString(),
+  );
   final _noteController = TextEditingController();
   bool _busy = false;
   Future<String?>? _proofUrl;
@@ -172,6 +185,7 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
   static const _green = Color(0xFF00D68F);
   static const _red = Color(0xFFFF4757);
   static const _amber = Color(0xFFFFB300);
+  static const double _thumbHeight = 260;
 
   bool get _isDark => context.watch<ThemeCubit>().state;
   Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
@@ -196,12 +210,16 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
   }
 
   void _snack(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: color,
-      duration: const Duration(seconds: 5),
-      content: Text(msg,
-          style: TextStyle(fontWeight: FontWeight.bold, color: color == _red ? Colors.white : Colors.black)),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: color,
+        duration: const Duration(seconds: 5),
+        content: Text(
+          msg,
+          style: TextStyle(fontWeight: FontWeight.bold, color: color == _red ? Colors.white : Colors.black),
+        ),
+      ),
+    );
   }
 
   Future<void> _approve() async {
@@ -269,8 +287,11 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
       if (res.alreadyReviewed) {
         _snack(res.message ?? 'This deposit was already reviewed.', _amber);
       } else if (approve) {
-        _snack('Approved. Credited ${MoneyMath.formatCurrency(res.deposit.amountCredited ?? amount!)}'
-            '${res.newBalance != null ? ' — new balance ${MoneyMath.formatCurrency(res.newBalance!)}' : ''}.', _green);
+        _snack(
+          'Approved. Credited ${MoneyMath.formatCurrency(res.deposit.amountCredited ?? amount!)}'
+          '${res.newBalance != null ? ' — new balance ${MoneyMath.formatCurrency(res.newBalance!)}' : ''}.',
+          _green,
+        );
       } else {
         _snack('Deposit rejected.', _green);
       }
@@ -288,6 +309,48 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
     }
   }
 
+  Future<void> _delete() async {
+    final d = widget.deposit;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete deposit request?'),
+        content: Text(
+          '${MoneyMath.formatCurrency(d.amountClaimed)} USDT from ${d.userEmail ?? d.userId} '
+          '(${d.status == DepositStatus.rejected ? 'rejected' : 'pending'}) will be removed permanently, '
+          'together with its payment screenshot.\n\nThe user\'s balance is not changed. '
+          'The deletion is recorded in the admin audit log.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await widget.service.adminDelete(depositId: d.id);
+      if (!mounted) return;
+      _snack('Deposit request deleted.', _green);
+      await widget.onReviewed();
+    } on DepositServiceException catch (e) {
+      if (!mounted) return;
+      _snack(switch (e.code) {
+        'DEPOSIT_CREDITED' => 'Approved deposits were already credited and cannot be deleted.',
+        'FORBIDDEN' => 'The server rejected this action: administrator privileges required.',
+        _ => e.message,
+      }, _red);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _openProof(String url) {
     showDialog<void>(
       context: context,
@@ -300,19 +363,23 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
   }
 
   Widget _kv(String k, String v, {bool mono = false}) => Padding(
-        padding: const EdgeInsets.only(top: 3),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(width: 92, child: Text(k, style: TextStyle(fontSize: 11, color: _textSecondary))),
-            Expanded(
-              child: SelectableText(v,
-                  style: TextStyle(
-                      fontSize: 11, color: _textPrimary, fontFamily: mono ? 'monospace' : null)),
-            ),
-          ],
+    padding: const EdgeInsets.only(top: 3),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(k, style: TextStyle(fontSize: 11, color: _textSecondary)),
         ),
-      );
+        Expanded(
+          child: SelectableText(
+            v,
+            style: TextStyle(fontSize: 11, color: _textPrimary, fontFamily: mono ? 'monospace' : null),
+          ),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -338,20 +405,35 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
           Row(
             children: [
               Expanded(
-                child: Text(d.userEmail ?? d.userId,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _textPrimary)),
+                child: Text(
+                  d.userEmail ?? d.userId,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _textPrimary),
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Text(
+                  label,
+                  style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
               ),
+              // Approved deposits were credited and stay as a record.
+              if (d.status != DepositStatus.approved)
+                IconButton(
+                  tooltip: 'Delete request',
+                  onPressed: _busy ? null : _delete,
+                  icon: const Icon(Icons.delete_outline_rounded, color: _red, size: 20),
+                  visualDensity: VisualDensity.compact,
+                ),
             ],
           ),
           const SizedBox(height: 6),
-          Text('Claimed ${MoneyMath.formatCurrency(d.amountClaimed)} ${d.token} (${d.network})',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _textPrimary)),
+          Text(
+            'Claimed ${MoneyMath.formatCurrency(d.amountClaimed)} ${d.token} (${d.network})',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: _textPrimary),
+          ),
           if (d.autoVerifyFailed)
             Container(
               margin: const EdgeInsets.only(top: 6),
@@ -361,19 +443,20 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: _red.withValues(alpha: 0.45)),
               ),
-              child: Text('Auto-verify failed: ${d.verificationErrorLabel}',
-                  style: const TextStyle(color: _red, fontSize: 11.5, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Auto-verify failed: ${d.verificationErrorLabel}',
+                style: const TextStyle(color: _red, fontSize: 11.5, fontWeight: FontWeight.bold),
+              ),
             ),
           if (d.approvedBySystem)
             Container(
               margin: const EdgeInsets.only(top: 6),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(
-                color: _green.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
+              decoration: BoxDecoration(color: _green.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+              child: const Text(
+                'Auto-approved by the system (verified on-chain) - no action needed',
+                style: TextStyle(color: _green, fontSize: 11.5, fontWeight: FontWeight.bold),
               ),
-              child: const Text('Auto-approved by the system (verified on-chain) - no action needed',
-                  style: TextStyle(color: _green, fontSize: 11.5, fontWeight: FontWeight.bold)),
             ),
           _kv('Submitted', fmt.format(d.createdAt.toLocal())),
           _kv('User ID', d.userId, mono: true),
@@ -395,17 +478,11 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
             spacing: 8,
             runSpacing: 6,
             children: [
-              if (d.hasTxid || d.payToAddress != null)
+              if (d.hasTxid)
                 OutlinedButton.icon(
-                  // Without a TXID, open the company wallet's incoming transfers instead.
-                  onPressed: () => launchUrl(
-                    d.hasTxid
-                        ? d.tronscanUrl
-                        : Uri.parse('https://tronscan.org/#/address/${d.payToAddress}/transfers'),
-                    mode: LaunchMode.externalApplication,
-                  ),
+                  onPressed: () => launchUrl(d.tronscanUrl, mode: LaunchMode.externalApplication),
                   icon: const Icon(Icons.open_in_new_rounded, size: 14),
-                  label: Text(d.hasTxid ? 'Verify on Tronscan' : 'Open company wallet on Tronscan'),
+                  label: const Text('Verify on Tronscan'),
                 ),
               if (d.hasTxid)
                 OutlinedButton.icon(
@@ -424,50 +501,70 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
               future: _proofUrl,
               builder: (context, snap) {
                 final url = snap.data;
-                if (snap.connectionState != ConnectionState.done) {
-                  return const LinearProgressIndicator(minHeight: 2);
-                }
-                if (url == null) {
+                if (snap.connectionState == ConnectionState.done && url == null) {
                   return Text('Screenshot unavailable.', style: TextStyle(fontSize: 11, color: _textSecondary));
                 }
+                // Fixed height whether loading or loaded: the card never changes
+                // size under the user's finger while scrolling.
                 return InkWell(
-                  onTap: () => _openProof(url),
+                  onTap: url == null ? null : () => _openProof(url),
                   child: Container(
-                    height: 260,
+                    height: _thumbHeight,
                     decoration: BoxDecoration(
                       color: _subCardBg,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: _border),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Image.network(url, fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => Center(
-                                child: Text('Could not load screenshot', style: TextStyle(color: _textSecondary)))),
-                        Positioned(
-                          right: 8,
-                          bottom: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.7),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.zoom_in_rounded, size: 16, color: Colors.white),
-                                SizedBox(width: 4),
-                                Text('Tap to zoom',
-                                    style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
-                              ],
-                            ),
+                    child: url == null
+                        ? const Center(
+                            child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+                          )
+                        : Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              // Decoded at thumbnail size (not the full photo) so the
+                              // list stays light; the viewer loads full resolution.
+                              Image(
+                                image: ResizeImage(
+                                  NetworkImage(url),
+                                  height: (_thumbHeight * MediaQuery.devicePixelRatioOf(context)).round(),
+                                  policy: ResizeImagePolicy.fit,
+                                ),
+                                fit: BoxFit.contain,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, _, _) => Center(
+                                  child: Text('Could not load screenshot', style: TextStyle(color: _textSecondary)),
+                                ),
+                              ),
+                              Positioned(
+                                right: 8,
+                                bottom: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.7),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.zoom_in_rounded, size: 16, color: Colors.white),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Tap to zoom',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
                   ),
                 );
               },
@@ -546,109 +643,140 @@ class _ProofViewer extends StatefulWidget {
   State<_ProofViewer> createState() => _ProofViewerState();
 }
 
-class _ProofViewerState extends State<_ProofViewer> {
+class _ProofViewerState extends State<_ProofViewer> with SingleTickerProviderStateMixin {
   static const double _minScale = 1.0;
   static const double _maxScale = 8.0;
 
   final _controller = TransformationController();
+  late final AnimationController _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 260))
+    ..addListener(_onAnimate);
+  Animation<Matrix4>? _zoom;
   Size _viewport = Size.zero;
   Offset? _doubleTapAt;
 
   double get _scale => _controller.value.getMaxScaleOnAxis();
 
   @override
-  void initState() {
-    super.initState();
-    _controller.addListener(_onTransform);
-  }
-
-  @override
   void dispose() {
-    _controller.removeListener(_onTransform);
+    _anim.dispose();
     _controller.dispose();
     super.dispose();
   }
 
-  void _onTransform() => setState(() {});
+  void _onAnimate() {
+    final z = _zoom;
+    if (z != null) _controller.value = z.value;
+  }
 
-  /// Zoom to [target] keeping [focal] (viewport coordinates) fixed on screen.
+  /// Smoothly zoom to [target], keeping [focal] (viewport coordinates) fixed on
+  /// screen. Pinch / wheel zoom is handled live by InteractiveViewer.
   void _zoomTo(double target, {Offset? focal}) {
     final scale = target.clamp(_minScale, _maxScale);
     final f = focal ?? _viewport.center(Offset.zero);
     final scenePoint = _controller.toScene(f);
-    _controller.value = Matrix4.identity()
-      ..translateByDouble(f.dx - scenePoint.dx * scale, f.dy - scenePoint.dy * scale, 0, 1)
-      ..scaleByDouble(scale, scale, 1, 1);
-    if (scale == _minScale) _controller.value = Matrix4.identity();
+    final end = scale == _minScale
+        ? Matrix4.identity()
+        : (Matrix4.identity()
+            ..translateByDouble(f.dx - scenePoint.dx * scale, f.dy - scenePoint.dy * scale, 0, 1)
+            ..scaleByDouble(scale, scale, 1, 1));
+    _zoom = Matrix4Tween(
+      begin: _controller.value.clone(),
+      end: end,
+    ).animate(CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic));
+    _anim.forward(from: 0);
   }
 
   Widget _toolButton(IconData icon, String tooltip, VoidCallback? onPressed) => IconButton(
-        tooltip: tooltip,
-        onPressed: onPressed,
-        icon: Icon(icon),
-        color: Colors.white,
-        disabledColor: Colors.white24,
-      );
+    tooltip: tooltip,
+    onPressed: onPressed,
+    icon: Icon(icon),
+    color: Colors.white,
+    disabledColor: Colors.white24,
+  );
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         Positioned.fill(
-          child: LayoutBuilder(builder: (context, constraints) {
-            _viewport = constraints.biggest;
-            return GestureDetector(
-              onDoubleTapDown: (d) => _doubleTapAt = d.localPosition,
-              onDoubleTap: () => _zoomTo(_scale > 1.01 ? _minScale : 2.5, focal: _doubleTapAt),
-              child: InteractiveViewer(
-                transformationController: _controller,
-                minScale: _minScale,
-                maxScale: _maxScale,
-                child: SizedBox.expand(
-                  child: Image.network(
-                    widget.url,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
-                    loadingBuilder: (_, child, progress) => progress == null
-                        ? child
-                        : const Center(child: CircularProgressIndicator(color: Colors.white)),
-                    errorBuilder: (_, _, _) => const Center(
-                      child: Text('Could not load the screenshot.', style: TextStyle(color: Colors.white70)),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _viewport = constraints.biggest;
+              return GestureDetector(
+                onDoubleTapDown: (d) => _doubleTapAt = d.localPosition,
+                onDoubleTap: () => _zoomTo(_scale > 1.01 ? _minScale : 2.5, focal: _doubleTapAt),
+                child: InteractiveViewer(
+                  transformationController: _controller,
+                  minScale: _minScale,
+                  maxScale: _maxScale,
+                  // A finger / wheel gesture takes over from a running zoom animation.
+                  onInteractionStart: (_) => _anim.stop(),
+                  child: SizedBox.expand(
+                    // Full-resolution original, sampled with high quality so text in
+                    // the screenshot stays sharp when zoomed in.
+                    child: Image.network(
+                      widget.url,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                      isAntiAlias: true,
+                      loadingBuilder: (_, child, progress) => progress == null
+                          ? child
+                          : const Center(child: CircularProgressIndicator(color: Colors.white)),
+                      errorBuilder: (_, _, _) => const Center(
+                        child: Text('Could not load the screenshot.', style: TextStyle(color: Colors.white70)),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          }),
+              );
+            },
+          ),
         ),
-        // Toolbar
+        // Toolbar: only this rebuilds while zooming / panning.
         Positioned(
           top: 12,
           right: 12,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.75),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _toolButton(Icons.zoom_out_rounded, 'Zoom out',
-                    _scale > _minScale + 0.01 ? () => _zoomTo(_scale / 1.5) : null),
-                SizedBox(
-                  width: 52,
-                  child: Text('${(_scale * 100).round()}%',
+          child: ValueListenableBuilder<Matrix4>(
+            valueListenable: _controller,
+            builder: (context, _, _) => Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _toolButton(
+                    Icons.zoom_out_rounded,
+                    'Zoom out',
+                    _scale > _minScale + 0.01 ? () => _zoomTo(_scale / 1.5) : null,
+                  ),
+                  SizedBox(
+                    width: 52,
+                    child: Text(
+                      '${(_scale * 100).round()}%',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                ),
-                _toolButton(Icons.zoom_in_rounded, 'Zoom in',
-                    _scale < _maxScale - 0.01 ? () => _zoomTo(_scale * 1.5) : null),
-                _toolButton(Icons.fit_screen_rounded, 'Fit to screen',
-                    _scale > _minScale + 0.01 ? () => _zoomTo(_minScale) : null),
-                _toolButton(Icons.open_in_new_rounded, 'Open original in new tab',
-                    () => launchUrl(Uri.parse(widget.url), mode: LaunchMode.externalApplication)),
-                _toolButton(Icons.close_rounded, 'Close', () => Navigator.of(context).pop()),
-              ],
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                  _toolButton(
+                    Icons.zoom_in_rounded,
+                    'Zoom in',
+                    _scale < _maxScale - 0.01 ? () => _zoomTo(_scale * 1.5) : null,
+                  ),
+                  _toolButton(
+                    Icons.fit_screen_rounded,
+                    'Fit to screen',
+                    _scale > _minScale + 0.01 ? () => _zoomTo(_minScale) : null,
+                  ),
+                  _toolButton(
+                    Icons.open_in_new_rounded,
+                    'Open original in new tab',
+                    () => launchUrl(Uri.parse(widget.url), mode: LaunchMode.externalApplication),
+                  ),
+                  _toolButton(Icons.close_rounded, 'Close', () => Navigator.of(context).pop()),
+                ],
+              ),
             ),
           ),
         ),
@@ -658,8 +786,10 @@ class _ProofViewerState extends State<_ProofViewer> {
           bottom: 16,
           child: IgnorePointer(
             child: Center(
-              child: Text('Scroll / pinch to zoom  •  drag to move  •  double-tap to zoom in/out',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              child: Text(
+                'Scroll / pinch to zoom  •  drag to move  •  double-tap to zoom in/out',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
             ),
           ),
         ),
