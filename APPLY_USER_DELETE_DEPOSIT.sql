@@ -15,6 +15,10 @@
 
 ALTER TABLE public.deposit_requests ADD COLUMN IF NOT EXISTS user_hidden_at TIMESTAMPTZ;
 
+-- Clients read deposit_requests through a column-level grant: the app filters
+-- its list on this column, so depositors must be allowed to read it.
+GRANT SELECT (user_hidden_at) ON public.deposit_requests TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.rpc_delete_my_deposit_request(p_deposit_id UUID)
 RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER

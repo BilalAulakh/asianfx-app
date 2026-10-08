@@ -303,8 +303,10 @@ class SupabaseDepositBackend implements DepositBackend {
     try {
       return await query(base + verification);
     } on PostgrestException catch (e) {
-      if (!e.message.contains('does not exist')) rethrow;
-      // Older schema: no user_hidden_at and/or no auto-verify columns yet.
+      // Older schema: no user_hidden_at and/or no auto-verify columns yet, or
+      // user_hidden_at exists but is not readable (column grant missing).
+      final m = e.message;
+      if (!m.contains('does not exist') && !m.contains('permission denied')) rethrow;
       try {
         return await query(base + verification, skipHidden: false);
       } on PostgrestException catch (e2) {
