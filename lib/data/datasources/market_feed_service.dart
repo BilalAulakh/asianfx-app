@@ -742,7 +742,7 @@ class MarketFeedService {
             close: price,
             volume: 1.0,
           ));
-          if (candles.length > 1500) {
+          if (candles.length > maxCandlesInMemory) {
             candles.removeAt(0);
           }
         } else {
@@ -771,7 +771,7 @@ class MarketFeedService {
           close: price,
           volume: 1.0,
         ));
-        if (symCandles.length > 1500) {
+        if (symCandles.length > maxCandlesInMemory) {
           symCandles.removeAt(0);
         }
       } else {
@@ -901,7 +901,7 @@ class MarketFeedService {
         candles[candles.length - 1] = liveCandle;
       } else if (liveCandle.time.isAfter(last.time)) {
         candles.add(liveCandle);
-        if (candles.length > 500) {
+        if (candles.length > maxCandlesInMemory) {
           candles.removeAt(0);
         }
       }
@@ -1024,6 +1024,15 @@ class MarketFeedService {
     }
   }
 
+  /// Candles kept per chart (paged history included): years of daily bars.
+  static const int maxCandlesInMemory = 20000;
+
+  /// Price shift applied to proxy history (PAXG) per chart, reused for older pages.
+  final Map<String, double> _metalBasis = {};
+
+  /// Charts whose source has no older history left to page in.
+  final Set<String> _historyExhausted = {};
+
   static bool _isSpotMetal(String sym) => sym == 'XAU/USD' || sym == 'XAG/USD' || sym == 'XPT/USD';
 
   /// Proxy history (PAXG token / COMEX futures) -> spot chart: drop candles from
@@ -1040,8 +1049,13 @@ class MarketFeedService {
     if (open.isEmpty) return raw;
 
     final inst = _instruments[sym];
-    if (inst == null || _lastLiveAt[sym] == null) return open;
+    final key = '${sym}_${tf.name}';
+    if (inst == null || _lastLiveAt[sym] == null) {
+      _metalBasis[key] = 0;
+      return open;
+    }
     final basis = inst.midPrice.toDouble() - open.last.close;
+    _metalBasis[key] = basis;
     if (basis == 0) return open;
     return [
       for (final c in open)
@@ -1084,6 +1098,8 @@ class MarketFeedService {
     final inst = _instruments[sym];
     final curPrice = inst != null ? inst.midPrice.toDouble() : 4480.0;
     final requiredCount = getHistoryCountForTimeframe(tf);
+    _historyExhausted.remove(key);
+    _metalBasis.remove(key);
 
     // 1. Crypto: real Binance history.
     if (inst?.category == 'crypto') {
@@ -1167,38 +1183,86 @@ class MarketFeedService {
     return existing;
   }
 
+  /// Older candles that end before [before], prepended to the cached series
+  /// (chart paging when the user scrolls back). Binance-backed charts (crypto,
+  /// gold via PAXG) page 1000 candles at a time back to the listing date; Yahoo
+  /// series are loaded in full up front, so they have nothing more to page.
+  /// Returns an empty list when nothing older exists or the request failed.
+  Future<List<CandleStickModel>> fetchOlderCandles(String sym, ChartTimeframe tf, DateTime before) async {
+    final key = '${sym}_${tf.name}';
+    if (_historyExhausted.contains(key)) return const [];
+
+    final String source;
+    if (_instruments[sym]?.category == 'crypto') {
+      source = sym;
+    } else if (sym == 'XAU/USD' && _metalBasis.containsKey(key)) {
+      source = 'PAXG/USD';
+    } else {
+      _historyExhausted.add(key);
+      return const [];
+    }
+
+    const pageSize = 1000;
+    final raw = await _binanceSource.fetchKlinesBefore(source, tf, before, limit: pageSize);
+    if (raw == null) return const []; // network error: try again on the next scroll
+    if (raw.length < pageSize ~/ 2) _historyExhausted.add(key);
+
+    var page = raw;
+    if (source == 'PAXG/USD') {
+      final half = Duration(seconds: tf.duration.inSeconds ~/ 2);
+      final basis = _metalBasis[key] ?? 0;
+      page = [
+        for (final c in raw)
+          if (FxSession.isMarketOpen(c.time.add(half)))
+            c.copyWith(open: c.open + basis, high: c.high + basis, low: c.low + basis, close: c.close + basis),
+      ];
+    }
+    if (page.isEmpty) return const [];
+
+    final existing = _candleHistory[key];
+    if (existing != null && existing.isNotEmpty) {
+      final merged = [...page.where((c) => c.time.isBefore(existing.first.time)), ...existing];
+      _candleHistory[key] = merged.length > maxCandlesInMemory
+          ? merged.sublist(merged.length - maxCandlesInMemory)
+          : merged;
+    }
+    return page;
+  }
+
   Future<List<CandleStickModel>> _fetchYahooCandles(String symbol, String yahooSymbol, ChartTimeframe timeframe) async {
     try {
       String interval;
       String range;
       switch (timeframe) {
+        // The longest range Yahoo serves for each interval (intraday data is
+        // capped: 7 days of 1m, 60 days of 5m-30m, 730 days of 1h).
         case ChartTimeframe.m1:
           interval = '1m';
-          range = '1d';
+          range = '7d';
           break;
         case ChartTimeframe.m5:
           interval = '5m';
-          range = '5d';
+          range = '60d';
           break;
         case ChartTimeframe.m15:
           interval = '15m';
-          range = '5d';
+          range = '60d';
           break;
         case ChartTimeframe.m30:
           interval = '30m';
-          range = '1mo';
+          range = '60d';
           break;
         case ChartTimeframe.h1:
           interval = '1h';
-          range = '1mo';
+          range = '730d';
           break;
         case ChartTimeframe.h4:
-          interval = '1h';
-          range = '3mo';
+          interval = '1h'; // Yahoo has no 4h: folded into 4h candles below
+          range = '730d';
           break;
         case ChartTimeframe.d1:
           interval = '1d';
-          range = '1y';
+          range = '10y';
           break;
       }
 
@@ -1237,7 +1301,7 @@ class MarketFeedService {
             }
 
             if (list.isNotEmpty) {
-              return list;
+              return timeframe == ChartTimeframe.h4 ? CandleMath.aggregate(list, timeframe) : list;
             }
           }
         }

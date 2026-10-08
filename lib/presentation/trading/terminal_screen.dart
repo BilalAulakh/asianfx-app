@@ -124,6 +124,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
                     child: CandlestickChartCanvas(
                       candles: candles,
                       timeframe: currentTf,
+                      viewKey: '$activeSymbol/${currentTf.name}',
+                      onNeedOlderHistory: () => context.read<MarketBloc>().add(MarketLoadOlderCandlesEvent()),
                       style: _chartStyle,
                       priceDecimals: live.displayDecimals,
                       currentPrice: live.midPrice.toDouble(),

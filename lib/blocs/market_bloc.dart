@@ -34,6 +34,9 @@ class MarketReloadCandlesEvent extends MarketEvent {
   MarketReloadCandlesEvent({this.symbol, this.timeframe});
 }
 
+/// The chart was scrolled back near its oldest candle: page in older history.
+class MarketLoadOlderCandlesEvent extends MarketEvent {}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 class MarketState {
   final List<InstrumentEntity> instruments;
@@ -132,6 +135,7 @@ class MarketBloc extends Bloc<MarketEvent, MarketState> {
     on<MarketSelectTimeframeEvent>(_onSelectTimeframe);
     on<MarketTickReceivedEvent>(_onTickReceived);
     on<MarketReloadCandlesEvent>(_onReloadCandles);
+    on<MarketLoadOlderCandlesEvent>(_onLoadOlderCandles);
 
     add(MarketInitializeEvent());
   }
@@ -229,7 +233,7 @@ class MarketBloc extends Bloc<MarketEvent, MarketState> {
           volume: 1.0,
         );
         updatedCandles.add(newCandle);
-        if (updatedCandles.length > 1500) {
+        if (updatedCandles.length > MarketFeedService.maxCandlesInMemory) {
           updatedCandles.removeAt(0);
         }
       } else {
@@ -269,6 +273,30 @@ class MarketBloc extends Bloc<MarketEvent, MarketState> {
       }
     } catch (_) {
       emit(state.copyWith(isLoadingCandles: false));
+    }
+  }
+
+  bool _loadingOlder = false;
+
+  Future<void> _onLoadOlderCandles(
+    MarketLoadOlderCandlesEvent event,
+    Emitter<MarketState> emit,
+  ) async {
+    if (_loadingOlder || state.isLoadingCandles || state.candles.isEmpty) return;
+    final sym = state.activeSymbol;
+    final tf = state.selectedTimeframe;
+    final first = state.candles.first.time;
+    _loadingOlder = true;
+    try {
+      final older = await feedService.fetchOlderCandles(sym, tf, first);
+      // Ignore the page if the chart changed (symbol / timeframe / reload) meanwhile.
+      if (older.isEmpty || state.activeSymbol != sym || state.selectedTimeframe != tf) return;
+      if (state.candles.isEmpty || state.candles.first.time != first) return;
+      final merged = [...older.where((c) => c.time.isBefore(first)), ...state.candles];
+      final cap = MarketFeedService.maxCandlesInMemory;
+      emit(state.copyWith(candles: merged.length > cap ? merged.sublist(merged.length - cap) : merged));
+    } finally {
+      _loadingOlder = false;
     }
   }
 

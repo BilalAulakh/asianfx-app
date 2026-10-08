@@ -235,6 +235,47 @@ class BinanceMarketDataSource {
     return _candleCache['${appSymbol}_${timeframe.name}'] ?? [];
   }
 
+  /// Up to [limit] candles that open strictly before [before] (oldest first),
+  /// for paging further back in history. Returns null on a network / API
+  /// error, and an empty list when Binance has nothing older.
+  Future<List<CandleStickModel>?> fetchKlinesBefore(
+    String appSymbol,
+    ChartTimeframe timeframe,
+    DateTime before, {
+    int limit = 1000,
+  }) async {
+    try {
+      final response = await _dio.get(
+        'https://api.binance.com/api/v3/klines',
+        queryParameters: {
+          'symbol': mapToBinanceSymbol(appSymbol),
+          'interval': _timeframeToBinanceInterval(timeframe),
+          'endTime': before.millisecondsSinceEpoch - 1,
+          'limit': limit,
+        },
+      );
+      if (response.statusCode != 200 || response.data is! List) return null;
+      final candles = <CandleStickModel>[];
+      for (final raw in response.data as List) {
+        if (raw is! List || raw.length < 6) continue;
+        final open = double.tryParse(raw[1].toString()) ?? 0.0;
+        final close = double.tryParse(raw[4].toString()) ?? 0.0;
+        if (open <= 0 || close <= 0) continue;
+        candles.add(CandleStickModel(
+          time: DateTime.fromMillisecondsSinceEpoch(raw[0] as int),
+          open: open,
+          high: double.tryParse(raw[2].toString()) ?? open,
+          low: double.tryParse(raw[3].toString()) ?? open,
+          close: close,
+          volume: double.tryParse(raw[5].toString()) ?? 0.0,
+        ));
+      }
+      return candles.where((c) => c.time.isBefore(before)).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
   String _timeframeToBinanceInterval(ChartTimeframe tf) {
     switch (tf) {
       case ChartTimeframe.m1:
