@@ -158,6 +158,25 @@ class AdminTraderUser {
     };
   }
 
+  /// One row of rpc_admin_list_users (the server's list of registered traders).
+  factory AdminTraderUser.fromServerRow(Map<String, dynamic> row) {
+    final email = row['email']?.toString() ?? '';
+    final name = row['full_name']?.toString().trim() ?? '';
+    final rawBalance = row['balance'];
+    final balance = rawBalance is num ? rawBalance.toDouble() : double.tryParse('$rawBalance') ?? 0.0;
+    return AdminTraderUser(
+      id: row['id']?.toString() ?? '',
+      name: name.isNotEmpty ? name : (email.contains('@') ? email.split('@').first : 'Trader'),
+      email: email,
+      phone: row['phone']?.toString() ?? '',
+      balance: balance,
+      equity: balance,
+      isKycVerified: row['kyc_status']?.toString().toUpperCase() == 'APPROVED',
+      status: row['is_frozen'] == true ? AdminUserStatus.frozen : AdminUserStatus.active,
+      joinedAt: DateTime.tryParse(row['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now(),
+    );
+  }
+
   factory AdminTraderUser.fromMap(Map<String, dynamic> map) {
     return AdminTraderUser(
       id: map['id']?.toString() ?? '',

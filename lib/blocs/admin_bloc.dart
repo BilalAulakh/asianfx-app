@@ -32,7 +32,36 @@ class AdminCubit extends Cubit<AdminState> {
     _syncUsersFromSupabase();
   }
 
+  /// Reload the registered traders from the server (call once the admin is
+  /// signed in: at app start the session is not an admin yet).
+  Future<void> refreshUsers() => _syncUsersFromSupabase();
+
   Future<void> _syncUsersFromSupabase() async {
+    // Authoritative list: every account in auth.users (admins excluded).
+    try {
+      final res = await Supabase.instance.client.rpc('rpc_admin_list_users');
+      if (res is List) {
+        final previous = {for (final u in state.users) u.id: u};
+        final users = <AdminTraderUser>[];
+        for (final r in res) {
+          if (r is! Map) continue;
+          final u = AdminTraderUser.fromServerRow(Map<String, dynamic>.from(r));
+          if (u.id.isEmpty) continue;
+          // Keep a suspension set on this desk (not stored on the server yet).
+          final before = previous[u.id];
+          users.add(before != null && before.status == AdminUserStatus.suspended && u.status == AdminUserStatus.active
+              ? u.copyWith(status: AdminUserStatus.suspended)
+              : u);
+        }
+        emit(state.copyWith(users: users));
+        return;
+      }
+    } catch (e) {
+      // Not an admin session yet, or APPLY_ADMIN_LIST_USERS.sql not run:
+      // fall back to the wallets table below.
+      debugPrint('rpc_admin_list_users unavailable: $e');
+    }
+
     try {
       final List<dynamic> walletRows = await Supabase.instance.client
           .from('wallets')

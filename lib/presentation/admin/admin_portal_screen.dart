@@ -66,6 +66,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
     // Load the persisted dealer config (markups, spread multiplier).
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<KycCubit>().loadAdminQueue();
+      // Registered traders come from the server now that the admin session exists.
+      context.read<AdminCubit>().refreshUsers();
       final feed = MarketFeedService();
       await feed.refreshServerQuotes(forceConfig: true);
       if (!mounted) return;
