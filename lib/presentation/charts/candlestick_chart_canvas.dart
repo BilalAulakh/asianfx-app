@@ -25,6 +25,9 @@ const double _kDefaultVisibleCandles = 30.0;
 const double _kAxisWidth = 64.0;
 const double _kTimeAxisHeight = 22.0;
 const double _kRightMargin = 14.0;
+// Pinch out to ~300 hair-thin candles, like Exness.
+const double _kMinScale = 0.1;
+const double _kMinSlotWidth = 1.2;
 
 /// Exness-style candlestick chart: blue/red joined candles, round price levels,
 /// Bid (red) and Ask (blue) tags on the price axis, pinch / wheel zoom, drag pan
@@ -95,7 +98,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
   }
 
   void _setScale(double s) {
-    setState(() => _scale = s.clamp(0.3, 5.0));
+    setState(() => _scale = s.clamp(_kMinScale, 5.0));
     widget.onScaleChanged?.call(_scale);
   }
 
@@ -158,7 +161,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> {
                 setState(() {
                   _panOffset += details.focalPointDelta.dx;
                   final plotWidth = width - _kAxisWidth - _kRightMargin;
-                  final slotWidth = max(5.0, (plotWidth / _kDefaultVisibleCandles) * _scale);
+                  final slotWidth = max(_kMinSlotWidth, (plotWidth / _kDefaultVisibleCandles) * _scale);
                   final maxPan = max(0.0, widget.candles.length * slotWidth - plotWidth);
                   _panOffset = _panOffset.clamp(-plotWidth * 0.5, maxPan + 40.0);
                 });
@@ -271,8 +274,8 @@ class _ExnessChartPainter extends CustomPainter {
     final plotRight = chartWidth - _kRightMargin;
     final total = candles.length;
 
-    final slotWidth = max(5.0, (plotRight / _kDefaultVisibleCandles) * scale);
-    final bodyWidth = max(2.0, slotWidth * 0.72);
+    final slotWidth = max(_kMinSlotWidth, (plotRight / _kDefaultVisibleCandles) * scale);
+    final bodyWidth = max(1.0, slotWidth * 0.72);
     double xOf(int i) => plotRight - (total - 1 - i) * slotWidth + panOffset;
     bool onScreen(double x) => x >= -slotWidth && x <= chartWidth + slotWidth;
 
@@ -319,7 +322,7 @@ class _ExnessChartPainter extends CustomPainter {
     // 3. Candles (or line) + bottom time axis.
     final bullPaint = Paint()..color = _bull;
     final bearPaint = Paint()..color = _bear;
-    final wick = max(1.0, min(1.6, slotWidth * 0.08));
+    final wick = max(0.8, min(1.6, slotWidth * 0.08));
     double lastTimeX = -1e9;
     final timeGap = max(70.0, 110.0 / scale);
 
