@@ -26,6 +26,13 @@
 
 ALTER TABLE public.withdrawals ADD COLUMN IF NOT EXISTS funds_held BOOLEAN NOT NULL DEFAULT TRUE;
 
+-- Columns used by the review below (also created by 20261006000000_admin_withdrawals.sql;
+-- repeated so this file works on its own).
+ALTER TABLE public.withdrawals ADD COLUMN IF NOT EXISTS payout_txid TEXT;
+ALTER TABLE public.withdrawals ADD COLUMN IF NOT EXISTS admin_note  TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_withdrawals_payout_txid
+    ON public.withdrawals (lower(payout_txid)) WHERE payout_txid IS NOT NULL;
+
 -- ------------------------------------------------------------------------------
 -- USER: request (no deduction)
 -- ------------------------------------------------------------------------------
@@ -233,6 +240,12 @@ GRANT EXECUTE ON FUNCTION public.rpc_request_withdrawal(NUMERIC, TEXT, TEXT, TEX
 GRANT EXECUTE ON FUNCTION public.rpc_admin_review_withdrawal(UUID, BOOLEAN, TEXT, TEXT, TEXT) TO authenticated;
 
 -- Legacy review path (deducted-at-request only, no payout TXID): not used by the app.
-REVOKE ALL ON FUNCTION public.rpc_review_withdrawal(UUID, BOOLEAN, TEXT) FROM PUBLIC, anon, authenticated;
+-- Guarded: a database that never had it must not abort this whole script.
+DO $$
+BEGIN
+    REVOKE ALL ON FUNCTION public.rpc_review_withdrawal(UUID, BOOLEAN, TEXT) FROM PUBLIC, anon, authenticated;
+EXCEPTION WHEN undefined_function THEN
+    NULL;
+END $$;
 
 NOTIFY pgrst, 'reload schema';
