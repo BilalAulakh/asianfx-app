@@ -1,8 +1,5 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../blocs/blocs.dart';
 import '../../core/math/money_math.dart';
@@ -13,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/user_entity.dart';
+import '../../data/datasources/supabase_deposit_service.dart';
 import 'widgets/deposit_panel.dart';
 
 class VaultScreen extends StatefulWidget {
@@ -595,43 +593,131 @@ class _VaultScreenState extends State<VaultScreen> {
 
   void _showWithdrawModal(BuildContext context, UserEntity? user) {
     // For now: allow withdrawal requests without requiring KYC approval
-    final amountController = TextEditingController(text: '1000');
+    final amountController = TextEditingController();
     final addressController = TextEditingController();
-    Uint8List? withdrawProofBytes;
-    String? withdrawProofFileName;
-    bool isPickingProof = false;
+    String? amountError;
+    String? addressError;
+    bool submitting = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF161B20),
+      backgroundColor: context.cardBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
-          Future<void> pickWithdrawProof() async {
-            try {
-              setModalState(() => isPickingProof = true);
-              final picker = ImagePicker();
-              final XFile? file = await picker.pickImage(
-                source: ImageSource.gallery,
-                imageQuality: 85,
-                maxWidth: 1920,
+          final textPrimary = context.textPrimaryColor;
+          final textSecondary = context.textSecondaryColor;
+          final freeMargin = context.read<TradingEngineBloc>().state.accountState.freeMargin;
+          final available = freeMargin < Decimal.zero ? Decimal.zero : freeMargin;
+
+          InputDecoration field(String label, {String? hint, String? prefix, String? error}) => InputDecoration(
+                labelText: label,
+                hintText: hint,
+                prefixText: prefix,
+                errorText: error,
+                filled: true,
+                fillColor: context.inputBg,
+                floatingLabelBehavior: FloatingLabelBehavior.always,
+                contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 14),
+                labelStyle: TextStyle(color: textSecondary, fontSize: 14),
+                hintStyle: TextStyle(color: textSecondary.withValues(alpha: 0.7), fontSize: 13),
+                prefixStyle: TextStyle(color: textPrimary, fontWeight: FontWeight.w700, fontSize: 18),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: _subtleBorder),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: _subtleBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: context.accentColor, width: 1.5),
+                ),
               );
-              if (file != null) {
-                final bytes = await file.readAsBytes();
-                setModalState(() {
-                  withdrawProofBytes = bytes;
-                  withdrawProofFileName = file.name;
-                  isPickingProof = false;
-                });
-              } else {
-                setModalState(() => isPickingProof = false);
-              }
+
+          Future<void> submit() async {
+            final amt = double.tryParse(amountController.text.trim().replaceAll(',', '')) ?? 0.0;
+            final address = addressController.text.trim();
+            setModalState(() {
+              amountError = amt <= 0
+                  ? 'Enter an amount'
+                  : MoneyMath.toDec(amt) > available
+                      ? 'More than your free margin (${MoneyMath.formatCurrency(available)})'
+                      : null;
+              addressError = DepositService.isValidTronAddress(address)
+                  ? null
+                  : 'Enter a valid TRC-20 address (starts with T)';
+            });
+            if (amountError != null || addressError != null) return;
+
+            final authUser = context.read<AuthBloc>().state.user;
+            final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
+            final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
+            // 1. Hold the funds server-side FIRST. rpc_request_withdrawal locks
+            //    the wallet, re-verifies balance and free margin, debits inside
+            //    a transaction and records a withdrawal_hold ledger entry.
+            //    withdrawFunds() used to only change a client-side number, so
+            //    the real wallet was never debited and the money could be spent
+            //    again. Nothing is recorded locally until this succeeds.
+            final messenger = ScaffoldMessenger.of(context);
+            final adminBloc = context.read<AdminBloc>();
+            final walletBloc = context.read<WalletBloc>();
+
+            setModalState(() => submitting = true);
+            try {
+              await context.read<TradingEngineCubit>().requestWithdrawal(
+                    amount: MoneyMath.toDec(amt),
+                    method: 'USDT (TRC-20)',
+                    destination: address,
+                    requestId: txId,
+                  );
             } catch (e) {
-              setModalState(() => isPickingProof = false);
+              if (ctx.mounted) setModalState(() => submitting = false);
+              messenger.showSnackBar(
+                SnackBar(
+                  backgroundColor: AppColors.loss,
+                  content: Text(
+                    'Withdrawal rejected: ${e.toString().replaceAll('Exception: ', '')}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+              );
+              return;
             }
+
+            // 2. Mirror the accepted request for the admin queue and local UI.
+            adminBloc.addTransactionRequest(
+              AdminTransaction(
+                id: txId,
+                userId: effectiveUserId,
+                userName: authUser?.fullName ?? 'Trader',
+                userEmail: authUser?.email ?? 'trader@asianfx.com',
+                type: 'WITHDRAWAL',
+                amount: amt,
+                method: 'USDT (TRC-20)',
+                accountOrAddress: address,
+                status: AdminTxStatus.pending,
+                isAutoApproved: false,
+                createdAt: DateTime.now(),
+              ),
+            );
+            walletBloc.debitWithdrawal(amt, 'USDT (TRC-20)', txId: txId, autoApprove: false);
+
+            if (ctx.mounted) Navigator.of(ctx).pop();
+            messenger.showSnackBar(
+              SnackBar(
+                backgroundColor: AppColors.profit,
+                content: Text(
+                  '✓ Withdrawal of \$${amt.toStringAsFixed(2)} submitted — funds held pending approval.',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+                ),
+              ),
+            );
           }
 
           return Padding(
@@ -647,342 +733,70 @@ class _VaultScreenState extends State<VaultScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Withdrawal Disbursement',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                      Expanded(
+                        child: Text(
+                          'Withdraw USDT (TRC-20)',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: textPrimary),
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          color: Color(0xFF8A919A),
-                          size: 20,
-                        ),
+                        icon: Icon(Icons.close, color: textSecondary, size: 22),
                         onPressed: () => Navigator.of(ctx).pop(),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  Text(
+                    'Available: ${MoneyMath.formatCurrency(available)}',
+                    style: TextStyle(fontSize: 13, color: textSecondary),
+                  ),
+                  const SizedBox(height: 18),
                   TextField(
                     controller: amountController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Withdrawal Amount (USD)',
-                      prefixText: '\$ ',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: addressController,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                    decoration: const InputDecoration(
-                      labelText: 'Destination Wallet Address (USDT TRC-20)',
-                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(color: textPrimary, fontWeight: FontWeight.w700, fontSize: 18),
+                    onChanged: (_) {
+                      if (amountError != null) setModalState(() => amountError = null);
+                    },
+                    decoration: field('Amount (USD)', hint: '0.00', prefix: '\$ ', error: amountError),
                   ),
                   const SizedBox(height: 14),
-
-                  // Optional Wallet QR / Screenshot Slip
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Wallet QR / Proof Screenshot (Optional)',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF8A919A),
-                        ),
-                      ),
-                      if (withdrawProofBytes != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF16C784,
-                            ).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            '✓ ATTACHED',
-                            style: TextStyle(
-                              color: Color(0xFF16C784),
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (withdrawProofBytes == null)
-                    InkWell(
-                      onTap: pickWithdrawProof,
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F1317),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF262D34)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (isPickingProof)
-                              const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF16C784),
-                                ),
-                              )
-                            else ...[
-                              const Icon(
-                                Icons.add_photo_alternate_outlined,
-                                size: 18,
-                                color: Color(0xFF8A919A),
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Attach Wallet Address Slip / QR Screenshot',
-                                style: TextStyle(
-                                  color: Color(0xFF8A919A),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F1317),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: const Color(0xFF16C784).withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.memory(
-                              withdrawProofBytes!,
-                              width: 44,
-                              height: 44,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  withdrawProofFileName ?? 'wallet_proof.png',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${(withdrawProofBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB • Attached for Admin Check',
-                                  style: const TextStyle(
-                                    color: Color(0xFF16C784),
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Color(0xFFE5484D),
-                              size: 18,
-                            ),
-                            onPressed: () => setModalState(() {
-                              withdrawProofBytes = null;
-                              withdrawProofFileName = null;
-                            }),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 18),
-
-                  ElevatedButton(
-                    onPressed: () async {
-                      final amt = double.tryParse(amountController.text) ?? 0.0;
-                      final amtDec = MoneyMath.toDec(amt);
-                      final engineState = context
-                          .read<TradingEngineBloc>()
-                          .state;
-
-                      if (amtDec > engineState.accountState.freeMargin) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: AppColors.loss,
-                            content: Text(
-                              'Insufficient Free Margin! Available: ${MoneyMath.formatCurrency(engineState.accountState.freeMargin)}',
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-
-                      final authUser = context.read<AuthBloc>().state.user;
-                      final effectiveUserId =
-                          authUser?.id ?? 'usr_institutional_01';
-                      final txId =
-                          'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-
-                      String? uploadedStoragePath;
-                      if (withdrawProofBytes != null) {
-                        final fileExt =
-                            (withdrawProofFileName != null &&
-                                withdrawProofFileName!.contains('.'))
-                            ? withdrawProofFileName!
-                                  .split('.')
-                                  .last
-                                  .toLowerCase()
-                            : 'png';
-                        final storagePath =
-                            'withdraw_${effectiveUserId}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
-                        try {
-                          await Supabase.instance.client.storage
-                              .from('reciept-proof')
-                              .uploadBinary(
-                                storagePath,
-                                withdrawProofBytes!,
-                                fileOptions: FileOptions(
-                                  contentType: 'image/$fileExt',
-                                  upsert: true,
-                                ),
-                              );
-                          uploadedStoragePath = storagePath;
-                        } catch (e) {
-                          debugPrint('Supabase storage upload error: $e');
-                        }
-                      }
-
-                      if (!ctx.mounted || !context.mounted) return;
-
-                      // 1. Hold the funds server-side FIRST. rpc_request_withdrawal locks
-                      //    the wallet, re-verifies balance and free margin, debits inside
-                      //    a transaction and records a withdrawal_hold ledger entry.
-                      //    withdrawFunds() used to only change a client-side number, so
-                      //    the real wallet was never debited and the money could be spent
-                      //    again. Nothing is recorded locally until this succeeds.
-                      final messenger = ScaffoldMessenger.of(context);
-                      final adminBloc = context.read<AdminBloc>();
-                      final walletBloc = context.read<WalletBloc>();
-
-                      try {
-                        await context
-                            .read<TradingEngineCubit>()
-                            .requestWithdrawal(
-                              amount: MoneyMath.toDec(amt),
-                              method: 'USDT (TRC-20)',
-                              destination: addressController.text,
-                              requestId: txId,
-                            );
-                      } catch (e) {
-                        if (context.mounted) {
-                          messenger.showSnackBar(
-                            SnackBar(
-                              backgroundColor: const Color(0xFFE5484D),
-                              content: Text(
-                                'Withdrawal rejected: ${e.toString().replaceAll('Exception: ', '')}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                        return;
-                      }
-
-                      // 2. Mirror the accepted request for the admin queue and local UI.
-                      adminBloc.addTransactionRequest(
-                        AdminTransaction(
-                          id: txId,
-                          userId: effectiveUserId,
-                          userName: authUser?.fullName ?? 'Trader',
-                          userEmail: authUser?.email ?? 'trader@asianfx.com',
-                          type: 'WITHDRAWAL',
-                          amount: amt,
-                          method: 'USDT (TRC-20)',
-                          accountOrAddress: addressController.text,
-                          status: AdminTxStatus.pending,
-                          isAutoApproved: false,
-                          createdAt: DateTime.now(),
-                          proofImageName:
-                              uploadedStoragePath ?? withdrawProofFileName,
-                          proofImageBytes: withdrawProofBytes,
-                        ),
-                      );
-                      walletBloc.debitWithdrawal(
-                        amt,
-                        'USDT (TRC-20)',
-                        txId: txId,
-                        autoApprove: false,
-                      );
-
-                      if (ctx.mounted) {
-                        Navigator.of(ctx).pop();
-                      }
-                      if (context.mounted) {
-                        messenger.showSnackBar(
-                          SnackBar(
-                            backgroundColor: AppColors.profit,
-                            content: Text(
-                              '✓ Withdrawal of \$${amt.toStringAsFixed(2)} submitted — funds held pending approval.',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                        );
-                      }
+                  TextField(
+                    controller: addressController,
+                    style: TextStyle(color: textPrimary, fontSize: 14),
+                    autocorrect: false,
+                    onChanged: (_) {
+                      if (addressError != null) setModalState(() => addressError = null);
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE5484D),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: const Text(
-                      'SUBMIT WITHDRAWAL REQUEST',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    decoration: field('Wallet address (USDT TRC-20)', hint: 'T…', error: addressError),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Funds are held now and sent to this address after admin approval.',
+                    style: TextStyle(fontSize: 12, color: textSecondary),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: submitting ? null : submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.brandPrimary,
+                        foregroundColor: Colors.black,
+                        disabledBackgroundColor: AppColors.brandPrimary.withValues(alpha: 0.5),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: submitting
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.black),
+                            )
+                          : const Text(
+                              'Submit withdrawal request',
+                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                            ),
                     ),
                   ),
                 ],
@@ -994,6 +808,3 @@ class _VaultScreenState extends State<VaultScreen> {
     );
   }
 }
-
-/// Soft green wave in the balance card's right corner.
-
