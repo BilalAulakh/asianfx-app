@@ -262,6 +262,41 @@ class _DepositPanelState extends State<DepositPanel> {
     }
   }
 
+  /// Delete an unpaid request, or remove an approved / rejected one from the list.
+  Future<void> _deleteRequest(DepositRequest r) async {
+    final unpaid = r.isPending;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(unpaid ? 'Delete deposit request?' : 'Remove from list?'),
+        content: Text(unpaid
+            ? 'This ${MoneyMath.formatCurrency(r.amountClaimed)} request will be deleted.\n\n'
+                'If you already sent the payment, do not delete it: attach your payment '
+                'screenshot and tap "I have sent the payment" instead.'
+            : 'This request will be removed from your list. Your balance and account '
+                'history are not affected.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(unpaid ? 'Delete' : 'Remove', style: const TextStyle(color: _red)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    try {
+      await _service.deleteMyRequest(r.id);
+      if (!mounted) return;
+      setState(() => _requests = _requests.where((x) => x.id != r.id).toList());
+      _snack(unpaid ? 'Deposit request deleted.' : 'Removed from your list.', _green);
+    } on DepositServiceException catch (e) {
+      _snack(e.message, _red);
+      await _loadRequests(silent: true);
+    }
+  }
+
   void _snack(String message, Color color) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -590,6 +625,16 @@ class _DepositPanelState extends State<DepositPanel> {
               const Spacer(),
               Text(DateFormat('yyyy-MM-dd HH:mm').format(r.createdAt.toLocal()),
                   style: TextStyle(fontSize: 10, color: _textSecondary)),
+              // Requests under review cannot be removed (server-enforced too).
+              if (r.userCanRemove && !_submitted.contains(r.id))
+                IconButton(
+                  tooltip: r.isPending ? 'Delete request' : 'Remove from list',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 28),
+                  icon: Icon(Icons.delete_outline_rounded, size: 18, color: _textSecondary),
+                  onPressed: () => _deleteRequest(r),
+                ),
             ],
           ),
           if (approved && credited != null)

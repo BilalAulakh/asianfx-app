@@ -360,4 +360,45 @@ void main() {
       expect(await service.proofUrl(null), isNull);
     });
   });
+
+  group('user deletes own request', () {
+    test('calls the RPC and reports deleted vs hidden', () async {
+      backend.onRpc = (fn, p) => {'status': 'success', 'action': p['p_deposit_id'] == 'a' ? 'deleted' : 'hidden'};
+      expect(await service.deleteMyRequest('a'), isTrue);
+      expect(await service.deleteMyRequest('b'), isFalse);
+      expect(backend.rpcCalls.map((c) => c.$1), everyElement('rpc_delete_my_deposit_request'));
+      expect(backend.rpcCalls.first.$2, {'p_deposit_id': 'a'});
+    });
+
+    test('under-review refusal surfaces the server message', () async {
+      backend.onRpc = (_, _) =>
+          const PostgrestException(message: 'UNDER_REVIEW: this deposit is being reviewed and cannot be deleted');
+      await expectLater(
+        service.deleteMyRequest('a'),
+        throwsA(isA<DepositServiceException>().having((e) => e.code, 'code', 'UNDER_REVIEW')),
+      );
+    });
+
+    test('server without the migration gives a friendly message', () async {
+      backend.onRpc = (_, _) => const PostgrestException(
+          message: 'Could not find the function public.rpc_delete_my_deposit_request(p_deposit_id) in the schema cache');
+      await expectLater(
+        service.deleteMyRequest('a'),
+        throwsA(isA<DepositServiceException>().having((e) => e.code, 'code', 'NOT_AVAILABLE')),
+      );
+    });
+
+    test('userCanRemove: everything except a pending request already submitted', () {
+      DepositRequest r(String status, {String? txid, String? proof}) => DepositRequest.fromMap({
+            ..._row(status: status, credited: status == 'APPROVED' ? 10 : null, reason: 'x'),
+            'txid': txid,
+            'proof_path': proof,
+          });
+      expect(r('PENDING').userCanRemove, isTrue); // awaiting payment
+      expect(r('PENDING', proof: 'user-1/p.png').userCanRemove, isFalse);
+      expect(r('PENDING', txid: _txid.toLowerCase()).userCanRemove, isFalse);
+      expect(r('APPROVED', txid: _txid.toLowerCase()).userCanRemove, isTrue);
+      expect(r('REJECTED', proof: 'user-1/p.png').userCanRemove, isTrue);
+    });
+  });
 }

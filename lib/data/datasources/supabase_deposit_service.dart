@@ -125,6 +125,10 @@ class DepositRequest {
 
   bool get hasTxid => txid.isNotEmpty;
 
+  /// The user may remove it from their list: anything except a pending request
+  /// whose payment proof / TXID is already with the reviewer (server-enforced).
+  bool get userCanRemove => !isPending || ((proofPath == null || proofPath!.isEmpty) && !hasTxid);
+
   Uri get tronscanUrl => DepositService.tronscanUrl(txid);
 
   static DepositStatus statusFrom(dynamic raw) {
@@ -288,22 +292,25 @@ class SupabaseDepositBackend implements DepositBackend {
         'reject_reason, created_at, updated_at';
     const verification = ', address_used, verification_status, verification_error, '
         'onchain_amount, approved_by_system';
-    Future<List<Map<String, dynamic>>> query(String columns) async {
-      final rows = await _client
-          .from('deposit_requests')
-          .select(columns)
-          .eq('user_id', userId)
-          .order('created_at', ascending: false)
-          .limit(50);
+    Future<List<Map<String, dynamic>>> query(String columns, {bool skipHidden = true}) async {
+      var q = _client.from('deposit_requests').select(columns).eq('user_id', userId);
+      // Requests the user removed from their list (approved / rejected).
+      if (skipHidden) q = q.isFilter('user_hidden_at', null);
+      final rows = await q.order('created_at', ascending: false).limit(50);
       return [for (final r in rows) Map<String, dynamic>.from(r)];
     }
 
     try {
       return await query(base + verification);
     } on PostgrestException catch (e) {
-      // Auto-verify migration not applied yet: fall back to the original columns.
-      if (e.message.contains('does not exist')) return query(base);
-      rethrow;
+      if (!e.message.contains('does not exist')) rethrow;
+      // Older schema: no user_hidden_at and/or no auto-verify columns yet.
+      try {
+        return await query(base + verification, skipHidden: false);
+      } on PostgrestException catch (e2) {
+        if (e2.message.contains('does not exist')) return query(base, skipHidden: false);
+        rethrow;
+      }
     }
   }
 
@@ -720,6 +727,25 @@ class DepositService {
       try {
         await _backend.removeProof(proofPath);
       } catch (_) {}
+    }
+  }
+
+  /// User: remove one of their own requests from "My deposit requests".
+  /// An unpaid pending request is deleted; an approved / rejected one is only
+  /// hidden (it stays on the ledger and the admin desk). Requests under review
+  /// are refused by the server. Returns true when the request was deleted.
+  Future<bool> deleteMyRequest(String depositId) async {
+    _requireUser();
+    try {
+      final res = _asMap(await _backend.rpc('rpc_delete_my_deposit_request', {'p_deposit_id': depositId}));
+      return res['action'] == 'deleted';
+    } catch (e) {
+      final ex = toException(e);
+      if (ex.message.contains('rpc_delete_my_deposit_request')) {
+        throw const DepositServiceException(
+            'NOT_AVAILABLE', 'Deleting deposit requests is not available yet. Please try again later.');
+      }
+      throw ex;
     }
   }
 
