@@ -89,6 +89,22 @@ class WalletCubit extends Cubit<WalletState> {
     ));
   }
 
+  /// A withdrawal request awaiting admin approval: listed as pending, the
+  /// balance is unchanged (the server deducts it when the admin approves).
+  void recordWithdrawalRequest(double amount, String method, {String? txId}) {
+    final tx = TransactionEntity(
+      id: txId ?? 'tx_${DateTime.now().millisecondsSinceEpoch}',
+      type: 'withdrawal',
+      amount: amount,
+      currency: 'USD',
+      status: 'pending',
+      method: method,
+      description: 'Withdrawal via $method (awaiting approval)',
+      createdAt: DateTime.now(),
+    );
+    emit(state.copyWith(transactions: [tx, ...state.transactions]));
+  }
+
   void debitWithdrawal(double amount, String method, {String? txId, bool autoApprove = false}) {
     final newBal = (state.balance - amount).clamp(0.0, 1000000000.0);
     final newEquity = (state.equity - amount).clamp(0.0, 1000000000.0);

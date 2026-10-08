@@ -353,6 +353,22 @@ class DepositService {
   static bool isValidTxid(String raw) => _txidPattern.hasMatch(raw.trim());
   static bool isValidTronAddress(String raw) => _tronAddressPattern.hasMatch(raw.trim());
 
+  /// Why [raw] is not a TRON (TRC-20) address, or null when it is valid.
+  static String? tronAddressProblem(String raw) {
+    final a = raw.trim();
+    if (a.isEmpty) return 'Enter your USDT TRC-20 wallet address';
+    if (!a.startsWith('T')) return 'A TRC-20 address starts with a capital T';
+    if (a.length != 34) {
+      return 'A TRC-20 address is exactly 34 characters (you entered ${a.length})';
+    }
+    final bad = RegExp(r'[^1-9A-HJ-NP-Za-km-z]').allMatches(a).map((m) => m.group(0)!).toSet();
+    if (bad.isNotEmpty) {
+      final shown = bad.map((c) => c == ' ' ? 'space' : '"$c"').join(', ');
+      return 'Not allowed in a TRC-20 address: $shown (check 0/O and I/l)';
+    }
+    return null;
+  }
+
   static Uri tronscanUrl(String txid) =>
       Uri.parse('https://tronscan.org/#/transaction/${normalizeTxid(txid)}');
 

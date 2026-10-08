@@ -170,4 +170,40 @@ void main() {
       expect(find.textContaining('Funds returned to the user'), findsOneWidget);
     });
   });
+
+  group('deduct on approval (new requests, funds_held = false)', () {
+    Map<String, dynamic> newRow({num balance = 89.67, num amount = 10}) =>
+        {..._row(), 'funds_held': false, 'wallet_balance': balance, 'amount': amount};
+
+    test('old rows without the column count as already deducted', () {
+      expect(WithdrawalRequest.fromMap(_row()).fundsHeld, isTrue);
+      expect(WithdrawalRequest.fromMap(newRow()).fundsHeld, isFalse);
+    });
+
+    test('balanceTooLow only for undeducted requests above the current balance', () {
+      expect(WithdrawalRequest.fromMap(newRow(balance: 5, amount: 10)).balanceTooLow, isTrue);
+      expect(WithdrawalRequest.fromMap(newRow(balance: 50, amount: 10)).balanceTooLow, isFalse);
+      expect(WithdrawalRequest.fromMap({..._row(), 'wallet_balance': 5}).balanceTooLow, isFalse);
+    });
+
+    testWidgets('card says nothing is held; reject does not mention a refund', (tester) async {
+      final fake = await _pump(tester, rows: [newRow()]);
+      expect(find.text('Balance now'), findsOneWidget);
+      expect(find.text('REJECT & REFUND'), findsNothing);
+
+      await tester.tap(find.text('REJECT'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Nothing was deducted'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).last, 'Wrong address');
+      await tester.tap(find.widgetWithText(FilledButton, 'Reject'));
+      await tester.pumpAndSettle();
+      expect(fake.reviews().single['p_approve'], isFalse);
+      expect(find.textContaining('balance was not changed'), findsOneWidget);
+    });
+
+    testWidgets('warns not to pay when the balance dropped below the request', (tester) async {
+      await _pump(tester, rows: [newRow(balance: 4, amount: 10)]);
+      expect(find.textContaining('less than this withdrawal. Do not pay'), findsOneWidget);
+    });
+  });
 }

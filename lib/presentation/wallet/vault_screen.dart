@@ -1,10 +1,10 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../blocs/blocs.dart';
 import '../../core/math/money_math.dart';
-import 'package:go_router/go_router.dart';
-
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
@@ -591,7 +591,29 @@ class _VaultScreenState extends State<VaultScreen> {
     );
   }
 
-  void _showWithdrawModal(BuildContext context, UserEntity? user) {
+  /// Total of the user's withdrawal requests still awaiting approval (not yet
+  /// deducted). The server reserves it against new requests, so the sheet does too.
+  Future<Decimal> _pendingWithdrawals() async {
+    try {
+      final rows = await Supabase.instance.client
+          .from('withdrawals')
+          .select('amount')
+          .eq('status', 'PENDING')
+          .eq('funds_held', false);
+      var total = Decimal.zero;
+      for (final r in rows) {
+        total += MoneyMath.toDec(r['amount'] ?? 0);
+      }
+      return total;
+    } catch (_) {
+      return Decimal.zero; // offline / older schema: the server still checks
+    }
+  }
+
+  Future<void> _showWithdrawModal(BuildContext context, UserEntity? user) async {
+    final pending = await _pendingWithdrawals();
+    if (!context.mounted) return;
+
     // For now: allow withdrawal requests without requiring KYC approval
     final amountController = TextEditingController();
     final addressController = TextEditingController();
@@ -611,7 +633,8 @@ class _VaultScreenState extends State<VaultScreen> {
           final textPrimary = context.textPrimaryColor;
           final textSecondary = context.textSecondaryColor;
           final freeMargin = context.read<TradingEngineBloc>().state.accountState.freeMargin;
-          final available = freeMargin < Decimal.zero ? Decimal.zero : freeMargin;
+          final free = freeMargin - pending;
+          final available = free < Decimal.zero ? Decimal.zero : free;
 
           InputDecoration field(String label, {String? hint, String? prefix, String? error}) => InputDecoration(
                 labelText: label,
@@ -648,9 +671,7 @@ class _VaultScreenState extends State<VaultScreen> {
                   : MoneyMath.toDec(amt) > available
                       ? 'More than your free margin (${MoneyMath.formatCurrency(available)})'
                       : null;
-              addressError = DepositService.isValidTronAddress(address)
-                  ? null
-                  : 'Enter a valid TRC-20 address (starts with T)';
+              addressError = DepositService.tronAddressProblem(address);
             });
             if (amountError != null || addressError != null) return;
 
@@ -658,12 +679,10 @@ class _VaultScreenState extends State<VaultScreen> {
             final effectiveUserId = authUser?.id ?? 'usr_institutional_01';
             final txId = 'TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
-            // 1. Hold the funds server-side FIRST. rpc_request_withdrawal locks
-            //    the wallet, re-verifies balance and free margin, debits inside
-            //    a transaction and records a withdrawal_hold ledger entry.
-            //    withdrawFunds() used to only change a client-side number, so
-            //    the real wallet was never debited and the money could be spent
-            //    again. Nothing is recorded locally until this succeeds.
+            // 1. Record the request server-side FIRST. rpc_request_withdrawal
+            //    re-verifies balance, free margin and other pending requests.
+            //    The balance is deducted only when the admin approves it.
+            //    Nothing is recorded locally until this succeeds.
             final messenger = ScaffoldMessenger.of(context);
             final adminBloc = context.read<AdminBloc>();
             final walletBloc = context.read<WalletBloc>();
@@ -706,14 +725,14 @@ class _VaultScreenState extends State<VaultScreen> {
                 createdAt: DateTime.now(),
               ),
             );
-            walletBloc.debitWithdrawal(amt, 'USDT (TRC-20)', txId: txId, autoApprove: false);
+            walletBloc.recordWithdrawalRequest(amt, 'USDT (TRC-20)', txId: txId);
 
             if (ctx.mounted) Navigator.of(ctx).pop();
             messenger.showSnackBar(
               SnackBar(
                 backgroundColor: AppColors.profit,
                 content: Text(
-                  '✓ Withdrawal of \$${amt.toStringAsFixed(2)} submitted — funds held pending approval.',
+                  '✓ Withdrawal request of \$${amt.toStringAsFixed(2)} sent. It is deducted from your balance when approved.',
                   style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
                 ),
               ),
@@ -750,6 +769,14 @@ class _VaultScreenState extends State<VaultScreen> {
                     'Available: ${MoneyMath.formatCurrency(available)}',
                     style: TextStyle(fontSize: 13, color: textSecondary),
                   ),
+                  if (pending > Decimal.zero)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Awaiting approval: ${MoneyMath.formatCurrency(pending)} (not deducted yet)',
+                        style: TextStyle(fontSize: 13, color: context.accentColor),
+                      ),
+                    ),
                   const SizedBox(height: 18),
                   TextField(
                     controller: amountController,
@@ -772,7 +799,7 @@ class _VaultScreenState extends State<VaultScreen> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Funds are held now and sent to this address after admin approval.',
+                    'Your balance is not changed now. The amount is deducted and sent to this address when the admin approves it.',
                     style: TextStyle(fontSize: 12, color: textSecondary),
                   ),
                   const SizedBox(height: 18),

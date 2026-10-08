@@ -6,10 +6,12 @@ import 'supabase_deposit_service.dart';
 
 /// Admin side of USDT withdrawals.
 ///
-/// `rpc_request_withdrawal` already deducted and held the amount when the user
-/// asked. The admin sends the USDT by hand, then either records the payment
-/// (`rpc_admin_review_withdrawal` approve + payout TXID) or rejects with a
-/// reason, which returns the held funds to the user's balance.
+/// `rpc_request_withdrawal` records the request without touching the balance.
+/// The admin sends the USDT by hand, then records the payment
+/// (`rpc_admin_review_withdrawal` approve + payout TXID), which deducts the
+/// amount from the user's balance, or rejects with a reason (nothing to return).
+/// Requests made before deduct-on-approval were deducted when made
+/// ([WithdrawalRequest.fundsHeld]): rejecting those refunds the amount.
 
 enum WithdrawalStatus { pending, approved, rejected, cancelled }
 
@@ -26,6 +28,10 @@ class WithdrawalRequest {
   final String? rejectReason;
   final String? payoutTxid;
   final String? adminNote;
+
+  /// True when the amount was already deducted at request time (old requests).
+  /// New requests are deducted only when approved.
+  final bool fundsHeld;
 
   // Context for the decision (from rpc_admin_list_withdrawals).
   final String? userEmail;
@@ -54,6 +60,7 @@ class WithdrawalRequest {
     this.rejectReason,
     this.payoutTxid,
     this.adminNote,
+    this.fundsHeld = false,
     this.userEmail,
     this.fullName,
     this.kycStatus = 'NOT_STARTED',
@@ -71,6 +78,10 @@ class WithdrawalRequest {
         totalWithdrawn = totalWithdrawn ?? Decimal.zero;
 
   bool get isPending => status == WithdrawalStatus.pending;
+
+  /// Approving deducts the amount now, but the user's balance is lower.
+  bool get balanceTooLow =>
+      isPending && !fundsHeld && walletBalance != null && walletBalance! < amount;
   bool get kycApproved => kycStatus.toUpperCase() == 'APPROVED';
   bool get destinationLooksValid => DepositService.isValidTronAddress(destination ?? '');
 
@@ -104,6 +115,8 @@ class WithdrawalRequest {
         rejectReason: m['reject_reason'] as String?,
         payoutTxid: m['payout_txid'] as String?,
         adminNote: m['admin_note'] as String?,
+        // Rows from before the column existed were all deducted at request time.
+        fundsHeld: m.containsKey('funds_held') ? m['funds_held'] == true : true,
         userEmail: m['user_email'] as String?,
         fullName: m['full_name'] as String?,
         kycStatus: '${m['kyc_status'] ?? 'NOT_STARTED'}',

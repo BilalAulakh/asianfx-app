@@ -401,4 +401,15 @@ void main() {
       expect(r('REJECTED', proof: 'user-1/p.png').userCanRemove, isTrue);
     });
   });
+
+  test('tronAddressProblem explains what is wrong with a withdrawal address', () {
+    expect(DepositService.tronAddressProblem('TA199GDmT2ybpMKdHwZkjMgo2awuk1N1fV'), isNull);
+    expect(DepositService.tronAddressProblem('  '), contains('Enter'));
+    expect(DepositService.tronAddressProblem('XA199GDmT2ybpMKdHwZkjMgo2awuk1N1fV'), contains('starts with'));
+    expect(DepositService.tronAddressProblem('Tojopjpjoojojijjijjijjijijideesesjijijijiqweqweweqweqw'),
+        contains('you entered 54'));
+    expect(DepositService.tronAddressProblem('TA199GDmT2ybpMKdHwZkjMgo2awuk1N10V'), contains('"0"'));
+    // Agrees with the strict check used elsewhere.
+    expect(DepositService.isValidTronAddress('TA199GDmT2ybpMKdHwZkjMgo2awuk1N1fV'), isTrue);
+  });
 }

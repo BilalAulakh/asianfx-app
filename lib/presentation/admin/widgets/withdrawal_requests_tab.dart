@@ -14,7 +14,8 @@ import 'reason_dialog.dart';
 ///
 /// Workflow: check the user and the destination address, send the USDT from
 /// the company wallet, paste that payment's TXID and press "Mark as Paid".
-/// Or reject with a reason, which returns the held amount to the user.
+/// Or reject with a reason. Approving deducts the amount from the user's
+/// balance (older requests were deducted when made; rejecting those refunds).
 ///
 /// Layout note: the app theme gives Filled/Outlined buttons an infinite minimum
 /// width, so every button here sets its own minimumSize.
@@ -215,6 +216,7 @@ class _WithdrawalCardState extends State<_WithdrawalCard> {
         title: Text('Mark as paid?', style: TextStyle(color: _textPrimary, fontSize: 16)),
         content: Text(
           'Confirm you sent ${MoneyMath.formatCurrency(w.amount)} USDT to\n${w.destination ?? '-'}\n\n'
+          '${w.fundsHeld ? '' : '${MoneyMath.formatCurrency(w.amount)} is deducted from the user\'s balance now. '}'
           'This settles the withdrawal and cannot be undone.',
           style: TextStyle(color: _textSecondary, fontSize: 12),
         ),
@@ -241,8 +243,9 @@ class _WithdrawalCardState extends State<_WithdrawalCard> {
     final reason = await showReasonDialog(
       context,
       title: 'Reject withdrawal',
-      message: '${MoneyMath.formatCurrency(w.amount)} will be returned to the user\'s balance. '
-          'The user sees this reason.',
+      message: w.fundsHeld
+          ? '${MoneyMath.formatCurrency(w.amount)} will be returned to the user\'s balance. The user sees this reason.'
+          : 'Nothing was deducted from the user\'s balance. The user sees this reason.',
       hint: 'e.g. Wallet address is not a TRC-20 address',
       confirmLabel: 'Reject',
       background: _cardBg,
@@ -255,7 +258,7 @@ class _WithdrawalCardState extends State<_WithdrawalCard> {
       return;
     }
     await _run(() => widget.service.reject(w.id, reason: reason, adminNote: _noteController.text),
-        'Withdrawal rejected. Funds returned to the user.');
+        w.fundsHeld ? 'Withdrawal rejected. Funds returned to the user.' : 'Withdrawal rejected. The balance was not changed.');
   }
 
   Future<void> _run(Future<void> Function() action, String success) async {
@@ -345,6 +348,8 @@ class _WithdrawalCardState extends State<_WithdrawalCard> {
     final warnings = <String>[
       if (!w.kycApproved) 'KYC is ${w.kycStatus.replaceAll('_', ' ').toLowerCase()} - identity not verified.',
       if (!w.destinationLooksValid) 'Destination is not a valid TRC-20 address. Do not send - reject instead.',
+      if (w.balanceTooLow)
+        'Balance is now ${MoneyMath.formatCurrency(w.walletBalance!)}, less than this withdrawal. Do not pay - reject instead.',
       if (w.openPositions > 0) 'User has ${w.openPositions} open position(s); their equity can still change.',
       if (w.totalWithdrawn + w.amount > w.totalDeposited && w.totalDeposited > Decimal.zero)
         'Paying this takes withdrawals above deposits (profit payout).',
@@ -447,7 +452,9 @@ class _WithdrawalCardState extends State<_WithdrawalCard> {
 
           // ── Account ──────────────────────────────────────────────────────
           _section('Account', [
-            _kv('Balance (after hold)', w.walletBalance == null ? '-' : MoneyMath.formatCurrency(w.walletBalance!)),
+            _kv(w.fundsHeld ? 'Balance (after hold)' : 'Balance now',
+                w.walletBalance == null ? '-' : MoneyMath.formatCurrency(w.walletBalance!),
+                color: w.balanceTooLow ? _red : null),
             _kv('Used margin', w.heldMargin == null ? '-' : MoneyMath.formatCurrency(w.heldMargin!)),
             _kv('Open positions', '${w.openPositions}', color: w.openPositions > 0 ? _amber : null),
             _kv('Realized P/L (all time)', MoneyMath.formatPnL(w.realizedPnlTotal), color: pnlColor),
@@ -541,7 +548,8 @@ class _WithdrawalCardState extends State<_WithdrawalCard> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     icon: const Icon(Icons.cancel_outlined, size: 18),
-                    label: const Text('REJECT & REFUND', style: TextStyle(fontWeight: FontWeight.bold)),
+                    label: Text(w.fundsHeld ? 'REJECT & REFUND' : 'REJECT',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(width: 12),
