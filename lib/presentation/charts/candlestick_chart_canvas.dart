@@ -23,7 +23,7 @@ class ExnessChartColors {
 
 /// Candles visible across the default viewport (Exness shows ~30 on a phone).
 const double _kDefaultVisibleCandles = 30.0;
-const double _kAxisWidth = 64.0;
+const double _kAxisWidth = 64.0; // minimum; widened to fit the price text
 const double _kTimeAxisHeight = 22.0;
 const double _kRightMargin = 14.0;
 // Pinch out to ~300 hair-thin candles, like Exness.
@@ -45,8 +45,8 @@ class ChartViewport {
 
   const ChartViewport({required this.plotRight, required this.slot, required this.count, required this.pan});
 
-  factory ChartViewport.of(double width, double scale, int count, double pan) {
-    final plotRight = width - _kAxisWidth - _kRightMargin;
+  factory ChartViewport.of(double width, double scale, int count, double pan, {double axisWidth = _kAxisWidth}) {
+    final plotRight = width - axisWidth - _kRightMargin;
     return ChartViewport(
       plotRight: plotRight,
       slot: max(_kMinSlotWidth, (plotRight / _kDefaultVisibleCandles) * scale),
@@ -228,7 +228,27 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> with Si
     return _joined = CandleMath.joinGaps(src, maxGap);
   }
 
-  ChartViewport _viewport([double? pan]) => ChartViewport.of(_width, _scale, widget.candles.length, pan ?? _panOffset);
+  ChartViewport _viewport([double? pan]) =>
+      ChartViewport.of(_width, _scale, widget.candles.length, pan ?? _panOffset, axisWidth: _axisWidth);
+
+  /// Price axis wide enough for the longest price label / tag (e.g. "4114.790").
+  double _axisWidth = _kAxisWidth;
+
+  double _measureAxisWidth(double price) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: price.abs().toStringAsFixed(widget.priceDecimals),
+        style: const TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          fontFeatures: [ui.FontFeature.tabularFigures()],
+        ),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    )..layout();
+    return max(_kAxisWidth, (tp.width + 14).ceilToDouble());
+  }
 
   void _kick() {
     if (!_ticker.isActive) {
@@ -287,7 +307,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> with Si
     final s = newScale.clamp(_kMinScale, _kMaxScale).toDouble();
     if (s == _scale || _width <= 0) return;
     final before = _viewport();
-    final after = ChartViewport.of(_width, s, widget.candles.length, 0);
+    final after = ChartViewport.of(_width, s, widget.candles.length, 0, axisWidth: _axisWidth);
     setState(() {
       _scale = s;
       _panOffset = after.clampPan(before.panAfterZoom(focalX, after.slot));
@@ -355,7 +375,9 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> with Si
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
         _width = width;
-        final chartWidth = width - _kAxisWidth;
+        final hiPrice = max(widget.currentPrice, max(widget.ask ?? 0, _hi ?? widget.candles.last.high));
+        _axisWidth = _measureAxisWidth(hiPrice);
+        final chartWidth = width - _axisWidth;
         final candles = _joinedCandles();
         final viewport = _viewport();
 
@@ -435,6 +457,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> with Si
                     painter: _ExnessChartPainter(
                       candles: candles,
                       viewport: viewport,
+                      axisWidth: _axisWidth,
                       minPrice: _lo!,
                       maxPrice: _hi!,
                       style: widget.style,
@@ -453,7 +476,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> with Si
             // Round "fit" button (Exness): glide back to the latest candles at 100%.
             if (showFit)
               Positioned(
-                right: _kAxisWidth + 10,
+                right: _axisWidth + 10,
                 bottom: _kTimeAxisHeight + 12,
                 child: Material(
                   color: isDark ? const Color(0xFF1F272E) : Colors.white,
@@ -484,6 +507,7 @@ class _CandlestickChartCanvasState extends State<CandlestickChartCanvas> with Si
 class _ExnessChartPainter extends CustomPainter {
   final List<CandleStickModel> candles;
   final ChartViewport viewport;
+  final double axisWidth;
   final double minPrice;
   final double maxPrice;
   final ChartStyle style;
@@ -498,6 +522,7 @@ class _ExnessChartPainter extends CustomPainter {
   _ExnessChartPainter({
     required this.candles,
     required this.viewport,
+    required this.axisWidth,
     required this.minPrice,
     required this.maxPrice,
     required this.style,
@@ -533,7 +558,7 @@ class _ExnessChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (candles.isEmpty) return;
 
-    final chartWidth = size.width - _kAxisWidth;
+    final chartWidth = size.width - axisWidth;
     final chartHeight = size.height - _kTimeAxisHeight;
     final slotWidth = viewport.slot;
     final bodyWidth = max(1.0, slotWidth * 0.72);
@@ -658,7 +683,7 @@ class _ExnessChartPainter extends CustomPainter {
   }
 
   void _axisTag(Canvas canvas, double chartWidth, double top, Color bg, String text, Color fg) {
-    const w = _kAxisWidth - 3;
+    final w = axisWidth - 3;
     canvas.drawRRect(
       RRect.fromRectAndRadius(Rect.fromLTWH(chartWidth + 2, top, w, _tagH), const Radius.circular(3)),
       Paint()..color = bg,
