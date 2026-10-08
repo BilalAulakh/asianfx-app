@@ -61,7 +61,7 @@ class FxButton extends StatelessWidget {
               ? LinearGradient(
                   colors: backgroundColor != null
                       ? [backgroundColor!, backgroundColor!]
-                      : [const Color(0xFF00C896), const Color(0xFF00B0CC)],
+                      : AppColors.brandGradient,
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 )

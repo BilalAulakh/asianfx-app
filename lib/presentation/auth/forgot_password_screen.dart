@@ -292,13 +292,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           width: 64,
           height: 64,
           decoration: BoxDecoration(
-            color: const Color(0xFFFFD600).withAlpha(20),
+            color: const Color(0xFFFFDE02).withAlpha(20),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFFFD600).withAlpha(60)),
+            border: Border.all(color: const Color(0xFFFFDE02).withAlpha(60)),
           ),
           child: const Icon(
             Icons.password_rounded,
-            color: Color(0xFFFFD600),
+            color: Color(0xFFFFDE02),
             size: 32,
           ),
         ),
@@ -328,13 +328,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFD600).withAlpha(15),
+            color: const Color(0xFFFFDE02).withAlpha(15),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFFD600).withAlpha(60)),
+            border: Border.all(color: const Color(0xFFFFDE02).withAlpha(60)),
           ),
           child: Row(
             children: [
-              const Icon(Icons.mark_email_read_rounded, color: Color(0xFFFFD600), size: 24),
+              const Icon(Icons.mark_email_read_rounded, color: Color(0xFFFFDE02), size: 24),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -446,12 +446,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            color: const Color(0xFF00D68F).withAlpha(30),
+            color: const Color(0xFF16C784).withAlpha(30),
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF00D68F), width: 2),
+            border: Border.all(color: const Color(0xFF16C784), width: 2),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00D68F).withAlpha(60),
+                color: const Color(0xFF16C784).withAlpha(60),
                 blurRadius: 28,
                 spreadRadius: 4,
               ),
@@ -459,7 +459,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           child: const Icon(
             Icons.check_circle_rounded,
-            color: Color(0xFF00D68F),
+            color: Color(0xFF16C784),
             size: 42,
           ),
         ),

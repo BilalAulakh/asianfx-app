@@ -27,8 +27,8 @@ class AddressACard extends StatefulWidget {
 }
 
 class _AddressACardState extends State<AddressACard> {
-  static const _emerald = Color(0xFF10B981);
-  static const _red = Color(0xFFFF4757);
+  static const _emerald = Color(0xFF16C784);
+  static const _red = Color(0xFFE5484D);
 
   final _controller = TextEditingController();
   String? _addressA;

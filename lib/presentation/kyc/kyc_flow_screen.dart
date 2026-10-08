@@ -496,7 +496,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
   void _showSnackBar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: isError ? const Color(0xFFFF4757) : const Color(0xFF0ECB81),
+        backgroundColor: isError ? const Color(0xFFE5484D) : const Color(0xFF16C784),
         content: Text(
           message,
           style: TextStyle(
@@ -527,9 +527,9 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
         effectiveStatus == KycVerificationStatus.inProgress;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E17),
+      backgroundColor: const Color(0xFF0B0E11),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121824),
+        backgroundColor: const Color(0xFF13181D),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
@@ -545,16 +545,16 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFC700).withValues(alpha: 0.15),
+                      color: const Color(0xFFFFDE02).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFFFFC700)),
+                      border: Border.all(color: const Color(0xFFFFDE02)),
                     ),
                     child: const Text(
                       'COMPLIANCE',
                       style: TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.w900,
-                        color: Color(0xFFFFC700),
+                        color: Color(0xFFFFDE02),
                         letterSpacing: 0.6,
                       ),
                     ),
@@ -575,7 +575,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
         actions: [
           IconButton(
             tooltip: 'Reset / Test Flow',
-            icon: const Icon(Icons.refresh_rounded, size: 20, color: Color(0xFFFFC700)),
+            icon: const Icon(Icons.refresh_rounded, size: 20, color: Color(0xFFFFDE02)),
             onPressed: () {
               context.read<AuthBloc>().resetKycForTesting();
               if (authUser != null) {
@@ -634,7 +634,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF121824),
+        color: const Color(0xFF13181D),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
@@ -677,7 +677,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                     const SizedBox(height: 2),
                     Text(
                       status.code,
-                      style: const TextStyle(fontSize: 10, color: Color(0xFF848E9C)),
+                      style: const TextStyle(fontSize: 10, color: Color(0xFF8A919A)),
                     ),
                   ],
                 ),
@@ -716,9 +716,9 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF121824),
+        color: const Color(0xFF13181D),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1E2838)),
+        border: Border.all(color: const Color(0xFF1E242A)),
       ),
       child: Row(
         children: [
@@ -750,14 +750,14 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: isDone
-                    ? const Color(0xFF0ECB81)
-                    : (isActive ? const Color(0xFFFFC700) : const Color(0xFF1A2230)),
+                    ? const Color(0xFF16C784)
+                    : (isActive ? const Color(0xFFFFDE02) : const Color(0xFF1A2230)),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 isDone ? Icons.check : icon,
                 size: 15,
-                color: (isActive || isDone) ? Colors.black : const Color(0xFF848E9C),
+                color: (isActive || isDone) ? Colors.black : const Color(0xFF8A919A),
               ),
             ),
             const SizedBox(height: 5),
@@ -768,8 +768,8 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 fontSize: 10,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
                 color: isActive
-                    ? const Color(0xFFFFC700)
-                    : (isDone ? const Color(0xFF0ECB81) : const Color(0xFF848E9C)),
+                    ? const Color(0xFFFFDE02)
+                    : (isDone ? const Color(0xFF16C784) : const Color(0xFF8A919A)),
               ),
             ),
           ],
@@ -784,7 +784,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
       child: Container(
         height: 2,
         margin: const EdgeInsets.symmetric(horizontal: 2),
-        color: isDone ? const Color(0xFF0ECB81) : const Color(0xFF263143),
+        color: isDone ? const Color(0xFF16C784) : const Color(0xFF252C33),
       ),
     );
   }
@@ -797,9 +797,9 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF121824),
+          color: const Color(0xFF13181D),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF1E2838)),
+          border: Border.all(color: const Color(0xFF1E242A)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -851,9 +851,9 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                   builder: (context, child) => Theme(
                     data: ThemeData.dark().copyWith(
                       colorScheme: const ColorScheme.dark(
-                        primary: Color(0xFFFFC700),
+                        primary: Color(0xFFFFDE02),
                         onPrimary: Colors.black,
-                        surface: Color(0xFF121824),
+                        surface: Color(0xFF13181D),
                       ),
                     ),
                     child: child!,
@@ -864,13 +864,13 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F141C),
+                  color: const Color(0xFF0F1317),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF263143)),
+                  border: Border.all(color: const Color(0xFF252C33)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.calendar_today_rounded, size: 18, color: Color(0xFFFFC700)),
+                    const Icon(Icons.calendar_today_rounded, size: 18, color: Color(0xFFFFDE02)),
                     const SizedBox(width: 12),
                     Text(
                       _dateOfBirth != null
@@ -958,7 +958,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
             ElevatedButton(
               onPressed: _handleSavePersonalInfo,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFC700),
+                backgroundColor: const Color(0xFFFFDE02),
                 foregroundColor: Colors.black,
                 minimumSize: const Size.fromHeight(48),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -986,9 +986,9 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF121824),
+        color: const Color(0xFF13181D),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF1E2838)),
+        border: Border.all(color: const Color(0xFF1E242A)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1095,7 +1095,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                   onPressed: () => setState(() => _currentStep = 0),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white70,
-                    side: const BorderSide(color: Color(0xFF263143)),
+                    side: const BorderSide(color: Color(0xFF252C33)),
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -1108,7 +1108,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 child: ElevatedButton(
                   onPressed: _handleSavePoi,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFC700),
+                    backgroundColor: const Color(0xFFFFDE02),
                     foregroundColor: Colors.black,
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1142,9 +1142,9 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF121824),
+        color: const Color(0xFF13181D),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF1E2838)),
+        border: Border.all(color: const Color(0xFF1E242A)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1194,7 +1194,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 CheckboxListTile(
                   value: _agreedToAccuracy,
                   onChanged: (v) => setState(() => _agreedToAccuracy = v ?? true),
-                  activeColor: const Color(0xFFFFC700),
+                  activeColor: const Color(0xFFFFDE02),
                   checkColor: Colors.black,
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
@@ -1205,7 +1205,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 CheckboxListTile(
                   value: _agreedToTerms,
                   onChanged: (v) => setState(() => _agreedToTerms = v ?? true),
-                  activeColor: const Color(0xFFFFC700),
+                  activeColor: const Color(0xFFFFDE02),
                   checkColor: Colors.black,
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
@@ -1222,20 +1222,20 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-              color: const Color(0xFF0ECB81).withValues(alpha: 0.1),
+              color: const Color(0xFF16C784).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF0ECB81).withValues(alpha: 0.3)),
+              border: Border.all(color: const Color(0xFF16C784).withValues(alpha: 0.3)),
             ),
             child: const Row(
               children: [
-                Icon(Icons.verified_user_outlined, color: Color(0xFF0ECB81), size: 20),
+                Icon(Icons.verified_user_outlined, color: Color(0xFF16C784), size: 20),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Manual review: our compliance team checks your details and documents by hand, '
                     'usually within 24 hours. Your status will update once a decision is made.',
                     style: TextStyle(
-                      color: Color(0xFF0ECB81),
+                      color: Color(0xFF16C784),
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       height: 1.3,
@@ -1253,7 +1253,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                   onPressed: () => setState(() => _currentStep = 1),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white70,
-                    side: const BorderSide(color: Color(0xFF263143)),
+                    side: const BorderSide(color: Color(0xFF252C33)),
                     minimumSize: const Size.fromHeight(50),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -1266,7 +1266,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 child: ElevatedButton.icon(
                   onPressed: _isSubmittingFinal ? null : _handleFinalSubmission,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0ECB81),
+                    backgroundColor: const Color(0xFF16C784),
                     foregroundColor: Colors.black,
                     minimumSize: const Size.fromHeight(50),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1316,29 +1316,29 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF121824),
+        color: const Color(0xFF13181D),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF0ECB81)),
+        border: Border.all(color: const Color(0xFF16C784)),
       ),
       child: Column(
         children: [
-          const Icon(Icons.verified_rounded, color: Color(0xFF0ECB81), size: 56),
+          const Icon(Icons.verified_rounded, color: Color(0xFF16C784), size: 56),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF0ECB81).withValues(alpha: 0.15),
+              color: const Color(0xFF16C784).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF0ECB81)),
+              border: Border.all(color: const Color(0xFF16C784)),
             ),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.verified_rounded, size: 14, color: Color(0xFF0ECB81)),
+                Icon(Icons.verified_rounded, size: 14, color: Color(0xFF16C784)),
                 SizedBox(width: 4),
                 Text(
                   'APPROVED BY COMPLIANCE',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF0ECB81)),
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF16C784)),
                 ),
               ],
             ),
@@ -1352,7 +1352,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
           Text(
             'All compliance criteria cleared for ${profile?.fullName ?? "Trader"}. Zero restrictions on live trading, deposits, and STP withdrawals.',
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF848E9C)),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF8A919A)),
           ),
           const SizedBox(height: 24),
           Row(
@@ -1361,7 +1361,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () => context.go(AppRoutes.terminal),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0ECB81),
+                    backgroundColor: const Color(0xFF16C784),
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1375,8 +1375,8 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 child: OutlinedButton.icon(
                   onPressed: () => context.go(AppRoutes.vault),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFFFC700),
-                    side: const BorderSide(color: Color(0xFFFFC700)),
+                    foregroundColor: const Color(0xFFFFDE02),
+                    side: const BorderSide(color: Color(0xFFFFDE02)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -1389,8 +1389,8 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
           const SizedBox(height: 16),
           TextButton.icon(
             onPressed: () => setState(() => _isEditingFromStatus = true),
-            icon: const Icon(Icons.visibility_rounded, size: 16, color: Color(0xFF848E9C)),
-            label: const Text('View Submitted KYC Information', style: TextStyle(color: Color(0xFF848E9C), fontSize: 12)),
+            icon: const Icon(Icons.visibility_rounded, size: 16, color: Color(0xFF8A919A)),
+            label: const Text('View Submitted KYC Information', style: TextStyle(color: Color(0xFF8A919A), fontSize: 12)),
           ),
         ],
       ),
@@ -1401,13 +1401,13 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF121824),
+        color: const Color(0xFF13181D),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFC700)),
+        border: Border.all(color: const Color(0xFFFFDE02)),
       ),
       child: Column(
         children: [
-          const Icon(Icons.hourglass_top_rounded, color: Color(0xFFFFC700), size: 52),
+          const Icon(Icons.hourglass_top_rounded, color: Color(0xFFFFDE02), size: 52),
           const SizedBox(height: 14),
           const Text(
             'VERIFICATION UNDER REVIEW',
@@ -1417,25 +1417,25 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
           const Text(
             'Your verification documents have been received by the compliance team. You will receive an update within 24 hours.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Color(0xFF848E9C)),
+            style: TextStyle(fontSize: 12, color: Color(0xFF8A919A)),
           ),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F141C),
+              color: const Color(0xFF0F1317),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF1E2838)),
+              border: Border.all(color: const Color(0xFF1E242A)),
             ),
             child: Column(
               children: [
                 _dashboardRow('Applicant', profile?.fullName ?? 'Trader'),
-                const Divider(color: Color(0xFF1E2838), height: 16),
+                const Divider(color: Color(0xFF1E242A), height: 16),
                 _dashboardRow('Document Type', profile?.identityDocType.displayName ?? 'CNIC'),
-                const Divider(color: Color(0xFF1E2838), height: 16),
+                const Divider(color: Color(0xFF1E242A), height: 16),
                 _dashboardRow('Submission Date', profile?.submittedAt != null ? '${profile!.submittedAt!.day}/${profile.submittedAt!.month}/${profile.submittedAt!.year}' : 'Recent'),
-                const Divider(color: Color(0xFF1E2838), height: 16),
-                _dashboardRow('Review State', 'In Compliance Queue', valColor: const Color(0xFFFFC700)),
+                const Divider(color: Color(0xFF1E242A), height: 16),
+                _dashboardRow('Review State', 'In Compliance Queue', valColor: const Color(0xFFFFDE02)),
               ],
             ),
           ),
@@ -1444,7 +1444,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
             onPressed: () => context.go(AppRoutes.terminal),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white70,
-              side: const BorderSide(color: Color(0xFF263143)),
+              side: const BorderSide(color: Color(0xFF252C33)),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
@@ -1460,7 +1460,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF121824),
+        color: const Color(0xFF13181D),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFFF9800)),
       ),
@@ -1515,13 +1515,13 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF121824),
+        color: const Color(0xFF13181D),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFF4757)),
+        border: Border.all(color: const Color(0xFFE5484D)),
       ),
       child: Column(
         children: [
-          const Icon(Icons.cancel_outlined, color: Color(0xFFFF4757), size: 52),
+          const Icon(Icons.cancel_outlined, color: Color(0xFFE5484D), size: 52),
           const SizedBox(height: 14),
           const Text(
             'APPLICATION NOT APPROVED',
@@ -1533,13 +1533,13 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 ? 'Reason: ${profile!.rejectionReason}'
                 : 'Your submission did not meet institutional compliance requirements.',
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF848E9C)),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF8A919A)),
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: () => setState(() => _isEditingFromStatus = true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF4757),
+              backgroundColor: const Color(0xFFE5484D),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1556,7 +1556,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF848E9C))),
+        Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF8A919A))),
         Text(
           value,
           style: TextStyle(
@@ -1577,7 +1577,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
       children: [
         Row(
           children: [
-            Icon(icon, color: const Color(0xFFFFC700), size: 20),
+            Icon(icon, color: const Color(0xFFFFDE02), size: 20),
             const SizedBox(width: 8),
             Text(
               title,
@@ -1588,7 +1588,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
         const SizedBox(height: 4),
         Text(
           subtitle,
-          style: const TextStyle(fontSize: 11, color: Color(0xFF848E9C)),
+          style: const TextStyle(fontSize: 11, color: Color(0xFF8A919A)),
         ),
       ],
     );
@@ -1621,17 +1621,17 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: Color(0xFF55657E), fontSize: 12),
-            fillColor: const Color(0xFF0F141C),
+            fillColor: const Color(0xFF0F1317),
             filled: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF263143)),
+              borderSide: const BorderSide(color: Color(0xFF252C33)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFFFC700)),
+              borderSide: const BorderSide(color: Color(0xFFFFDE02)),
             ),
           ),
         ),
@@ -1646,16 +1646,16 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
   }) {
     return DropdownButtonFormField<T>(
       initialValue: value,
-      dropdownColor: const Color(0xFF121824),
+      dropdownColor: const Color(0xFF13181D),
       style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Inter'),
       decoration: InputDecoration(
-        fillColor: const Color(0xFF0F141C),
+        fillColor: const Color(0xFF0F1317),
         filled: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF263143)),
+          borderSide: const BorderSide(color: Color(0xFF252C33)),
         ),
       ),
       items: items.map((item) => DropdownMenuItem(value: item, child: Text(item.toString()))).toList(),
@@ -1676,16 +1676,16 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFFFC700).withValues(alpha: 0.15) : const Color(0xFF0F141C),
+            color: isSelected ? const Color(0xFFFFDE02).withValues(alpha: 0.15) : const Color(0xFF0F1317),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isSelected ? const Color(0xFFFFC700) : const Color(0xFF263143),
+              color: isSelected ? const Color(0xFFFFDE02) : const Color(0xFF252C33),
               width: isSelected ? 1.5 : 1,
             ),
           ),
           child: Column(
             children: [
-              Icon(icon, size: 20, color: isSelected ? const Color(0xFFFFC700) : const Color(0xFF848E9C)),
+              Icon(icon, size: 20, color: isSelected ? const Color(0xFFFFDE02) : const Color(0xFF8A919A)),
               const SizedBox(height: 6),
               Text(
                 type.displayName,
@@ -1693,7 +1693,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected ? Colors.white : const Color(0xFF848E9C),
+                  color: isSelected ? Colors.white : const Color(0xFF8A919A),
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -1709,18 +1709,18 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F141C),
+        color: const Color(0xFF0F1317),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF1E2838)),
+        border: Border.all(color: const Color(0xFF1E242A)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.info_outline_rounded, color: Color(0xFFFFC700), size: 16),
+              const Icon(Icons.info_outline_rounded, color: Color(0xFFFFDE02), size: 16),
               const SizedBox(width: 8),
-              Text(title, style: const TextStyle(color: Color(0xFFFFC700), fontSize: 11, fontWeight: FontWeight.bold)),
+              Text(title, style: const TextStyle(color: Color(0xFFFFDE02), fontSize: 11, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 6),
@@ -1730,9 +1730,9 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('• ', style: TextStyle(color: Color(0xFF848E9C), fontSize: 11)),
+                  const Text('• ', style: TextStyle(color: Color(0xFF8A919A), fontSize: 11)),
                   Expanded(
-                    child: Text(r, style: const TextStyle(color: Color(0xFF848E9C), fontSize: 11)),
+                    child: Text(r, style: const TextStyle(color: Color(0xFF8A919A), fontSize: 11)),
                   ),
                 ],
               ),
@@ -1757,10 +1757,10 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F141C),
+        color: const Color(0xFF0F1317),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: hasFile ? const Color(0xFF0ECB81) : const Color(0xFF263143),
+          color: hasFile ? const Color(0xFF16C784) : const Color(0xFF252C33),
           width: hasFile ? 1.5 : 1,
         ),
       ),
@@ -1775,10 +1775,10 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0ECB81).withValues(alpha: 0.15),
+                    color: const Color(0xFF16C784).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text('ATTACHED', style: TextStyle(color: Color(0xFF0ECB81), fontSize: 9, fontWeight: FontWeight.bold)),
+                  child: const Text('ATTACHED', style: TextStyle(color: Color(0xFF16C784), fontSize: 9, fontWeight: FontWeight.bold)),
                 ),
             ],
           ),
@@ -1792,8 +1792,8 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                   child: Container(
                     width: 48,
                     height: 48,
-                    color: const Color(0xFF1E2838),
-                    child: const Icon(Icons.description_rounded, color: Color(0xFF0ECB81), size: 24),
+                    color: const Color(0xFF1E242A),
+                    child: const Icon(Icons.description_rounded, color: Color(0xFF16C784), size: 24),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1810,13 +1810,13 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                       const SizedBox(height: 2),
                       Text(
                         fileSize != null ? '${(fileSize / 1024).toStringAsFixed(1)} KB' : 'Valid Document',
-                        style: const TextStyle(color: Color(0xFF848E9C), fontSize: 10),
+                        style: const TextStyle(color: Color(0xFF8A919A), fontSize: 10),
                       ),
                     ],
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF4757), size: 18),
+                  icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFE5484D), size: 18),
                   tooltip: 'Remove',
                   onPressed: onRemove,
                 ),
@@ -1826,9 +1826,9 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
             Center(
               child: Column(
                 children: [
-                  const Icon(Icons.cloud_upload_outlined, color: Color(0xFFFFC700), size: 32),
+                  const Icon(Icons.cloud_upload_outlined, color: Color(0xFFFFDE02), size: 32),
                   const SizedBox(height: 6),
-                  const Text('JPG, PNG or PDF (Max 10MB)', style: TextStyle(fontSize: 10, color: Color(0xFF848E9C))),
+                  const Text('JPG, PNG or PDF (Max 10MB)', style: TextStyle(fontSize: 10, color: Color(0xFF8A919A))),
                   const SizedBox(height: 10),
                   Wrap(
                     alignment: WrapAlignment.center,
@@ -1838,7 +1838,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                       ElevatedButton(
                         onPressed: onPick,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E2838),
+                          backgroundColor: const Color(0xFF1E242A),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           minimumSize: Size.zero,
@@ -1849,8 +1849,8 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                       OutlinedButton(
                         onPressed: onSimulate,
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF0ECB81),
-                          side: const BorderSide(color: Color(0xFF0ECB81)),
+                          foregroundColor: const Color(0xFF16C784),
+                          side: const BorderSide(color: Color(0xFF16C784)),
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1876,9 +1876,9 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F141C),
+        color: const Color(0xFF0F1317),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF1E2838)),
+        border: Border.all(color: const Color(0xFF1E242A)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1886,20 +1886,20 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFFC700))),
+              Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFFDE02))),
               GestureDetector(
                 onTap: onEdit,
                 child: const Row(
                   children: [
-                    Icon(Icons.edit_rounded, size: 14, color: Color(0xFF848E9C)),
+                    Icon(Icons.edit_rounded, size: 14, color: Color(0xFF8A919A)),
                     SizedBox(width: 4),
-                    Text('Edit', style: TextStyle(color: Color(0xFF848E9C), fontSize: 11)),
+                    Text('Edit', style: TextStyle(color: Color(0xFF8A919A), fontSize: 11)),
                   ],
                 ),
               ),
             ],
           ),
-          const Divider(color: Color(0xFF1E2838), height: 16),
+          const Divider(color: Color(0xFF1E242A), height: 16),
           ...items.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 6),
@@ -1908,7 +1908,7 @@ class _KycFlowScreenState extends State<KycFlowScreen> {
                 children: [
                   Expanded(
                     flex: 2,
-                    child: Text(item.keys.first, style: const TextStyle(color: Color(0xFF848E9C), fontSize: 11)),
+                    child: Text(item.keys.first, style: const TextStyle(color: Color(0xFF8A919A), fontSize: 11)),
                   ),
                   Expanded(
                     flex: 3,

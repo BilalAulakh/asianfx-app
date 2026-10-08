@@ -29,7 +29,7 @@ enum _Phase { hidden, available, downloading, ready, failed }
 class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
   late final AppUpdateService _service = widget.service ?? AppUpdateService.instance;
 
-  static const _green = Color(0xFF10B981);
+  static const _green = Color(0xFF16C784);
   static const _checkEvery = Duration(minutes: 5);
 
   _Phase _phase = _Phase.hidden;
@@ -239,7 +239,7 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
               const SizedBox(height: 12),
               Text(_message!,
                   style: TextStyle(
-                      fontSize: 12, color: _phase == _Phase.failed ? const Color(0xFFFF4757) : textSecondary)),
+                      fontSize: 12, color: _phase == _Phase.failed ? const Color(0xFFE5484D) : textSecondary)),
             ],
             const SizedBox(height: 18),
             if (_phase != _Phase.downloading)

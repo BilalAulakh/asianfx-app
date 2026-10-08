@@ -60,8 +60,8 @@ class _DepositPanelState extends State<DepositPanel> {
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0F172A);
   Color get _textSecondary => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
-  static const _green = Color(0xFF10B981);
-  static const _red = Color(0xFFFF4757);
+  static const _green = Color(0xFF16C784);
+  static const _red = Color(0xFFE5484D);
   static const _amber = Color(0xFFFFB300);
   static const _blue = Color(0xFF3B82F6);
 

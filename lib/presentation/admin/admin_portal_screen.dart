@@ -34,19 +34,19 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
   String _adminKycCountryFilter = 'All';
 
   bool get _isDark => context.watch<ThemeCubit>().state;
-  Color get _bg => _isDark ? const Color(0xFF0A0E17) : const Color(0xFFF1F5F9);
-  Color get _appBarBg => _isDark ? const Color(0xFF151D28) : Colors.white;
-  Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
-  Color get _subCardBg => _isDark ? const Color(0xFF0F141C) : const Color(0xFFF8FAFC);
-  Color get _borderColor => _isDark ? const Color(0xFF1C2535) : const Color(0xFFE2E8F0);
-  Color get _subtleBorder => _isDark ? const Color(0xFF2B384E) : const Color(0xFFCBD5E1);
+  Color get _bg => _isDark ? const Color(0xFF0B0E11) : const Color(0xFFF1F5F9);
+  Color get _appBarBg => _isDark ? const Color(0xFF161B20) : Colors.white;
+  Color get _cardBg => _isDark ? const Color(0xFF161B20) : Colors.white;
+  Color get _subCardBg => _isDark ? const Color(0xFF0F1317) : const Color(0xFFF8FAFC);
+  Color get _borderColor => _isDark ? const Color(0xFF1F252B) : const Color(0xFFE2E8F0);
+  Color get _subtleBorder => _isDark ? const Color(0xFF262D34) : const Color(0xFFCBD5E1);
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0F172A);
-  Color get _textSecondary => _isDark ? const Color(0xFF848E9C) : const Color(0xFF64748B);
-  Color get _goldAccent => _isDark ? const Color(0xFFFFD600) : const Color(0xFFD97706);
-  Color get _goldText => _isDark ? const Color(0xFFFFD600) : const Color(0xFFB45309);
-  Color get _goldBg => _isDark ? const Color(0xFFFFD600).withValues(alpha: 0.2) : const Color(0xFFFEF3C7);
-  Color get _goldBorder => _isDark ? const Color(0xFFFFD600).withValues(alpha: 0.4) : const Color(0xFFFDE68A);
-  Color get _goldSlider => _isDark ? const Color(0xFFFFD600) : const Color(0xFFF59E0B);
+  Color get _textSecondary => _isDark ? const Color(0xFF8A919A) : const Color(0xFF64748B);
+  Color get _goldAccent => _isDark ? const Color(0xFFFFDE02) : const Color(0xFFD97706);
+  Color get _goldText => _isDark ? const Color(0xFFFFDE02) : const Color(0xFFB45309);
+  Color get _goldBg => _isDark ? const Color(0xFFFFDE02).withValues(alpha: 0.2) : const Color(0xFFFEF3C7);
+  Color get _goldBorder => _isDark ? const Color(0xFFFFDE02).withValues(alpha: 0.4) : const Color(0xFFFDE68A);
+  Color get _goldSlider => _isDark ? const Color(0xFFFFDE02) : const Color(0xFFF59E0B);
 
   /// Position of "KYC & AML" in the portal's TabBar.
   static const int _kycTabIndex = 3;
@@ -82,14 +82,14 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
       feed.updateSpreadMultiplier(stored);
       adminNotifier.setSpreadMultiplier(stored);
       messenger.showSnackBar(SnackBar(
-        backgroundColor: const Color(0xFF00D68F),
+        backgroundColor: const Color(0xFF16C784),
         content: Text('Spread multiplier saved: ${stored.toStringAsFixed(2)}x '
             '(applied by the price publisher on its next run).'),
       ));
     } on TradeServiceException catch (e) {
       adminNotifier.setSpreadMultiplier(feed.spreadMultiplier);
       messenger.showSnackBar(SnackBar(
-        backgroundColor: const Color(0xFFFF4757),
+        backgroundColor: const Color(0xFFE5484D),
         content: Text('Spread multiplier NOT saved: ${e.message}'),
       ));
     }
@@ -165,15 +165,15 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF4757).withValues(alpha: 0.2),
+                color: const Color(0xFFE5484D).withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFFFF4757)),
+                border: Border.all(color: const Color(0xFFE5484D)),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Color(0xFFFF4757), size: 14),
+                  Icon(Icons.warning_amber_rounded, color: Color(0xFFE5484D), size: 14),
                   SizedBox(width: 4),
-                  Text('CIRCUIT HALTED', style: TextStyle(color: Color(0xFFFF4757), fontSize: 10, fontWeight: FontWeight.bold)),
+                  Text('CIRCUIT HALTED', style: TextStyle(color: Color(0xFFE5484D), fontSize: 10, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -253,7 +253,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                       const Text('KYC & AML'),
                       if (pendingKycCount > 0) ...[
                         const SizedBox(width: 6),
-                        _badge(pendingKycCount, const Color(0xFFFF4757)),
+                        _badge(pendingKycCount, const Color(0xFFE5484D)),
                       ],
                     ],
                   ),
@@ -347,7 +347,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: _isDark
-                    ? const [Color(0xFF1E2838), Color(0xFF101722)]
+                    ? const [Color(0xFF1E242A), Color(0xFF101722)]
                     : const [Colors.white, Color(0xFFF8FAFC)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -391,8 +391,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                                 fontSize: 22,
                                 fontWeight: FontWeight.w900,
                                 color: risk.aggregateHouseFloatingPnl >= Decimal.zero
-                                     ? const Color(0xFF00D68F)
-                                     : const Color(0xFFFF4757),
+                                     ? const Color(0xFF16C784)
+                                     : const Color(0xFFE5484D),
                               ),
                             ),
                           ),
@@ -470,7 +470,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                     value: '\$${admin.totalUserFunds.toStringAsFixed(2)}',
                     subtitle: 'Total User Balances',
                     icon: Icons.account_balance_wallet_rounded,
-                    color: const Color(0xFF00D68F),
+                    color: const Color(0xFF16C784),
                     onTap: () => _tabController.animateTo(2),
                   ),
                   _overviewKpiCard(
@@ -508,11 +508,11 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00D68F).withValues(alpha: 0.15),
+                  color: const Color(0xFF16C784).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.35)),
+                  border: Border.all(color: const Color(0xFF16C784).withValues(alpha: 0.35)),
                 ),
-                child: const Text('NOT HEDGED', style: TextStyle(color: Color(0xFF00D68F), fontSize: 9.5, fontWeight: FontWeight.bold)),
+                child: const Text('NOT HEDGED', style: TextStyle(color: Color(0xFF16C784), fontSize: 9.5, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -559,12 +559,12 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                         decoration: BoxDecoration(
                           color: exp.routing == ExecutionRouting.bBookInternal
                               ? _goldBg
-                              : (_isDark ? const Color(0xFF00D68F).withValues(alpha: 0.2) : const Color(0xFFD1FAE5)),
+                              : (_isDark ? const Color(0xFF16C784).withValues(alpha: 0.2) : const Color(0xFFD1FAE5)),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color: exp.routing == ExecutionRouting.bBookInternal
                                 ? _goldBorder
-                                : (_isDark ? const Color(0xFF00D68F).withValues(alpha: 0.3) : const Color(0xFFA7F3D0)),
+                                : (_isDark ? const Color(0xFF16C784).withValues(alpha: 0.3) : const Color(0xFFA7F3D0)),
                           ),
                         ),
                         child: Text(
@@ -574,7 +574,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                             fontWeight: FontWeight.bold,
                             color: exp.routing == ExecutionRouting.bBookInternal
                                 ? _goldText
-                                : (_isDark ? const Color(0xFF00D68F) : const Color(0xFF059669)),
+                                : (_isDark ? const Color(0xFF16C784) : const Color(0xFF059669)),
                           ),
                         ),
                       ),
@@ -584,7 +584,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: exp.netExposureLots >= Decimal.zero ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                          color: exp.netExposureLots >= Decimal.zero ? const Color(0xFF16C784) : const Color(0xFFE5484D),
                         ),
                       ),
                     ],
@@ -627,7 +627,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                             .commitSpreadMarkup(exp.symbol, val.round());
                         messenger.showSnackBar(SnackBar(
                           duration: const Duration(seconds: 2),
-                          backgroundColor: error == null ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                          backgroundColor: error == null ? const Color(0xFF16C784) : const Color(0xFFE5484D),
                           content: Text(error ?? '${exp.symbol} markup saved: ${val.round()} pts'),
                         ));
                       },
@@ -760,7 +760,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                     children: [
                       Text('ACTIVE ACCOUNTS', style: TextStyle(fontSize: 9.5, color: _textSecondary, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 2),
-                      Text('${admin.activeUsersCount}', style: TextStyle(fontFamily: 'Inter', fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF00D68F))),
+                      Text('${admin.activeUsersCount}', style: TextStyle(fontFamily: 'Inter', fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF16C784))),
                     ],
                   ),
                 ),
@@ -817,7 +817,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               decoration: BoxDecoration(
                 color: _cardBg,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: isFrozen ? const Color(0xFFFF4757).withValues(alpha: 0.6) : _borderColor),
+                border: Border.all(color: isFrozen ? const Color(0xFFE5484D).withValues(alpha: 0.6) : _borderColor),
                 boxShadow: _isDark
                     ? null
                     : [
@@ -867,15 +867,15 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                         decoration: BoxDecoration(
-                          color: isFrozen ? const Color(0xFFFF4757).withValues(alpha: 0.2) : const Color(0xFF00D68F).withValues(alpha: 0.2),
+                          color: isFrozen ? const Color(0xFFE5484D).withValues(alpha: 0.2) : const Color(0xFF16C784).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: isFrozen ? const Color(0xFFFF4757).withValues(alpha: 0.4) : const Color(0xFF00D68F).withValues(alpha: 0.4),
+                            color: isFrozen ? const Color(0xFFE5484D).withValues(alpha: 0.4) : const Color(0xFF16C784).withValues(alpha: 0.4),
                           ),
                         ),
                         child: Text(
                           isFrozen ? 'FROZEN' : 'ACTIVE',
-                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isFrozen ? const Color(0xFFFF4757) : const Color(0xFF00D68F)),
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isFrozen ? const Color(0xFFE5484D) : const Color(0xFF16C784)),
                         ),
                       ),
                     ],
@@ -884,13 +884,13 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                   Row(
                     children: [
                       Expanded(
-                        child: _miniInfo('Balance', '\$${u.balance.toStringAsFixed(2)}', const Color(0xFF00D68F)),
+                        child: _miniInfo('Balance', '\$${u.balance.toStringAsFixed(2)}', const Color(0xFF16C784)),
                       ),
                       Expanded(
                         child: _miniInfo('Equity', '\$${u.equity.toStringAsFixed(2)}', _textPrimary),
                       ),
                       Expanded(
-                        child: _miniInfo('KYC Status', u.isKycVerified ? 'Verified' : 'Unverified', u.isKycVerified ? const Color(0xFF00D68F) : const Color(0xFFFFB300)),
+                        child: _miniInfo('KYC Status', u.isKycVerified ? 'Verified' : 'Unverified', u.isKycVerified ? const Color(0xFF16C784) : const Color(0xFFFFB300)),
                       ),
                     ],
                   ),
@@ -932,7 +932,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(isFrozen ? '${u.name} has been ACTIVATED' : '${u.name} has been FROZEN'),
-                              backgroundColor: isFrozen ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                              backgroundColor: isFrozen ? const Color(0xFF16C784) : const Color(0xFFE5484D),
                             ),
                           );
                         },
@@ -942,11 +942,11 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(isFrozen ? Icons.lock_open : Icons.lock_outline, size: 13, color: isFrozen ? const Color(0xFF00D68F) : const Color(0xFFFF4757)),
+                              Icon(isFrozen ? Icons.lock_open : Icons.lock_outline, size: 13, color: isFrozen ? const Color(0xFF16C784) : const Color(0xFFE5484D)),
                               const SizedBox(width: 4),
                               Text(
                                 isFrozen ? 'Unfreeze' : 'Freeze Account',
-                                style: TextStyle(color: isFrozen ? const Color(0xFF00D68F) : const Color(0xFFFF4757), fontSize: 11, fontWeight: FontWeight.w600),
+                                style: TextStyle(color: isFrozen ? const Color(0xFF16C784) : const Color(0xFFE5484D), fontSize: 11, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -996,7 +996,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               notifier.adjustUserBalance(user.id, val);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Balance adjusted by \$${val.toStringAsFixed(2)} for ${user.name}'), backgroundColor: const Color(0xFF00D68F)),
+                SnackBar(content: Text('Balance adjusted by \$${val.toStringAsFixed(2)} for ${user.name}'), backgroundColor: const Color(0xFF16C784)),
               );
             },
             style: ElevatedButton.styleFrom(backgroundColor: _goldSlider, foregroundColor: _isDark ? Colors.black : Colors.white),
@@ -1049,13 +1049,13 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
             children: [
               SizedBox(width: 95, child: _kycKpiMiniCard('Total Queue', '${profiles.length + state.pendingApplications.length}', const Color(0xFF3B82F6))),
               const SizedBox(width: 8),
-              SizedBox(width: 90, child: _kycKpiMiniCard('Pending', '$pendingCount', const Color(0xFFFFC700))),
+              SizedBox(width: 90, child: _kycKpiMiniCard('Pending', '$pendingCount', const Color(0xFFFFDE02))),
               const SizedBox(width: 8),
               SizedBox(width: 105, child: _kycKpiMiniCard('Resubmit Req.', '$resubmissionCount', const Color(0xFFFF9800))),
               const SizedBox(width: 8),
-              SizedBox(width: 90, child: _kycKpiMiniCard('Approved', '$approvedCount', const Color(0xFF0ECB81))),
+              SizedBox(width: 90, child: _kycKpiMiniCard('Approved', '$approvedCount', const Color(0xFF16C784))),
               const SizedBox(width: 8),
-              SizedBox(width: 90, child: _kycKpiMiniCard('Rejected', '$rejectedCount', const Color(0xFFFF4757))),
+              SizedBox(width: 90, child: _kycKpiMiniCard('Rejected', '$rejectedCount', const Color(0xFFE5484D))),
             ],
           ),
         ),
@@ -1187,7 +1187,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () => context.read<KycCubit>().approveKyc(app.id),
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F), foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 8)),
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16C784), foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 8)),
                           child: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                         ),
                       ),
@@ -1195,7 +1195,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => context.read<KycCubit>().rejectKyc(app.id, 'Unreadable documents'),
-                          style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFFF4757), side: const BorderSide(color: Color(0xFFFF4757)), padding: const EdgeInsets.symmetric(vertical: 8)),
+                          style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFE5484D), side: const BorderSide(color: Color(0xFFE5484D)), padding: const EdgeInsets.symmetric(vertical: 8)),
                           child: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                         ),
                       ),
@@ -1218,7 +1218,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
             ),
             child: Column(
               children: [
-                const Icon(Icons.verified_user_outlined, size: 48, color: Color(0xFF0ECB81)),
+                const Icon(Icons.verified_user_outlined, size: 48, color: Color(0xFF16C784)),
                 const SizedBox(height: 12),
                 Text('No KYC Requests Matching Filter', style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
                 const SizedBox(height: 4),
@@ -1245,7 +1245,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
             ),
             child: Row(
               children: [
-                const Icon(Icons.security, color: Color(0xFFFFD600), size: 18),
+                const Icon(Icons.security, color: Color(0xFFFFDE02), size: 18),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -1285,9 +1285,9 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFD600) : _cardBg,
+          color: isSelected ? const Color(0xFFFFDE02) : _cardBg,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? const Color(0xFFFFD600) : _borderColor),
+          border: Border.all(color: isSelected ? const Color(0xFFFFDE02) : _borderColor),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1305,13 +1305,13 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
-                  color: isSelected ? Colors.black : const Color(0xFF263143),
+                  color: isSelected ? Colors.black : const Color(0xFF252C33),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   '$count',
                   style: TextStyle(
-                    color: isSelected ? const Color(0xFFFFD600) : Colors.white,
+                    color: isSelected ? const Color(0xFFFFDE02) : Colors.white,
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1334,7 +1334,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
       decoration: BoxDecoration(
         color: _cardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isPending ? const Color(0xFFFFC700).withValues(alpha: 0.6) : _borderColor),
+        border: Border.all(color: isPending ? const Color(0xFFFFDE02).withValues(alpha: 0.6) : _borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1343,10 +1343,10 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
             children: [
               CircleAvatar(
                 radius: 16,
-                backgroundColor: const Color(0xFF1E2838),
+                backgroundColor: const Color(0xFF1E242A),
                 child: Text(
                   profile.firstName.isNotEmpty ? profile.firstName[0].toUpperCase() : 'T',
-                  style: const TextStyle(color: Color(0xFFFFD600), fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(color: Color(0xFFFFDE02), fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1423,7 +1423,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF4757).withValues(alpha: 0.1),
+                color: const Color(0xFFE5484D).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -1443,7 +1443,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                 child: ElevatedButton.icon(
                   onPressed: () => _showKycInspectionModal(profile, adminNotifier),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E2838),
+                    backgroundColor: const Color(0xFF1E242A),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1458,7 +1458,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                   child: ElevatedButton(
                     onPressed: () => _showApproveDialog(profile, adminNotifier),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0ECB81),
+                      backgroundColor: const Color(0xFF16C784),
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1471,8 +1471,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                   child: OutlinedButton(
                     onPressed: () => _showRejectDialog(profile, adminNotifier),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFFF4757),
-                      side: const BorderSide(color: Color(0xFFFF4757)),
+                      foregroundColor: const Color(0xFFE5484D),
+                      side: const BorderSide(color: Color(0xFFE5484D)),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
@@ -1633,7 +1633,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                           _showApproveDialog(profile, adminNotifier);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0ECB81),
+                          backgroundColor: const Color(0xFF16C784),
                           foregroundColor: Colors.black,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1663,8 +1663,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                           _showRejectDialog(profile, adminNotifier);
                         },
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFFF4757),
-                          side: const BorderSide(color: Color(0xFFFF4757)),
+                          foregroundColor: const Color(0xFFE5484D),
+                          side: const BorderSide(color: Color(0xFFE5484D)),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
@@ -1744,11 +1744,11 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               height: 100,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: const Color(0xFF1E2838),
+                color: const Color(0xFF1E242A),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: const Center(
-                child: Icon(Icons.zoom_in_rounded, color: Color(0xFFFFD600), size: 32),
+                child: Icon(Icons.zoom_in_rounded, color: Color(0xFFFFDE02), size: 32),
               ),
             ),
           ),
@@ -1763,7 +1763,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: const Color(0xFF121824),
+        backgroundColor: const Color(0xFF13181D),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -1782,14 +1782,14 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                 height: 250,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F141C),
+                  color: const Color(0xFF0F1317),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.description_rounded, size: 56, color: Color(0xFF0ECB81)),
+                      Icon(Icons.description_rounded, size: 56, color: Color(0xFF16C784)),
                       SizedBox(height: 8),
                       Text('Secure Document Verified', style: TextStyle(color: Colors.white70, fontSize: 12)),
                     ],
@@ -1807,11 +1807,11 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF121824),
+        backgroundColor: const Color(0xFF13181D),
         title: const Text('Approve KYC Application?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: Text(
           'Approving ${profile.fullName} will unlock Level 2 privileges (deposits, withdrawals and live orders).',
-          style: const TextStyle(color: Color(0xFF848E9C), fontSize: 13),
+          style: const TextStyle(color: Color(0xFF8A919A), fontSize: 13),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel', style: TextStyle(color: Colors.white70))),
@@ -1828,10 +1828,10 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                 context.read<AuthBloc>().updateUserKyc(KycStatus.approved, kycTier: 2);
               }
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('✓ ${profile.fullName} KYC Approved!'), backgroundColor: const Color(0xFF0ECB81)),
+                SnackBar(content: Text('✓ ${profile.fullName} KYC Approved!'), backgroundColor: const Color(0xFF16C784)),
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0ECB81), foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16C784), foregroundColor: Colors.black),
             child: const Text('Approve KYC', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
@@ -1855,17 +1855,17 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (dialogCtx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF121824),
-          title: const Text('Reject KYC Application', style: TextStyle(color: Color(0xFFFF4757), fontWeight: FontWeight.bold)),
+          backgroundColor: const Color(0xFF13181D),
+          title: const Text('Reject KYC Application', style: TextStyle(color: Color(0xFFE5484D), fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Select mandatory compliance reason:', style: TextStyle(color: Color(0xFF848E9C), fontSize: 12)),
+              const Text('Select mandatory compliance reason:', style: TextStyle(color: Color(0xFF8A919A), fontSize: 12)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: selectedReason,
-                dropdownColor: const Color(0xFF1E2838),
+                dropdownColor: const Color(0xFF1E242A),
                 style: const TextStyle(color: Colors.white, fontSize: 12),
                 items: reasons.map((r) => DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(fontSize: 12)))).toList(),
                 onChanged: (v) {
@@ -1879,7 +1879,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                 decoration: const InputDecoration(
                   hintText: 'Additional remarks for compliance record...',
                   hintStyle: TextStyle(color: Color(0xFF55657E), fontSize: 12),
-                  fillColor: Color(0xFF0F141C),
+                  fillColor: Color(0xFF0F1317),
                   filled: true,
                 ),
               ),
@@ -1905,10 +1905,10 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                   context.read<AuthBloc>().updateUserKyc(KycStatus.rejected, rejectionReason: fullReason);
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${profile.fullName} KYC Rejected: $fullReason'), backgroundColor: const Color(0xFFFF4757)),
+                  SnackBar(content: Text('${profile.fullName} KYC Rejected: $fullReason'), backgroundColor: const Color(0xFFE5484D)),
                 );
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4757), foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE5484D), foregroundColor: Colors.white),
               child: const Text('Reject KYC', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
@@ -1923,7 +1923,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF121824),
+        backgroundColor: const Color(0xFF13181D),
         title: const Text('Request Document Resubmission', style: TextStyle(color: Color(0xFFFF9800), fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1931,7 +1931,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
           children: [
             const Text(
               'Specify what document or detail the trader must correct:',
-              style: TextStyle(color: Color(0xFF848E9C), fontSize: 12),
+              style: TextStyle(color: Color(0xFF8A919A), fontSize: 12),
             ),
             const SizedBox(height: 10),
             TextField(
@@ -1940,7 +1940,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               style: const TextStyle(color: Colors.white, fontSize: 13),
               decoration: const InputDecoration(
                 hintText: 'Enter specific resubmission instructions...',
-                fillColor: Color(0xFF0F141C),
+                fillColor: Color(0xFF0F1317),
                 filled: true,
               ),
             ),
@@ -1990,9 +1990,9 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: admin.isTradingHalted ? const Color(0xFFFF4757).withValues(alpha: 0.15) : _cardBg,
+              color: admin.isTradingHalted ? const Color(0xFFE5484D).withValues(alpha: 0.15) : _cardBg,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: admin.isTradingHalted ? const Color(0xFFFF4757) : _borderColor),
+              border: Border.all(color: admin.isTradingHalted ? const Color(0xFFE5484D) : _borderColor),
               boxShadow: _isDark
                   ? null
                   : [
@@ -2005,7 +2005,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
             ),
             child: Row(
               children: [
-                Icon(Icons.power_settings_new_rounded, color: admin.isTradingHalted ? const Color(0xFFFF4757) : const Color(0xFF00D68F), size: 28),
+                Icon(Icons.power_settings_new_rounded, color: admin.isTradingHalted ? const Color(0xFFE5484D) : const Color(0xFF16C784), size: 28),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -2013,7 +2013,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                     children: [
                       Text(
                         admin.isTradingHalted ? 'TRADING IS GLOBALLY HALTED' : 'Trading Engine Active',
-                        style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: admin.isTradingHalted ? const Color(0xFFFF4757) : _textPrimary),
+                        style: TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.bold, color: admin.isTradingHalted ? const Color(0xFFE5484D) : _textPrimary),
                       ),
                       const SizedBox(height: 2),
                       Text('Emergency circuit breaker for extreme market volatility', style: TextStyle(fontSize: 11, color: _textSecondary)),
@@ -2022,8 +2022,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                 ),
                 Switch(
                   value: !admin.isTradingHalted,
-                  activeThumbColor: const Color(0xFF00D68F),
-                  inactiveThumbColor: const Color(0xFFFF4757),
+                  activeThumbColor: const Color(0xFF16C784),
+                  inactiveThumbColor: const Color(0xFFE5484D),
                   onChanged: (_) => adminNotifier.toggleTradingHalt(),
                 ),
               ],
@@ -2171,7 +2171,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Stop-Out Auto Liquidation', style: TextStyle(fontSize: 12, color: _textSecondary)),
-                    const Text('20% Margin Level', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFF4757))),
+                    const Text('20% Margin Level', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFE5484D))),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -2205,7 +2205,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
             decoration: BoxDecoration(
               color: _cardBg,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: proof.isZeroDriftVerified ? const Color(0xFF00D68F) : const Color(0xFFFF4757)),
+              border: Border.all(color: proof.isZeroDriftVerified ? const Color(0xFF16C784) : const Color(0xFFE5484D)),
               boxShadow: _isDark
                   ? null
                   : [
@@ -2220,7 +2220,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
               children: [
                 Icon(
                   proof.isZeroDriftVerified ? Icons.verified_rounded : Icons.error_rounded,
-                  color: proof.isZeroDriftVerified ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                  color: proof.isZeroDriftVerified ? const Color(0xFF16C784) : const Color(0xFFE5484D),
                   size: 32,
                 ),
                 const SizedBox(width: 14),
@@ -2234,7 +2234,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                           fontFamily: 'Inter',
                           fontSize: 13,
                           fontWeight: FontWeight.w900,
-                          color: proof.isZeroDriftVerified ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                          color: proof.isZeroDriftVerified ? const Color(0xFF16C784) : const Color(0xFFE5484D),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -2292,7 +2292,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Solvency Reserve Ratio:', style: TextStyle(fontSize: 12, color: _textSecondary)),
-                    const Text('100.00% (Fully Backed)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF00D68F))),
+                    const Text('100.00% (Fully Backed)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF16C784))),
                   ],
                 ),
                 const SizedBox(height: 12),

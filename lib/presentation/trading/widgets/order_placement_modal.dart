@@ -27,7 +27,7 @@ class OrderPlacementModal extends StatefulWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF151D28),
+      backgroundColor: const Color(0xFF161B20),
       barrierColor: Colors.black.withValues(alpha: 0.75),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -214,7 +214,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                 width: 44,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2B384E),
+                  color: const Color(0xFF262D34),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -227,9 +227,9 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF4757).withValues(alpha: 0.12),
+                  color: const Color(0xFFE5484D).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFFF4757).withValues(alpha: 0.5)),
+                  border: Border.all(color: const Color(0xFFE5484D).withValues(alpha: 0.5)),
                 ),
                 child: Row(
                   children: [
@@ -239,7 +239,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       child: Text(
                         'No live price for this instrument right now (market closed or feed offline). '
                         'Orders will be rejected until a live price is available.',
-                        style: TextStyle(fontFamily: 'Inter', fontSize: 11, color: Color(0xFFFF4757)),
+                        style: TextStyle(fontFamily: 'Inter', fontSize: 11, color: Color(0xFFE5484D)),
                       ),
                     ),
                   ],
@@ -252,9 +252,9 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFD600).withValues(alpha: 0.15),
+                    color: const Color(0xFFFFDE02).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFFFD600), width: 1),
+                    border: Border.all(color: const Color(0xFFFFDE02), width: 1),
                   ),
                   child: Text(
                     live.symbol,
@@ -262,7 +262,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       fontFamily: 'Inter',
                       fontSize: 14,
                       fontWeight: FontWeight.w900,
-                      color: Color(0xFFFFD600),
+                      color: Color(0xFFFFDE02),
                     ),
                   ),
                 ),
@@ -286,14 +286,14 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                         style: const TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 11,
-                          color: Color(0xFF848E9C),
+                          color: Color(0xFF8A919A),
                         ),
                       ),
                     ],
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Color(0xFF848E9C)),
+                  icon: const Icon(Icons.close_rounded, color: Color(0xFF8A919A)),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -304,9 +304,9 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
             Container(
               height: 38,
               decoration: BoxDecoration(
-                color: const Color(0xFF0F141C),
+                color: const Color(0xFF0F1317),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF2B384E)),
+                border: Border.all(color: const Color(0xFF262D34)),
               ),
               child: Row(
                 children: [
@@ -337,8 +337,8 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         color: _side == OrderSide.buy
-                            ? const Color(0xFF00D68F)
-                            : const Color(0xFF1E2838),
+                            ? AppColors.buyButton
+                            : const Color(0xFF1E242A),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       alignment: Alignment.center,
@@ -349,7 +349,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                           fontFamily: 'Inter',
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: _side == OrderSide.buy ? Colors.black : const Color(0xFF00D68F),
+                          color: _side == OrderSide.buy ? Colors.white : AppColors.buyButton,
                         ),
                       ),
                     ),
@@ -372,8 +372,8 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         color: _side == OrderSide.sell
-                            ? const Color(0xFFFF4757)
-                            : const Color(0xFF1E2838),
+                            ? AppColors.sellButton
+                            : const Color(0xFF1E242A),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       alignment: Alignment.center,
@@ -384,7 +384,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                           fontFamily: 'Inter',
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: _side == OrderSide.sell ? Colors.white : const Color(0xFFFF4757),
+                          color: _side == OrderSide.sell ? Colors.white : AppColors.sellButton,
                         ),
                       ),
                     ),
@@ -401,7 +401,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                   Icon(
                     _orderType == OrderType.limit ? Icons.tune_rounded : Icons.pan_tool_rounded,
                     size: 15,
-                    color: const Color(0xFFFFD600),
+                    color: const Color(0xFFFFDE02),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -410,7 +410,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       fontFamily: 'Inter',
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF848E9C),
+                      color: Color(0xFF8A919A),
                     ),
                   ),
                   const Spacer(),
@@ -419,9 +419,9 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFD600).withValues(alpha: 0.12),
+                        color: const Color(0xFFFFDE02).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.5)),
+                        border: Border.all(color: const Color(0xFFFFDE02).withValues(alpha: 0.5)),
                       ),
                       child: Text(
                         'Live: ${MoneyMath.formatDec(execPrice, live.displayDecimals)}',
@@ -429,7 +429,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                           fontFamily: 'Inter',
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFFFD600),
+                          color: Color(0xFFFFDE02),
                         ),
                       ),
                     ),
@@ -441,9 +441,9 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F141C),
+                  color: const Color(0xFF0F1317),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.6), width: 1.2),
+                  border: Border.all(color: const Color(0xFFFFDE02).withValues(alpha: 0.6), width: 1.2),
                 ),
                 child: Row(
                   children: [
@@ -456,12 +456,12 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                         controller: _priceController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         textAlign: TextAlign.center,
-                        cursorColor: const Color(0xFFFFD600),
+                        cursorColor: const Color(0xFFFFDE02),
                         style: const TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFFFD600),
+                          color: Color(0xFFFFDE02),
                         ),
                         decoration: const InputDecoration(
                           filled: false,
@@ -532,7 +532,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                     fontFamily: 'Inter',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF848E9C),
+                    color: Color(0xFF8A919A),
                   ),
                 ),
                 const Spacer(),
@@ -547,9 +547,9 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F141C),
+                color: const Color(0xFF0F1317),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF2B384E)),
+                border: Border.all(color: const Color(0xFF262D34)),
               ),
               child: Row(
                 children: [
@@ -562,7 +562,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       controller: _lotController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       textAlign: TextAlign.center,
-                      cursorColor: const Color(0xFFFFD600),
+                      cursorColor: const Color(0xFFFFDE02),
                       style: const TextStyle(
                         fontFamily: 'Inter',
                         fontSize: 18,
@@ -606,10 +606,10 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                       decoration: BoxDecoration(
-                        color: _enableTp ? const Color(0xFF00D68F).withValues(alpha: 0.12) : const Color(0xFF0F141C),
+                        color: _enableTp ? const Color(0xFF16C784).withValues(alpha: 0.12) : const Color(0xFF0F1317),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: _enableTp ? const Color(0xFF00D68F) : const Color(0xFF2B384E),
+                          color: _enableTp ? const Color(0xFF16C784) : const Color(0xFF262D34),
                         ),
                       ),
                       child: Row(
@@ -618,7 +618,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                           Icon(
                             _enableTp ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
                             size: 15,
-                            color: _enableTp ? const Color(0xFF00D68F) : const Color(0xFF848E9C),
+                            color: _enableTp ? const Color(0xFF16C784) : const Color(0xFF8A919A),
                           ),
                           const SizedBox(width: 6),
                           const Text(
@@ -642,10 +642,10 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                       decoration: BoxDecoration(
-                        color: _enableSl ? const Color(0xFFFF4757).withValues(alpha: 0.12) : const Color(0xFF0F141C),
+                        color: _enableSl ? const Color(0xFFE5484D).withValues(alpha: 0.12) : const Color(0xFF0F1317),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: _enableSl ? const Color(0xFFFF4757) : const Color(0xFF2B384E),
+                          color: _enableSl ? const Color(0xFFE5484D) : const Color(0xFF262D34),
                         ),
                       ),
                       child: Row(
@@ -654,7 +654,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                           Icon(
                             _enableSl ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
                             size: 15,
-                            color: _enableSl ? const Color(0xFFFF4757) : const Color(0xFF848E9C),
+                            color: _enableSl ? const Color(0xFFE5484D) : const Color(0xFF8A919A),
                           ),
                           const SizedBox(width: 6),
                           const Text(
@@ -682,24 +682,24 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       child: Container(
                         padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F141C),
+                          color: const Color(0xFF0F1317),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF00D68F).withValues(alpha: 0.5)),
+                          border: Border.all(color: const Color(0xFF16C784).withValues(alpha: 0.5)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text('TP Price',
-                                style: TextStyle(fontFamily: 'Inter', fontSize: 10, color: Color(0xFF00D68F))),
+                                style: TextStyle(fontFamily: 'Inter', fontSize: 10, color: Color(0xFF16C784))),
                             TextField(
                               controller: _tpController,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              cursorColor: const Color(0xFF00D68F),
+                              cursorColor: const Color(0xFF16C784),
                               style: const TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF00D68F),
+                                color: Color(0xFF16C784),
                               ),
                               decoration: _plainField,
                             ),
@@ -713,24 +713,24 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       child: Container(
                         padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F141C),
+                          color: const Color(0xFF0F1317),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFFF4757).withValues(alpha: 0.5)),
+                          border: Border.all(color: const Color(0xFFE5484D).withValues(alpha: 0.5)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text('SL Price',
-                                style: TextStyle(fontFamily: 'Inter', fontSize: 10, color: Color(0xFFFF4757))),
+                                style: TextStyle(fontFamily: 'Inter', fontSize: 10, color: Color(0xFFE5484D))),
                             TextField(
                               controller: _slController,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              cursorColor: const Color(0xFFFF4757),
+                              cursorColor: const Color(0xFFE5484D),
                               style: const TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFFFF4757),
+                                color: Color(0xFFE5484D),
                               ),
                               decoration: _plainField,
                             ),
@@ -747,10 +747,10 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F141C),
+                color: const Color(0xFF0F1317),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isMarginSufficient ? const Color(0xFF2B384E) : AppColors.loss,
+                  color: isMarginSufficient ? const Color(0xFF262D34) : AppColors.loss,
                 ),
               ),
               child: Column(
@@ -771,7 +771,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 12,
-                          color: Color(0xFF848E9C),
+                          color: Color(0xFF8A919A),
                         ),
                       ),
                       Row(
@@ -785,10 +785,10 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                               margin: const EdgeInsets.only(left: 6),
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                               decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF1E2838),
+                                color: isSelected ? const Color(0xFFFFDE02) : const Color(0xFF1E242A),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF2B384E),
+                                  color: isSelected ? const Color(0xFFFFDE02) : const Color(0xFF262D34),
                                 ),
                               ),
                               child: Text(
@@ -853,7 +853,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
 
                           messenger.showSnackBar(
                             SnackBar(
-                              backgroundColor: const Color(0xFF00D68F),
+                              backgroundColor: const Color(0xFF16C784),
                               behavior: SnackBarBehavior.floating,
                               content: Text(
                                 '✓ $sideStr $typeStr ${_lots.toStringAsFixed(2)} Lots ${live.symbol}$priceStr Placed!',
@@ -882,10 +882,8 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: _side == OrderSide.buy
-                    ? const Color(0xFF00D68F)
-                    : const Color(0xFFFF4757),
-                foregroundColor: _side == OrderSide.buy ? Colors.black : Colors.white,
+                backgroundColor: _side == OrderSide.buy ? AppColors.buyButton : AppColors.sellButton,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -934,7 +932,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
         },
         child: Container(
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFFFD600) : Colors.transparent,
+            color: isSelected ? const Color(0xFFFFDE02) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           alignment: Alignment.center,
@@ -944,7 +942,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
               fontFamily: 'Inter',
               fontSize: 12,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              color: isSelected ? Colors.black : const Color(0xFF848E9C),
+              color: isSelected ? Colors.black : const Color(0xFF8A919A),
             ),
           ),
         ),
@@ -959,9 +957,9 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
         margin: const EdgeInsets.only(right: 6),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E2838),
+          color: const Color(0xFF1E242A),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: const Color(0xFF2B384E)),
+          border: Border.all(color: const Color(0xFF262D34)),
         ),
         child: Text(
           label,
@@ -969,7 +967,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
             fontFamily: 'Inter',
             fontSize: 11,
             fontWeight: FontWeight.bold,
-            color: Color(0xFFFFD600),
+            color: Color(0xFFFFDE02),
           ),
         ),
       ),
@@ -989,10 +987,10 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
         margin: const EdgeInsets.only(left: 6),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFD600).withValues(alpha: 0.2) : const Color(0xFF1E2838),
+          color: isSelected ? const Color(0xFFFFDE02).withValues(alpha: 0.2) : const Color(0xFF1E242A),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF2B384E),
+            color: isSelected ? const Color(0xFFFFDE02) : const Color(0xFF262D34),
             width: 1,
           ),
         ),
@@ -1002,7 +1000,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
             fontFamily: 'Inter',
             fontSize: 11,
             fontWeight: FontWeight.bold,
-            color: isSelected ? const Color(0xFFFFD600) : Colors.white70,
+            color: isSelected ? const Color(0xFFFFDE02) : Colors.white70,
           ),
         ),
       ),
@@ -1031,7 +1029,7 @@ class _OrderPlacementModalState extends State<OrderPlacementModal> {
           style: const TextStyle(
             fontFamily: 'Inter',
             fontSize: 12,
-            color: Color(0xFF848E9C),
+            color: Color(0xFF8A919A),
           ),
         ),
         Text(

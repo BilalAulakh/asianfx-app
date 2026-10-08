@@ -10,6 +10,8 @@ import '../../domain/entities/chart_entities.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/user_entity.dart';
 import '../charts/candlestick_chart_canvas.dart';
+import '../common/widgets/balance_pill.dart';
+import '../common/widgets/symbol_badge.dart';
 import 'widgets/order_placement_modal.dart';
 
 const _blue = ExnessChartColors.bull;
@@ -55,11 +57,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
     final isDark = context.isDarkMode;
     final textPrimary = context.textPrimaryColor;
     final textSecondary = context.textSecondaryColor;
-    final border = context.subtleBorderColor;
     final bg = isDark ? ExnessChartColors.darkBg : context.scaffoldBg;
     final chipBg = isDark ? const Color(0xFF232B33) : const Color(0xFFEFF2F5);
     final rowBg = isDark ? const Color(0xFF1A2229) : const Color(0xFFF8FAFC);
-    final accent = isDark ? const Color(0xFFFFD600) : const Color(0xFFB7791F);
+    final accent = isDark ? const Color(0xFFFFDE02) : const Color(0xFFB7791F);
 
     return Scaffold(
       backgroundColor: bg,
@@ -73,26 +74,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 children: [
                   const SizedBox(width: 40),
                   const Spacer(),
-                  InkWell(
-                    onTap: () => context.go(AppRoutes.vault),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: isDark ? const Color(0xFF3A434B) : border),
-                      ),
-                      child: Text(
-                        '${MoneyMath.formatCurrency(account.equity, symbol: '')} ${account.currency}',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
-                        ),
-                      ),
-                    ),
-                  ),
+                  const BalancePill(),
                   const Spacer(),
                   SizedBox(
                     width: 40,
@@ -162,7 +144,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _SymbolBadge(symbol: live.symbol),
+                            SymbolBadge(symbol: live.symbol),
                             const SizedBox(width: 8),
                             Text(
                               live.symbol,
@@ -425,7 +407,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
             return ListTile(
               selected: inst.symbol == activeSymbol,
               selectedTileColor: isDark ? const Color(0xFF232B33) : const Color(0xFFF1F4F7),
-              leading: _SymbolBadge(symbol: inst.symbol, size: 30),
+              leading: SymbolBadge(symbol: inst.symbol, size: 30),
               title: Text(
                 inst.symbol,
                 style: TextStyle(
@@ -468,42 +450,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
               },
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-/// Round badge with the base asset code (XAU, EUR, BTC…).
-class _SymbolBadge extends StatelessWidget {
-  final String symbol;
-  final double size;
-
-  const _SymbolBadge({required this.symbol, this.size = 26});
-
-  @override
-  Widget build(BuildContext context) {
-    final base = symbol.split('/').first;
-    final color = switch (base) {
-      'XAU' => const Color(0xFFE0A526),
-      'XAG' => const Color(0xFF9EA7B0),
-      'XPT' => const Color(0xFF7D8A96),
-      'BTC' => const Color(0xFFF7931A),
-      'ETH' => const Color(0xFF627EEA),
-      _ => const Color(0xFF2E6FD8),
-    };
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: Text(
-        base.length > 3 ? base.substring(0, 3) : base,
-        style: TextStyle(
-          fontFamily: 'Inter',
-          fontSize: size * 0.3,
-          fontWeight: FontWeight.w800,
-          color: Colors.white,
         ),
       ),
     );

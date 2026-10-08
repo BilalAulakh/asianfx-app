@@ -6,7 +6,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../blocs/blocs.dart';
 import '../../core/math/money_math.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../domain/entities/trading_entities.dart';
 import '../../domain/entities/user_entity.dart';
 import 'widgets/deposit_panel.dart';
@@ -24,35 +28,17 @@ class _VaultScreenState extends State<VaultScreen> {
   bool _showDepositSection = false;
 
   bool get _isDark => context.watch<ThemeCubit>().state;
-  Color get _cardBg => _isDark ? const Color(0xFF15222C) : Colors.white;
-  Color get _subCardBg =>
-      _isDark ? const Color(0xFF0F1A22) : const Color(0xFFF5F8FA);
-  Color get _subtleBorder =>
-      _isDark ? const Color(0xFF233440) : const Color(0xFFE3EBF0);
-  Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0B1B2B);
-  Color get _textSecondary =>
-      _isDark ? const Color(0xFF8FA3B3) : const Color(0xFF64748B);
-  Color get _mutedValue =>
-      _isDark ? const Color(0xFF9FB0BF) : const Color(0xFF5B6B7B);
+  Color get _cardBg => context.cardBg;
+  Color get _subCardBg => context.inputBg;
+  Color get _subtleBorder => context.subtleBorderColor;
+  Color get _textPrimary => context.textPrimaryColor;
+  Color get _textSecondary => context.textSecondaryColor;
+  Color get _mutedValue => context.textPrimaryColor;
 
-  static const _brandGreen = Color(0xFF1EC27E);
-  static const _lossRed = Color(0xFFFF4757);
+  static const _brandGreen = AppColors.profit;
+  static const _lossRed = AppColors.loss;
 
-  List<BoxShadow> get _cardShadow => _isDark
-      ? [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ]
-      : [
-          BoxShadow(
-            color: const Color(0xFF0B1B2B).withValues(alpha: 0.07),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ];
+  List<BoxShadow> get _cardShadow => const [];
 
   @override
   void dispose() {
@@ -90,268 +76,134 @@ class _VaultScreenState extends State<VaultScreen> {
     final accountId = (rawId.length > 8 ? rawId.substring(0, 8) : rawId)
         .toUpperCase();
 
+    final floating = account.unrealizedPnl;
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0A1218)
-          : const Color(0xFFE8F0F3),
-      body: Container(
-        // Fill the whole screen, not just the content height.
-        constraints: const BoxConstraints.expand(),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isDark
-                ? const [Color(0xFF111D25), Color(0xFF0A1218)]
-                : const [Color(0xFFF6F9FB), Color(0xFFE8F0F3)],
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            controller: _scrollController,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Header ────────────────────────────────────────────────────
-                Row(
+      backgroundColor: context.scaffoldBg,
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Header ──────────────────────────────────────────────────────
+              Row(
+                children: [
+                  Text(
+                    'Accounts',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      color: _textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme',
+                    onPressed: () => context.read<ThemeCubit>().toggleTheme(),
+                    icon: Icon(
+                      isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                      color: _textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // ── Account card ────────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+                decoration: BoxDecoration(
+                  color: _cardBg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: isDark ? null : Border.all(color: _subtleBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        Text(
-                          'Wallet',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: _textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          width: 30,
-                          height: 3,
-                          decoration: BoxDecoration(
-                            color: _brandGreen,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+                        _tag('Real', highlight: true),
+                        _tag('Standard'),
+                        _tag('#AFX-$accountId'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      '${MoneyMath.formatCurrency(displayedBalance, symbol: '')} ${account.currency}',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 32,
+                        fontWeight: FontWeight.w700,
+                        color: _textPrimary,
+                        height: 1.1,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Balance',
+                      style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: _textSecondary),
+                    ),
+                    const SizedBox(height: 16),
+                    Divider(height: 1, thickness: 1, color: _subtleBorder),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        _vaultBreakdownItem('Free margin', MoneyMath.formatCurrency(cleanFreeMargin)),
+                        _vaultBreakdownItem('Used margin', MoneyMath.formatCurrency(account.usedMargin)),
+                        _vaultBreakdownItem(
+                          'Floating P/L',
+                          floating == Decimal.zero
+                              ? MoneyMath.formatCurrency(Decimal.zero)
+                              : MoneyMath.formatPnL(floating),
+                          valueColor: floating > Decimal.zero
+                              ? _brandGreen
+                              : floating < Decimal.zero
+                                  ? _lossRed
+                                  : null,
                         ),
                       ],
                     ),
-                    const Spacer(),
-                    Tooltip(
-                      message: isDark
-                          ? 'Switch to Light Theme'
-                          : 'Switch to Dark Theme',
-                      child: Material(
-                        color: isDark ? const Color(0xFF1A2832) : Colors.white,
-                        shape: CircleBorder(
-                          side: BorderSide(color: _subtleBorder),
-                        ),
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: () => context.read<ThemeCubit>().toggleTheme(),
-                          child: Padding(
-                            padding: const EdgeInsets.all(10),
-                            child: Icon(
-                              Icons.dark_mode_rounded,
-                              size: 20,
-                              color: _textPrimary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
+                    const SizedBox(height: 20),
 
-                // ── Balance card ──────────────────────────────────────────────
-                Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? null : Colors.white,
-                    gradient: isDark
-                        ? const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF1A2A35), Color(0xFF101B23)],
-                          )
-                        : null,
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: _subtleBorder),
-                    boxShadow: _cardShadow,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(22),
-                    child: Stack(
+                    // ── Round actions (Exness) ────────────────────────────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: CustomPaint(
-                              painter: _CardWavePainter(isDark: isDark),
-                            ),
-                          ),
+                        _actionButton(
+                          icon: Icons.swap_vert_rounded,
+                          label: 'Trade',
+                          filled: true,
+                          onTap: () => context.go(AppRoutes.markets),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: [
-                                  _pill(
-                                    icon: Icons.shield_rounded,
-                                    label: 'SEGREGATED ASSET VAULT',
-                                    fg: isDark
-                                        ? _brandGreen
-                                        : const Color(0xFF15965E),
-                                    bg: isDark
-                                        ? _brandGreen.withValues(alpha: 0.08)
-                                        : const Color(0xFFDDF5E9),
-                                    border: isDark
-                                        ? _brandGreen.withValues(alpha: 0.55)
-                                        : const Color(0xFFB9EAD1),
-                                  ),
-                                  _pill(
-                                    icon: Icons.person_outline_rounded,
-                                    label: 'ACC: #AFX-$accountId',
-                                    fg: isDark
-                                        ? const Color(0xFFF5C451)
-                                        : const Color(0xFF9A6A00),
-                                    bg: isDark
-                                        ? const Color(
-                                            0xFFF5C451,
-                                          ).withValues(alpha: 0.06)
-                                        : const Color(0xFFFFF4D6),
-                                    border: isDark
-                                        ? const Color(
-                                            0xFFF5C451,
-                                          ).withValues(alpha: 0.55)
-                                        : const Color(0xFFF5DFA0),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 18),
-                              Text(
-                                'PURE CASH LEDGER BALANCE',
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.4,
-                                  color: _textSecondary,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                MoneyMath.formatCurrency(displayedBalance),
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 38,
-                                  fontWeight: FontWeight.w800,
-                                  color: _textPrimary,
-                                  height: 1.1,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Divider(
-                                height: 1,
-                                thickness: 1,
-                                color: _subtleBorder,
-                              ),
-                              const SizedBox(height: 14),
-                              IntrinsicHeight(
-                                child: Row(
-                                  children: [
-                                    _vaultBreakdownItem(
-                                      'Free Margin',
-                                      MoneyMath.formatCurrency(cleanFreeMargin),
-                                      valueColor: _brandGreen,
-                                    ),
-                                    VerticalDivider(
-                                      width: 24,
-                                      thickness: 1,
-                                      color: _subtleBorder,
-                                    ),
-                                    _vaultBreakdownItem(
-                                      'Used Margin',
-                                      MoneyMath.formatCurrency(
-                                        account.usedMargin,
-                                      ),
-                                    ),
-                                    VerticalDivider(
-                                      width: 24,
-                                      thickness: 1,
-                                      color: _subtleBorder,
-                                    ),
-                                    _vaultBreakdownItem(
-                                      'Floating PnL',
-                                      account.unrealizedPnl == Decimal.zero
-                                          ? MoneyMath.formatCurrency(
-                                              Decimal.zero,
-                                            )
-                                          : MoneyMath.formatPnL(
-                                              account.unrealizedPnl,
-                                            ),
-                                      valueColor:
-                                          account.unrealizedPnl > Decimal.zero
-                                          ? _brandGreen
-                                          : account.unrealizedPnl < Decimal.zero
-                                          ? _lossRed
-                                          : null,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                        _actionButton(
+                          icon: _showDepositSection ? Icons.close_rounded : Icons.arrow_downward_rounded,
+                          label: _showDepositSection ? 'Hide' : 'Deposit',
+                          filled: false,
+                          onTap: () {
+                            setState(() => _showDepositSection = !_showDepositSection);
+                            if (_showDepositSection) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToDeposit());
+                            }
+                          },
+                        ),
+                        _actionButton(
+                          icon: Icons.arrow_upward_rounded,
+                          label: 'Withdraw',
+                          filled: false,
+                          onTap: () => _showWithdrawModal(context, authUser),
                         ),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // ── Deposit / Withdraw ────────────────────────────────────────
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 11,
-                      child: _actionButton(
-                        icon: _showDepositSection
-                            ? Icons.close_rounded
-                            : Icons.arrow_downward_rounded,
-                        label: _showDepositSection ? 'Hide Deposit' : 'Deposit',
-                        filled: true,
-                        onTap: () {
-                          setState(
-                            () => _showDepositSection = !_showDepositSection,
-                          );
-                          if (_showDepositSection) {
-                            WidgetsBinding.instance.addPostFrameCallback(
-                              (_) => _scrollToDeposit(),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 9,
-                      child: _actionButton(
-                        icon: Icons.arrow_upward_rounded,
-                        label: 'WITHDRAW',
-                        filled: false,
-                        onTap: () => _showWithdrawModal(context, authUser),
-                      ),
-                    ),
                   ],
                 ),
-                const SizedBox(height: 18),
+              ),
+              const SizedBox(height: 16),
 
                 // ── Active Open Trades Section (Directly Below Balance & Action Buttons) ──
                 _buildActiveTradesSection(engineState.openPositions),
@@ -363,8 +215,7 @@ class _VaultScreenState extends State<VaultScreen> {
                     key: _depositSectionKey,
                     onClose: () => setState(() => _showDepositSection = false),
                   ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -459,7 +310,7 @@ class _VaultScreenState extends State<VaultScreen> {
                     width: 8,
                     height: 8,
                     decoration: const BoxDecoration(
-                      color: Color(0xFF00D68F),
+                      color: Color(0xFF16C784),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -480,8 +331,8 @@ class _VaultScreenState extends State<VaultScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: isTotalProfit
-                      ? const Color(0xFF00D68F).withValues(alpha: 0.15)
-                      : const Color(0xFFFF4757).withValues(alpha: 0.15),
+                      ? const Color(0xFF16C784).withValues(alpha: 0.15)
+                      : const Color(0xFFE5484D).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -491,8 +342,8 @@ class _VaultScreenState extends State<VaultScreen> {
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
                     color: isTotalProfit
-                        ? const Color(0xFF00D68F)
-                        : const Color(0xFFFF4757),
+                        ? const Color(0xFF16C784)
+                        : const Color(0xFFE5484D),
                   ),
                 ),
               ),
@@ -525,8 +376,8 @@ class _VaultScreenState extends State<VaultScreen> {
                         ),
                         decoration: BoxDecoration(
                           color: pos.isBuy
-                              ? const Color(0xFF00D68F).withValues(alpha: 0.15)
-                              : const Color(0xFFFF4757).withValues(alpha: 0.15),
+                              ? const Color(0xFF16C784).withValues(alpha: 0.15)
+                              : const Color(0xFFE5484D).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -536,8 +387,8 @@ class _VaultScreenState extends State<VaultScreen> {
                             fontSize: 10,
                             fontWeight: FontWeight.w900,
                             color: pos.isBuy
-                                ? const Color(0xFF00D68F)
-                                : const Color(0xFFFF4757),
+                                ? const Color(0xFF16C784)
+                                : const Color(0xFFE5484D),
                           ),
                         ),
                       ),
@@ -559,8 +410,8 @@ class _VaultScreenState extends State<VaultScreen> {
                           fontSize: 14,
                           fontWeight: FontWeight.w900,
                           color: isPosProfit
-                              ? const Color(0xFF00D68F)
-                              : const Color(0xFFFF4757),
+                              ? const Color(0xFF16C784)
+                              : const Color(0xFFE5484D),
                         ),
                       ),
                     ],
@@ -597,7 +448,7 @@ class _VaultScreenState extends State<VaultScreen> {
                         'Margin: ${MoneyMath.formatCurrency(pos.requiredMargin)}',
                         style: const TextStyle(
                           fontSize: 11,
-                          color: Color(0xFFFFD600),
+                          color: Color(0xFFFFDE02),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -632,8 +483,8 @@ class _VaultScreenState extends State<VaultScreen> {
                       ),
                     ),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFFF4757),
-                      side: const BorderSide(color: Color(0xFFFF4757)),
+                      foregroundColor: const Color(0xFFE5484D),
+                      side: const BorderSide(color: Color(0xFFE5484D)),
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -681,89 +532,62 @@ class _VaultScreenState extends State<VaultScreen> {
     );
   }
 
-  Widget _pill({
-    required IconData icon,
-    required String label,
-    required Color fg,
-    required Color bg,
-    required Color border,
-  }) {
+  Widget _tag(String label, {bool highlight = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: border),
+        color: highlight
+            ? AppColors.brandPrimary.withValues(alpha: _isDark ? 0.16 : 0.35)
+            : _subCardBg,
+        borderRadius: BorderRadius.circular(6),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: fg),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              color: fg,
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: highlight ? context.accentColor : _textSecondary,
+        ),
       ),
     );
   }
 
+  /// Exness round action: icon in a circle with the label underneath.
   Widget _actionButton({
     required IconData icon,
     required String label,
     required bool filled,
     required VoidCallback onTap,
   }) {
-    final fg = filled ? Colors.white : _textPrimary;
-    return Container(
-      height: 58,
-      decoration: BoxDecoration(
-        color: filled
-            ? _brandGreen
-            : (_isDark ? const Color(0xFF1A2832) : Colors.white),
-        borderRadius: BorderRadius.circular(16),
-        border: filled ? null : Border.all(color: _subtleBorder),
-        boxShadow: filled
-            ? [
-                BoxShadow(
-                  color: _brandGreen.withValues(alpha: 0.35),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ]
-            : _cardShadow,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 22, color: fg),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: filled ? 18 : 14,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: filled ? 0 : 0.4,
-                    color: fg,
-                  ),
-                ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: filled ? AppColors.brandPrimary : _subCardBg,
+                shape: BoxShape.circle,
               ),
-            ],
-          ),
+              child: Icon(icon, size: 24, color: filled ? Colors.black : _textPrimary),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _textPrimary,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -780,7 +604,7 @@ class _VaultScreenState extends State<VaultScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF151D28),
+      backgroundColor: const Color(0xFF161B20),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -836,7 +660,7 @@ class _VaultScreenState extends State<VaultScreen> {
                       IconButton(
                         icon: const Icon(
                           Icons.close,
-                          color: Color(0xFF848E9C),
+                          color: Color(0xFF8A919A),
                           size: 20,
                         ),
                         onPressed: () => Navigator.of(ctx).pop(),
@@ -878,7 +702,7 @@ class _VaultScreenState extends State<VaultScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF848E9C),
+                          color: Color(0xFF8A919A),
                         ),
                       ),
                       if (withdrawProofBytes != null)
@@ -889,14 +713,14 @@ class _VaultScreenState extends State<VaultScreen> {
                           ),
                           decoration: BoxDecoration(
                             color: const Color(
-                              0xFF00D68F,
+                              0xFF16C784,
                             ).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
                             '✓ ATTACHED',
                             style: TextStyle(
-                              color: Color(0xFF00D68F),
+                              color: Color(0xFF16C784),
                               fontSize: 9,
                               fontWeight: FontWeight.bold,
                             ),
@@ -915,9 +739,9 @@ class _VaultScreenState extends State<VaultScreen> {
                           horizontal: 16,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F141C),
+                          color: const Color(0xFF0F1317),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF2B384E)),
+                          border: Border.all(color: const Color(0xFF262D34)),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -928,20 +752,20 @@ class _VaultScreenState extends State<VaultScreen> {
                                 height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Color(0xFF00D68F),
+                                  color: Color(0xFF16C784),
                                 ),
                               )
                             else ...[
                               const Icon(
                                 Icons.add_photo_alternate_outlined,
                                 size: 18,
-                                color: Color(0xFF848E9C),
+                                color: Color(0xFF8A919A),
                               ),
                               const SizedBox(width: 8),
                               const Text(
                                 'Attach Wallet Address Slip / QR Screenshot',
                                 style: TextStyle(
-                                  color: Color(0xFF848E9C),
+                                  color: Color(0xFF8A919A),
                                   fontSize: 12,
                                 ),
                               ),
@@ -954,10 +778,10 @@ class _VaultScreenState extends State<VaultScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F141C),
+                        color: const Color(0xFF0F1317),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: const Color(0xFF00D68F).withValues(alpha: 0.4),
+                          color: const Color(0xFF16C784).withValues(alpha: 0.4),
                         ),
                       ),
                       child: Row(
@@ -990,7 +814,7 @@ class _VaultScreenState extends State<VaultScreen> {
                                 Text(
                                   '${(withdrawProofBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB • Attached for Admin Check',
                                   style: const TextStyle(
-                                    color: Color(0xFF00D68F),
+                                    color: Color(0xFF16C784),
                                     fontSize: 10,
                                   ),
                                 ),
@@ -1000,7 +824,7 @@ class _VaultScreenState extends State<VaultScreen> {
                           IconButton(
                             icon: const Icon(
                               Icons.delete_outline,
-                              color: Color(0xFFFF4757),
+                              color: Color(0xFFE5484D),
                               size: 18,
                             ),
                             onPressed: () => setModalState(() {
@@ -1093,7 +917,7 @@ class _VaultScreenState extends State<VaultScreen> {
                         if (context.mounted) {
                           messenger.showSnackBar(
                             SnackBar(
-                              backgroundColor: const Color(0xFFFF4757),
+                              backgroundColor: const Color(0xFFE5484D),
                               content: Text(
                                 'Withdrawal rejected: ${e.toString().replaceAll('Exception: ', '')}',
                                 style: const TextStyle(
@@ -1139,7 +963,7 @@ class _VaultScreenState extends State<VaultScreen> {
                       if (context.mounted) {
                         messenger.showSnackBar(
                           SnackBar(
-                            backgroundColor: const Color(0xFF0ECB81),
+                            backgroundColor: AppColors.profit,
                             content: Text(
                               '✓ Withdrawal of \$${amt.toStringAsFixed(2)} submitted — funds held pending approval.',
                               style: const TextStyle(
@@ -1152,7 +976,7 @@ class _VaultScreenState extends State<VaultScreen> {
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF4757),
+                      backgroundColor: const Color(0xFFE5484D),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -1172,54 +996,4 @@ class _VaultScreenState extends State<VaultScreen> {
 }
 
 /// Soft green wave in the balance card's right corner.
-class _CardWavePainter extends CustomPainter {
-  final bool isDark;
-  const _CardWavePainter({required this.isDark});
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    const green = Color(0xFF1EC27E);
-
-    final back = Path()
-      ..moveTo(w * 0.55, h)
-      ..cubicTo(w * 0.72, h * 0.62, w * 0.80, h * 0.30, w, h * 0.12)
-      ..lineTo(w, h)
-      ..close();
-    canvas.drawPath(
-      back,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [
-            green.withValues(alpha: isDark ? 0.40 : 0.16),
-            green.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromLTWH(w * 0.5, 0, w * 0.5, h)),
-    );
-
-    final front = Path()
-      ..moveTo(w * 0.68, h)
-      ..cubicTo(w * 0.80, h * 0.78, w * 0.88, h * 0.55, w, h * 0.42)
-      ..lineTo(w, h)
-      ..close();
-    canvas.drawPath(
-      front,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [
-            green.withValues(alpha: isDark ? 0.30 : 0.10),
-            green.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromLTWH(w * 0.6, h * 0.4, w * 0.4, h * 0.6)),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _CardWavePainter oldDelegate) =>
-      oldDelegate.isDark != isDark;
-}

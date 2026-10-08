@@ -125,7 +125,7 @@ class _WithdrawalRequestsTabState extends State<WithdrawalRequestsTab> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Text(_error!, style: const TextStyle(color: Color(0xFFFF4757))),
+              child: Text(_error!, style: const TextStyle(color: Color(0xFFE5484D))),
             )
           else if (_items.isEmpty && !_loading)
             Padding(
@@ -153,8 +153,8 @@ class _WithdrawalCard extends StatefulWidget {
 }
 
 class _WithdrawalCardState extends State<_WithdrawalCard> {
-  static const _green = Color(0xFF10B981);
-  static const _red = Color(0xFFFF4757);
+  static const _green = Color(0xFF16C784);
+  static const _red = Color(0xFFE5484D);
   static const _amber = Color(0xFFFFB300);
 
   final _txidController = TextEditingController();

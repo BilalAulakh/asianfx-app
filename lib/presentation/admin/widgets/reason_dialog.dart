@@ -11,7 +11,7 @@ Future<String?> showReasonDialog(
   required String message,
   required String hint,
   required String confirmLabel,
-  Color confirmColor = const Color(0xFFFF4757),
+  Color confirmColor = const Color(0xFFE5484D),
   Color? background,
   Color? textPrimary,
   Color? textSecondary,

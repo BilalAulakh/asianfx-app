@@ -127,7 +127,7 @@ class AppTheme {
       brightness: Brightness.dark,
       primary: AppColors.brandPrimary,
       onPrimary: Colors.black,
-      primaryContainer: Color(0xFF00361F),
+      primaryContainer: Color(0xFF3A3300),
       onPrimaryContainer: AppColors.brandPrimary,
       secondary: AppColors.brandSecondary,
       onSecondary: Colors.black,
@@ -164,6 +164,7 @@ class AppTheme {
 
       // AppBar
       appBarTheme: const AppBarTheme(
+        surfaceTintColor: Colors.transparent,
         backgroundColor: AppColors.darkBackground,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
@@ -215,8 +216,8 @@ class AppTheme {
       // Outlined Button
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.brandPrimary,
-          side: const BorderSide(color: AppColors.brandPrimary, width: 1.5),
+          foregroundColor: AppColors.textPrimary,
+          side: const BorderSide(color: AppColors.darkBorder, width: 1.5),
           minimumSize: const Size(double.infinity, 52),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -338,9 +339,9 @@ class AppTheme {
 
       // Tab Bar
       tabBarTheme: const TabBarThemeData(
-        labelColor: AppColors.brandPrimary,
+        labelColor: AppColors.textPrimary,
         unselectedLabelColor: AppColors.textSecondary,
-        indicatorColor: AppColors.brandPrimary,
+        indicatorColor: AppColors.textPrimary,
         labelStyle: TextStyle(
           fontFamily: _fontFamily,
           fontSize: 13,
@@ -352,7 +353,7 @@ class AppTheme {
           fontWeight: FontWeight.w400,
         ),
         indicator: UnderlineTabIndicator(
-          borderSide: BorderSide(color: AppColors.brandPrimary, width: 2),
+          borderSide: BorderSide(color: AppColors.textPrimary, width: 2),
           borderRadius: BorderRadius.all(Radius.circular(2)),
         ),
         overlayColor: WidgetStatePropertyAll(Colors.transparent),
@@ -402,7 +403,7 @@ class AppTheme {
         activeTrackColor: AppColors.brandPrimary,
         inactiveTrackColor: AppColors.darkBorder,
         thumbColor: AppColors.brandPrimary,
-        overlayColor: AppColors.glowGreen,
+        overlayColor: AppColors.glowGold,
         valueIndicatorColor: AppColors.darkCard,
         valueIndicatorTextStyle: TextStyle(
           fontFamily: _fontFamily,
@@ -438,9 +439,9 @@ class AppTheme {
     const colorScheme = ColorScheme(
       brightness: Brightness.light,
       primary: AppColors.brandPrimary,
-      onPrimary: Colors.white,
-      primaryContainer: Color(0xFFB2DFDB),
-      onPrimaryContainer: Color(0xFF004D40),
+      onPrimary: Colors.black,
+      primaryContainer: Color(0xFFFFF6BF),
+      onPrimaryContainer: Color(0xFF4A3A00),
       secondary: AppColors.brandSecondary,
       onSecondary: Colors.white,
       secondaryContainer: Color(0xFFFFF8E1),
@@ -463,7 +464,7 @@ class AppTheme {
       scrim: Colors.black26,
       inverseSurface: AppColors.darkSurface,
       onInverseSurface: AppColors.textPrimary,
-      inversePrimary: AppColors.brandPrimary,
+      inversePrimary: AppColors.brandOnLight,
     );
 
     return ThemeData(
@@ -474,6 +475,7 @@ class AppTheme {
       fontFamily: _fontFamily,
       textTheme: _buildTextTheme(false),
       appBarTheme: const AppBarTheme(
+        surfaceTintColor: Colors.transparent,
         backgroundColor: AppColors.lightSurface,
         foregroundColor: AppColors.textDark,
         elevation: 0,
@@ -503,7 +505,7 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.brandPrimary,
-          foregroundColor: Colors.white,
+          foregroundColor: Colors.black,
           minimumSize: const Size(double.infinity, 52),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -517,8 +519,8 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.brandPrimary,
-          side: const BorderSide(color: AppColors.brandPrimary, width: 1.5),
+          foregroundColor: AppColors.textDark,
+          side: const BorderSide(color: AppColors.lightBorder, width: 1.5),
           minimumSize: const Size(double.infinity, 52),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -532,7 +534,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.brandPrimary,
+          foregroundColor: AppColors.brandOnLight,
           textStyle: const TextStyle(
             fontFamily: _fontFamily,
             fontSize: 14,
@@ -554,7 +556,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.brandPrimary, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.brandOnLight, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -579,7 +581,7 @@ class AppTheme {
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.lightSurface,
-        selectedItemColor: AppColors.brandPrimary,
+        selectedItemColor: AppColors.textDark,
         unselectedItemColor: AppColors.textMuted,
         type: BottomNavigationBarType.fixed,
         elevation: 4,
@@ -614,9 +616,9 @@ class AppTheme {
         space: 1,
       ),
       tabBarTheme: const TabBarThemeData(
-        labelColor: AppColors.brandPrimary,
+        labelColor: AppColors.textDark,
         unselectedLabelColor: AppColors.textMuted,
-        indicatorColor: AppColors.brandPrimary,
+        indicatorColor: AppColors.textDark,
         labelStyle: TextStyle(
           fontFamily: _fontFamily,
           fontSize: 13,
@@ -628,7 +630,7 @@ class AppTheme {
           fontWeight: FontWeight.w400,
         ),
         indicator: UnderlineTabIndicator(
-          borderSide: BorderSide(color: AppColors.brandPrimary, width: 2),
+          borderSide: BorderSide(color: AppColors.textDark, width: 2),
           borderRadius: BorderRadius.all(Radius.circular(2)),
         ),
         overlayColor: WidgetStatePropertyAll(Colors.transparent),
@@ -683,14 +685,17 @@ class AppTheme {
 /// Helper extension to easily access adaptive dark/light values in any widget
 extension ThemeContextExtension on BuildContext {
   bool get isDarkMode => Theme.of(this).brightness == Brightness.dark;
-  Color get surfaceColor => isDarkMode ? const Color(0xFF151D28) : Colors.white;
-  Color get scaffoldBg => isDarkMode ? const Color(0xFF0A0E17) : const Color(0xFFF4F6F9);
-  Color get cardBg => isDarkMode ? const Color(0xFF151D28) : Colors.white;
-  Color get elevatedCardBg => isDarkMode ? const Color(0xFF1A2338) : const Color(0xFFF8FAFC);
-  Color get headerBg => isDarkMode ? const Color(0xFF151D28) : Colors.white;
-  Color get borderColor => isDarkMode ? const Color(0xFF1C2535) : const Color(0xFFE2E8F0);
-  Color get subtleBorderColor => isDarkMode ? const Color(0xFF2B384E) : const Color(0xFFE2E8F0);
-  Color get textPrimaryColor => isDarkMode ? Colors.white : const Color(0xFF0F172A);
-  Color get textSecondaryColor => isDarkMode ? const Color(0xFF848E9C) : const Color(0xFF64748B);
-  Color get inputBg => isDarkMode ? const Color(0xFF0F141C) : const Color(0xFFF1F5F9);
+  Color get surfaceColor => isDarkMode ? AppColors.darkSurface : Colors.white;
+  Color get scaffoldBg => isDarkMode ? AppColors.darkBackground : AppColors.lightBackground;
+  Color get cardBg => isDarkMode ? AppColors.darkCard : Colors.white;
+  Color get elevatedCardBg => isDarkMode ? AppColors.darkCardElevated : const Color(0xFFF7F8FA);
+  Color get headerBg => isDarkMode ? AppColors.darkBackground : Colors.white;
+  Color get borderColor => isDarkMode ? AppColors.darkDivider : AppColors.lightBorder;
+  Color get subtleBorderColor => isDarkMode ? AppColors.darkBorder : AppColors.lightBorder;
+  Color get textPrimaryColor => isDarkMode ? AppColors.textPrimary : AppColors.textLight;
+  Color get textSecondaryColor => isDarkMode ? AppColors.textSecondary : const Color(0xFF6B7280);
+  Color get inputBg => isDarkMode ? const Color(0xFF0F1317) : const Color(0xFFF1F3F5);
+
+  /// Brand yellow for fills; a darker gold for text / icons on light backgrounds.
+  Color get accentColor => isDarkMode ? AppColors.brandPrimary : AppColors.brandOnLight;
 }

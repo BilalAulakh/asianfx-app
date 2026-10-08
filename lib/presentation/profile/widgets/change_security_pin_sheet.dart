@@ -225,13 +225,13 @@ class _ChangeSecurityPinSheetState extends State<ChangeSecurityPinSheet> {
           width: 64,
           height: 64,
           decoration: BoxDecoration(
-            color: const Color(0xFF00D68F).withAlpha(30),
+            color: const Color(0xFF16C784).withAlpha(30),
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF00D68F), width: 2),
+            border: Border.all(color: const Color(0xFF16C784), width: 2),
           ),
           child: const Icon(
             Icons.check_rounded,
-            color: Color(0xFF00D68F),
+            color: Color(0xFF16C784),
             size: 36,
           ),
         ),
@@ -262,7 +262,7 @@ class _ChangeSecurityPinSheetState extends State<ChangeSecurityPinSheet> {
           child: ElevatedButton(
             onPressed: () => Navigator.of(context).pop(),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFFD600),
+              backgroundColor: const Color(0xFFFFDE02),
               foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -288,10 +288,10 @@ class _ChangeSecurityPinSheetState extends State<ChangeSecurityPinSheet> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFD600).withAlpha(30),
+                    color: const Color(0xFFFFDE02).withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.lock_outline_rounded, color: Color(0xFFFFD600), size: 20),
+                  child: const Icon(Icons.lock_outline_rounded, color: Color(0xFFFFDE02), size: 20),
                 ),
                 const SizedBox(width: 12),
                 Text(
@@ -335,15 +335,15 @@ class _ChangeSecurityPinSheetState extends State<ChangeSecurityPinSheet> {
               height: 16,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isFilled ? const Color(0xFFFFD600) : Colors.transparent,
+                color: isFilled ? const Color(0xFFFFDE02) : Colors.transparent,
                 border: Border.all(
-                  color: isFilled ? const Color(0xFFFFD600) : context.borderColor,
+                  color: isFilled ? const Color(0xFFFFDE02) : context.borderColor,
                   width: 2,
                 ),
                 boxShadow: isFilled
                     ? [
                         BoxShadow(
-                          color: const Color(0xFFFFD600).withAlpha(80),
+                          color: const Color(0xFFFFDE02).withAlpha(80),
                           blurRadius: 8,
                           spreadRadius: 2,
                         ),

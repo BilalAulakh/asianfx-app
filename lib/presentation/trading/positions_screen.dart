@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../blocs/blocs.dart';
 import '../../core/math/money_math.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../domain/entities/trading_entities.dart';
 
 class PositionsScreen extends StatefulWidget {
@@ -18,12 +19,12 @@ class _PositionsScreenState extends State<PositionsScreen>
   late TabController _tabController;
 
   bool get _isDark => context.watch<ThemeCubit>().state;
-  Color get _bg => _isDark ? const Color(0xFF0A0E17) : const Color(0xFFF1F5F9);
-  Color get _appBarBg => _isDark ? const Color(0xFF151D28) : Colors.white;
-  Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
-  Color get _borderColor => _isDark ? const Color(0xFF1C2535) : const Color(0xFFE2E8F0);
-  Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0F172A);
-  Color get _textSecondary => _isDark ? const Color(0xFF848E9C) : const Color(0xFF64748B);
+  Color get _bg => context.scaffoldBg;
+  Color get _appBarBg => context.scaffoldBg;
+  Color get _cardBg => context.cardBg;
+  Color get _borderColor => context.borderColor;
+  Color get _textPrimary => context.textPrimaryColor;
+  Color get _textSecondary => context.textSecondaryColor;
 
   @override
   void initState() {
@@ -47,14 +48,14 @@ class _PositionsScreenState extends State<PositionsScreen>
       backgroundColor: _bg,
       appBar: AppBar(
         backgroundColor: _appBarBg,
-        elevation: isDark ? 0 : 1,
-        shadowColor: Colors.black.withValues(alpha: 0.08),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         title: Text(
-          'Positions & Portfolio',
+          'Positions',
           style: TextStyle(
             fontFamily: 'Inter',
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+            fontSize: 26,
+            fontWeight: FontWeight.w700,
             color: _textPrimary,
           ),
         ),
@@ -62,8 +63,8 @@ class _PositionsScreenState extends State<PositionsScreen>
           IconButton(
             icon: Icon(
               isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              color: const Color(0xFFFFD600),
-              size: 20,
+              color: _textPrimary,
+              size: 22,
             ),
             tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
             onPressed: () => context.read<ThemeCubit>().toggleTheme(),
@@ -71,11 +72,13 @@ class _PositionsScreenState extends State<PositionsScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: const Color(0xFFFFD600),
-          indicatorWeight: 3,
-          labelColor: isDark ? const Color(0xFFFFD600) : const Color(0xFFD97706),
+          indicatorColor: _textPrimary,
+          indicatorWeight: 2,
+          indicatorSize: TabBarIndicatorSize.label,
+          dividerColor: _borderColor,
+          labelColor: _textPrimary,
           unselectedLabelColor: _textSecondary,
-          labelStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold, fontSize: 13),
+          labelStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, fontSize: 14),
           tabs: [
             Tab(text: 'Open (${engineState.openPositions.length})'),
             Tab(text: 'Pending (${engineState.pendingOrders.length})'),
@@ -91,9 +94,7 @@ class _PositionsScreenState extends State<PositionsScreen>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: isDark
-                    ? const [Color(0xFF162030), Color(0xFF0F1622)]
-                    : const [Colors.white, Color(0xFFF8FAFC)],
+                colors: [_cardBg, _cardBg],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -101,7 +102,7 @@ class _PositionsScreenState extends State<PositionsScreen>
               border: Border.all(
                 color: account.isMarginCall
                     ? AppColors.loss
-                    : (isDark ? const Color(0xFF222F44) : const Color(0xFFE2E8F0)),
+                    : (isDark ? Colors.transparent : _borderColor),
               ),
               boxShadow: isDark
                   ? null
@@ -162,8 +163,8 @@ class _PositionsScreenState extends State<PositionsScreen>
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: account.unrealizedPnl >= Decimal.zero
-                                ? const Color(0xFF00D68F)
-                                : const Color(0xFFFF4757),
+                                ? const Color(0xFF16C784)
+                                : const Color(0xFFE5484D),
                           ),
                         ),
                       ],
@@ -192,7 +193,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                           : 'Safe (100%)',
                       highlightColor: account.isMarginCall
                           ? AppColors.loss
-                          : const Color(0xFF00D68F),
+                          : const Color(0xFF16C784),
                     ),
                   ],
                 ),
@@ -265,8 +266,8 @@ class _PositionsScreenState extends State<PositionsScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: pos.isBuy
-                          ? const Color(0xFF00D68F).withValues(alpha: 0.15)
-                          : const Color(0xFFFF4757).withValues(alpha: 0.15),
+                          ? const Color(0xFF2390F3).withValues(alpha: 0.15)
+                          : const Color(0xFFE5484D).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -275,7 +276,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                         fontFamily: 'Inter',
                         fontSize: 11,
                         fontWeight: FontWeight.w900,
-                        color: pos.isBuy ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                        color: pos.isBuy ? const Color(0xFF2390F3) : const Color(0xFFE5484D),
                       ),
                     ),
                   ),
@@ -296,7 +297,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                       fontFamily: 'Inter',
                       fontSize: 15,
                       fontWeight: FontWeight.w900,
-                      color: isProfit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                      color: isProfit ? const Color(0xFF16C784) : const Color(0xFFE5484D),
                     ),
                   ),
                 ],
@@ -318,7 +319,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                   ),
                   Text(
                     'Margin: ${MoneyMath.formatCurrency(pos.requiredMargin)}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFFFFD600), fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontSize: 12, color: Color(0xFFFFDE02), fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -341,8 +342,8 @@ class _PositionsScreenState extends State<PositionsScreen>
                   }
                 },
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFFF4757),
-                  side: const BorderSide(color: Color(0xFFFF4757)),
+                  foregroundColor: const Color(0xFFE5484D),
+                  side: const BorderSide(color: Color(0xFFE5484D)),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -418,7 +419,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.cancel_outlined, color: Color(0xFFFF4757)),
+                icon: const Icon(Icons.cancel_outlined, color: Color(0xFFE5484D)),
                 onPressed: () {
                   context.read<TradingEngineBloc>().cancelPendingOrder(ord.id);
                 },
@@ -470,8 +471,8 @@ class _PositionsScreenState extends State<PositionsScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
                   color: t.isBuy
-                      ? const Color(0xFF00D68F).withValues(alpha: 0.15)
-                      : const Color(0xFFFF4757).withValues(alpha: 0.15),
+                      ? const Color(0xFF2390F3).withValues(alpha: 0.15)
+                      : const Color(0xFFE5484D).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -480,7 +481,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                     fontFamily: 'Inter',
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: t.isBuy ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                    color: t.isBuy ? const Color(0xFF2390F3) : const Color(0xFFE5484D),
                   ),
                 ),
               ),
@@ -511,7 +512,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                   fontFamily: 'Inter',
                   fontSize: 14,
                   fontWeight: FontWeight.w900,
-                  color: isProfit ? const Color(0xFF00D68F) : const Color(0xFFFF4757),
+                  color: isProfit ? const Color(0xFF16C784) : const Color(0xFFE5484D),
                 ),
               ),
             ],

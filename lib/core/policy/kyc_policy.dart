@@ -40,15 +40,15 @@ class KycPolicy {
   static Color getStatusColor(KycVerificationStatus status) {
     switch (status) {
       case KycVerificationStatus.notStarted:
-        return const Color(0xFF848E9C);
+        return const Color(0xFF8A919A);
       case KycVerificationStatus.inProgress:
         return const Color(0xFF3B82F6); // Blue
       case KycVerificationStatus.pendingReview:
-        return const Color(0xFFFFC700); // Amber
+        return const Color(0xFFFFDE02); // Amber
       case KycVerificationStatus.approved:
-        return const Color(0xFF0ECB81); // Emerald Green
+        return const Color(0xFF16C784); // Emerald Green
       case KycVerificationStatus.rejected:
-        return const Color(0xFFFF4757); // Coral Red
+        return const Color(0xFFE5484D); // Coral Red
       case KycVerificationStatus.resubmissionRequired:
         return const Color(0xFFFF9800); // Deep Orange
     }

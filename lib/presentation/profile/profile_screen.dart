@@ -26,14 +26,14 @@ class ProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: context.scaffoldBg,
       appBar: AppBar(
-        backgroundColor: context.headerBg,
+        backgroundColor: context.scaffoldBg,
         elevation: 0,
         title: Text(
-          'Account & Profile',
+          'Profile',
           style: TextStyle(
             fontFamily: 'Inter',
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+            fontSize: 26,
+            fontWeight: FontWeight.w700,
             color: context.textPrimaryColor,
           ),
         ),
@@ -41,7 +41,7 @@ class ProfileScreen extends StatelessWidget {
           IconButton(
             icon: Icon(
               isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              color: isDark ? const Color(0xFFFFD600) : const Color(0xFF0F172A),
+              color: isDark ? const Color(0xFFFFDE02) : const Color(0xFF0F172A),
               size: 22,
             ),
             tooltip: isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme',
@@ -69,7 +69,7 @@ class ProfileScreen extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         radius: 26,
-                        backgroundColor: const Color(0xFFFFD600),
+                        backgroundColor: const Color(0xFFFFDE02),
                         child: Text(
                           (user?.fullName.isNotEmpty == true)
                               ? user!.fullName[0].toUpperCase()
@@ -168,12 +168,12 @@ class ProfileScreen extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFFD600).withValues(alpha: 0.15),
+                              color: const Color(0xFFFFDE02).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Icon(
                               isDark ? Icons.nightlight_round : Icons.wb_sunny_rounded,
-                              color: const Color(0xFFFFD600),
+                              color: const Color(0xFFFFDE02),
                               size: 18,
                             ),
                           ),
@@ -201,8 +201,8 @@ class ProfileScreen extends StatelessWidget {
                       ),
                       Switch.adaptive(
                         value: isDark,
-                        activeThumbColor: const Color(0xFFFFD600),
-                        activeTrackColor: const Color(0xFFFFD600).withValues(alpha: 0.4),
+                        activeThumbColor: const Color(0xFFFFDE02),
+                        activeTrackColor: const Color(0xFFFFDE02).withValues(alpha: 0.4),
                         onChanged: (val) {
                           context.read<ThemeCubit>().setDark(val);
                         },
@@ -223,16 +223,16 @@ class ProfileScreen extends StatelessWidget {
                             duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0F141C),
+                              color: const Color(0xFF0F1317),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: isDark ? const Color(0xFFFFD600) : const Color(0xFF2B384E),
+                                color: isDark ? const Color(0xFFFFDE02) : const Color(0xFF262D34),
                                 width: isDark ? 2.0 : 1.0,
                               ),
                               boxShadow: isDark
                                   ? [
                                       BoxShadow(
-                                        color: const Color(0xFFFFD600).withValues(alpha: 0.15),
+                                        color: const Color(0xFFFFDE02).withValues(alpha: 0.15),
                                         blurRadius: 8,
                                         spreadRadius: 1,
                                       ),
@@ -245,9 +245,9 @@ class ProfileScreen extends StatelessWidget {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Icon(Icons.nightlight_round, color: Color(0xFFFFD600), size: 18),
+                                    const Icon(Icons.nightlight_round, color: Color(0xFFFFDE02), size: 18),
                                     if (isDark)
-                                      const Icon(Icons.check_circle, color: Color(0xFFFFD600), size: 16),
+                                      const Icon(Icons.check_circle, color: Color(0xFFFFDE02), size: 16),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
@@ -258,7 +258,7 @@ class ProfileScreen extends StatelessWidget {
                                 const SizedBox(height: 2),
                                 const Text(
                                   'Charcoal Dark',
-                                  style: TextStyle(color: Color(0xFF848E9C), fontSize: 10),
+                                  style: TextStyle(color: Color(0xFF8A919A), fontSize: 10),
                                 ),
                               ],
                             ),
@@ -279,13 +279,13 @@ class ProfileScreen extends StatelessWidget {
                               color: const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: !isDark ? const Color(0xFF00C896) : const Color(0xFFCBD5E1),
+                                color: !isDark ? const Color(0xFF16C784) : const Color(0xFFCBD5E1),
                                 width: !isDark ? 2.0 : 1.0,
                               ),
                               boxShadow: !isDark
                                   ? [
                                       BoxShadow(
-                                        color: const Color(0xFF00C896).withValues(alpha: 0.2),
+                                        color: const Color(0xFF16C784).withValues(alpha: 0.2),
                                         blurRadius: 8,
                                         spreadRadius: 1,
                                       ),
@@ -300,7 +300,7 @@ class ProfileScreen extends StatelessWidget {
                                   children: [
                                     const Icon(Icons.wb_sunny_rounded, color: Color(0xFFFF9F43), size: 18),
                                     if (!isDark)
-                                      const Icon(Icons.check_circle, color: Color(0xFF00C896), size: 16),
+                                      const Icon(Icons.check_circle, color: Color(0xFF16C784), size: 16),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
@@ -330,12 +330,12 @@ class ProfileScreen extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF2A2000), Color(0xFF151D28)],
+                    colors: [Color(0xFF2A2000), Color(0xFF161B20)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFFFD600), width: 1.2),
+                  border: Border.all(color: const Color(0xFFFFDE02), width: 1.2),
                 ),
                 // Transparent Material so the ListTile's ink splash paints
                 // above the gradient.
@@ -351,10 +351,10 @@ class ProfileScreen extends StatelessWidget {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFD600).withValues(alpha: 0.2),
+                        color: const Color(0xFFFFDE02).withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFFFD600)),
+                      child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFFFDE02)),
                     ),
                     title: const Text(
                       'Multi-Desk Admin & Risk Portal',
@@ -367,9 +367,9 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     subtitle: const Text(
                       'Super Administrator Controls',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF848E9C)),
+                      style: TextStyle(fontSize: 11, color: Color(0xFF8A919A)),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFFFD600), size: 16),
+                    trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFFFDE02), size: 16),
                   ),
                 ),
               ),
@@ -433,7 +433,7 @@ class ProfileScreen extends StatelessWidget {
                   // Real TOTP MFA is not implemented yet; never show fake protection.
                   ListTile(
                     enabled: kTwoFactorAvailable,
-                    leading: const Icon(Icons.security_outlined, color: Color(0xFF848E9C)),
+                    leading: const Icon(Icons.security_outlined, color: Color(0xFF8A919A)),
                     title: Text(
                       'Two-Factor Authentication (2FA)',
                       style: TextStyle(
@@ -449,14 +449,14 @@ class ProfileScreen extends StatelessWidget {
                     trailing: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF848E9C).withAlpha(25),
+                        color: const Color(0xFF8A919A).withAlpha(25),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF848E9C)),
+                        border: Border.all(color: const Color(0xFF8A919A)),
                       ),
                       child: const Text(
                         'COMING SOON',
                         style: TextStyle(
-                          color: Color(0xFF848E9C),
+                          color: Color(0xFF8A919A),
                           fontWeight: FontWeight.bold,
                           fontSize: 11,
                         ),
@@ -469,7 +469,7 @@ class ProfileScreen extends StatelessWidget {
                       final email = user?.email ?? 'trader@asianfx.com';
                       ChangeSecurityPinSheet.show(context, email);
                     },
-                    leading: const Icon(Icons.lock_reset_rounded, color: Color(0xFFFFD600)),
+                    leading: const Icon(Icons.lock_reset_rounded, color: Color(0xFFFFDE02)),
                     title: Text(
                       'Change Security PIN',
                       style: TextStyle(
@@ -495,10 +495,10 @@ class ProfileScreen extends StatelessWidget {
                 context.read<AuthBloc>().logout();
                 context.go('/login');
               },
-              icon: const Icon(Icons.logout_rounded, color: Color(0xFFFF4757), size: 18),
+              icon: const Icon(Icons.logout_rounded, color: Color(0xFFE5484D), size: 18),
               label: const Text(
                 'Logout',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFF4757), fontSize: 14),
+                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE5484D), fontSize: 14),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: context.cardBg,
@@ -517,19 +517,19 @@ class ProfileScreen extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                          color: const Color(0xFF16C784).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                          border: Border.all(color: const Color(0xFF16C784).withValues(alpha: 0.4)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF10B981)),
+                            const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF16C784)),
                             const SizedBox(width: 6),
                             Text(
                               'FXAsian v${snap.data!.version} (build ${snap.data!.buildNumber})',
                               style: const TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF10B981)),
+                                  fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF16C784)),
                             ),
                           ],
                         ),

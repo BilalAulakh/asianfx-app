@@ -18,6 +18,7 @@ import '../../presentation/wallet/double_entry_statement_screen.dart';
 import '../../presentation/profile/profile_screen.dart';
 import '../../presentation/kyc/kyc_flow_screen.dart';
 import '../../presentation/admin/admin_portal_screen.dart';
+import '../../presentation/common/widgets/double_back_to_exit.dart';
 
 // Route names
 abstract class AppRoutes {
@@ -106,7 +107,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
         path: AppRoutes.login,
         pageBuilder: (context, state) => CustomTransitionPage(
           key: state.pageKey,
-          child: const LoginScreen(),
+          child: const DoubleBackToExit(child: LoginScreen()),
           transitionsBuilder: _fadeSlideTransition,
         ),
       ),
@@ -126,7 +127,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       // Admin & KYC Full Routes
       GoRoute(
         path: AppRoutes.admin,
-        builder: (context, state) => const AdminPortalScreen(),
+        // Root screen for admins: back asks twice before closing the app.
+        builder: (context, state) => const DoubleBackToExit(child: AdminPortalScreen()),
       ),
       GoRoute(
         path: AppRoutes.kyc,
@@ -191,17 +193,17 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
-      backgroundColor: const Color(0xFF0A0E17),
+      backgroundColor: const Color(0xFF0B0E11),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(color: Color(0xFFFFD600)),
+            const CircularProgressIndicator(color: Color(0xFFFFDE02)),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => context.go(AppRoutes.vault),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFD600),
+                backgroundColor: const Color(0xFFFFDE02),
                 foregroundColor: Colors.black,
               ),
               child: const Text('Go to Vault'),

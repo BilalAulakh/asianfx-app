@@ -29,8 +29,8 @@ class _AppReleaseTabState extends State<AppReleaseTab> {
   bool _saving = false;
   String? _error;
 
-  static const _green = Color(0xFF10B981);
-  static const _red = Color(0xFFFF4757);
+  static const _green = Color(0xFF16C784);
+  static const _red = Color(0xFFE5484D);
 
   bool _isDark = true;
   Color get _cardBg => _isDark ? const Color(0xFF1E293B) : Colors.white;

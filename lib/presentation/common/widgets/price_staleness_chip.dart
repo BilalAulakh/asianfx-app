@@ -51,10 +51,10 @@ class _PriceStalenessChipState extends State<PriceStalenessChip> {
   Widget build(BuildContext context) {
     final (Color color, String label) = () {
       if (kDemoMode) return (const Color(0xFFFF9F43), 'DEMO PRICE');
-      if (!_feed.isStale(widget.symbol)) return (const Color(0xFF00D68F), 'LIVE');
+      if (!_feed.isStale(widget.symbol)) return (const Color(0xFF16C784), 'LIVE');
       final at = _feed.lastLiveAt(widget.symbol);
-      if (at == null) return (const Color(0xFFFF4757), 'NO LIVE PRICE');
-      return (const Color(0xFFFF4757), 'STALE · ${_ago(DateTime.now().toUtc().difference(at.toUtc()))}');
+      if (at == null) return (const Color(0xFFE5484D), 'NO LIVE PRICE');
+      return (const Color(0xFFE5484D), 'STALE · ${_ago(DateTime.now().toUtc().difference(at.toUtc()))}');
     }();
 
     return Tooltip(

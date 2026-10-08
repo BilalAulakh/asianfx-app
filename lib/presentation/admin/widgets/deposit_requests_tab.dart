@@ -36,7 +36,7 @@ class _DepositRequestsTabState extends State<DepositRequestsTab> {
 
   bool get _isDark => context.watch<ThemeCubit>().state;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0F172A);
-  Color get _textSecondary => _isDark ? const Color(0xFF848E9C) : const Color(0xFF64748B);
+  Color get _textSecondary => _isDark ? const Color(0xFF8A919A) : const Color(0xFF64748B);
 
   @override
   void initState() {
@@ -169,7 +169,7 @@ class _DepositRequestsTabState extends State<DepositRequestsTab> {
     if (_error != null)
       Padding(
         padding: const EdgeInsets.all(12),
-        child: Text(_error!, style: const TextStyle(color: Color(0xFFFF4757))),
+        child: Text(_error!, style: const TextStyle(color: Color(0xFFE5484D))),
       )
     else if (_items.isEmpty && !_loading)
       Padding(
@@ -203,19 +203,19 @@ class _DepositReviewCardState extends State<_DepositReviewCard> {
   bool _busy = false;
   Future<String?>? _proofUrl;
 
-  static const _green = Color(0xFF00D68F);
-  static const _red = Color(0xFFFF4757);
+  static const _green = Color(0xFF16C784);
+  static const _red = Color(0xFFE5484D);
   static const _amber = Color(0xFFFFB300);
   // Small preview tile; tapping opens the full-resolution zoom viewer.
   static const double _thumbHeight = 150;
   static const double _thumbWidth = 120;
 
   bool get _isDark => context.watch<ThemeCubit>().state;
-  Color get _cardBg => _isDark ? const Color(0xFF151D28) : Colors.white;
-  Color get _subCardBg => _isDark ? const Color(0xFF0F141C) : const Color(0xFFF8FAFC);
-  Color get _border => _isDark ? const Color(0xFF2B384E) : const Color(0xFFCBD5E1);
+  Color get _cardBg => _isDark ? const Color(0xFF161B20) : Colors.white;
+  Color get _subCardBg => _isDark ? const Color(0xFF0F1317) : const Color(0xFFF8FAFC);
+  Color get _border => _isDark ? const Color(0xFF262D34) : const Color(0xFFCBD5E1);
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF0F172A);
-  Color get _textSecondary => _isDark ? const Color(0xFF848E9C) : const Color(0xFF64748B);
+  Color get _textSecondary => _isDark ? const Color(0xFF8A919A) : const Color(0xFF64748B);
 
   @override
   void initState() {

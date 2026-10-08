@@ -31,9 +31,9 @@ class _DoubleEntryStatementScreenState
         : transactions.where((t) => t.type == _filterType).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E17),
+      backgroundColor: const Color(0xFF0B0E11),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF151D28),
+        backgroundColor: const Color(0xFF161B20),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
@@ -57,13 +57,13 @@ class _DoubleEntryStatementScreenState
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF1E2838), Color(0xFF101722)],
+                colors: [Color(0xFF1E242A), Color(0xFF101722)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: proof.isProofValid ? const Color(0xFF00D68F) : AppColors.loss,
+                color: proof.isProofValid ? const Color(0xFF16C784) : AppColors.loss,
                 width: 1.2,
               ),
             ),
@@ -74,7 +74,7 @@ class _DoubleEntryStatementScreenState
                   children: [
                     Icon(
                       proof.isProofValid ? Icons.check_circle_rounded : Icons.warning_rounded,
-                      color: proof.isProofValid ? const Color(0xFF00D68F) : AppColors.loss,
+                      color: proof.isProofValid ? const Color(0xFF16C784) : AppColors.loss,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
@@ -86,7 +86,7 @@ class _DoubleEntryStatementScreenState
                         fontFamily: 'Inter',
                         fontSize: 12,
                         fontWeight: FontWeight.w900,
-                        color: proof.isProofValid ? const Color(0xFF00D68F) : AppColors.loss,
+                        color: proof.isProofValid ? const Color(0xFF16C784) : AppColors.loss,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -130,7 +130,7 @@ class _DoubleEntryStatementScreenState
                 ? const Center(
                     child: Text(
                       'No matching ledger journal entries.',
-                      style: TextStyle(color: Color(0xFF848E9C)),
+                      style: TextStyle(color: Color(0xFF8A919A)),
                     ),
                   )
                 : ListView.builder(
@@ -142,9 +142,9 @@ class _DoubleEntryStatementScreenState
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF151D28),
+                          color: const Color(0xFF161B20),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF1C2535)),
+                          border: Border.all(color: const Color(0xFF1F252B)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,7 +156,7 @@ class _DoubleEntryStatementScreenState
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFFD600).withValues(alpha: 0.15),
+                                    color: const Color(0xFFFFDE02).withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -165,7 +165,7 @@ class _DoubleEntryStatementScreenState
                                       fontFamily: 'Inter',
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFFFFD600),
+                                      color: Color(0xFFFFDE02),
                                     ),
                                   ),
                                 ),
@@ -174,7 +174,7 @@ class _DoubleEntryStatementScreenState
                                   style: const TextStyle(
                                     fontFamily: 'Inter',
                                     fontSize: 10,
-                                    color: Color(0xFF848E9C),
+                                    color: Color(0xFF8A919A),
                                   ),
                                 ),
                               ],
@@ -190,7 +190,7 @@ class _DoubleEntryStatementScreenState
                               ),
                             ),
                             const SizedBox(height: 10),
-                            const Divider(color: Color(0xFF1C2535), height: 1),
+                            const Divider(color: Color(0xFF1F252B), height: 1),
                             const SizedBox(height: 8),
 
                             // Double-Entry Line Items (Debit & Credit breakdown)
@@ -204,8 +204,8 @@ class _DoubleEntryStatementScreenState
                                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                       decoration: BoxDecoration(
                                         color: entry.isDebit
-                                            ? const Color(0xFF00D68F).withValues(alpha: 0.15)
-                                            : const Color(0xFFFF4757).withValues(alpha: 0.15),
+                                            ? const Color(0xFF16C784).withValues(alpha: 0.15)
+                                            : const Color(0xFFE5484D).withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       alignment: Alignment.center,
@@ -216,8 +216,8 @@ class _DoubleEntryStatementScreenState
                                           fontSize: 9,
                                           fontWeight: FontWeight.w900,
                                           color: entry.isDebit
-                                              ? const Color(0xFF00D68F)
-                                              : const Color(0xFFFF4757),
+                                              ? const Color(0xFF16C784)
+                                              : const Color(0xFFE5484D),
                                         ),
                                       ),
                                     ),
@@ -242,8 +242,8 @@ class _DoubleEntryStatementScreenState
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
                                         color: entry.isDebit
-                                            ? const Color(0xFF00D68F)
-                                            : const Color(0xFFFF4757),
+                                            ? const Color(0xFF16C784)
+                                            : const Color(0xFFE5484D),
                                       ),
                                     ),
                                   ],
@@ -265,7 +265,7 @@ class _DoubleEntryStatementScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF848E9C))),
+        Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF8A919A))),
         const SizedBox(height: 2),
         Text(
           value,
@@ -273,7 +273,7 @@ class _DoubleEntryStatementScreenState
             fontFamily: 'Inter',
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: isZero ? const Color(0xFF00D68F) : Colors.white,
+            color: isZero ? const Color(0xFF16C784) : Colors.white,
           ),
         ),
       ],
@@ -289,10 +289,10 @@ class _DoubleEntryStatementScreenState
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF151D28),
+            color: isSelected ? const Color(0xFFFFDE02) : const Color(0xFF161B20),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isSelected ? const Color(0xFFFFD600) : const Color(0xFF1C2535),
+              color: isSelected ? const Color(0xFFFFDE02) : const Color(0xFF1F252B),
             ),
           ),
           child: Text(
@@ -301,7 +301,7 @@ class _DoubleEntryStatementScreenState
               fontFamily: 'Inter',
               fontSize: 11,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              color: isSelected ? Colors.black : const Color(0xFF848E9C),
+              color: isSelected ? Colors.black : const Color(0xFF8A919A),
             ),
           ),
         ),
