@@ -14,7 +14,7 @@ import '../common/widgets/balance_pill.dart';
 import '../common/widgets/symbol_badge.dart';
 import 'widgets/order_placement_modal.dart';
 
-const _blue = ExnessChartColors.bull;
+const _green = ExnessChartColors.bull;
 const _red = ExnessChartColors.bear;
 
 /// Exness-style trading screen: balance pill, symbol picker over a full-height
@@ -248,7 +248,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                       final isProfitable = trade.unrealizedPnl >= Decimal.zero;
                       return _TradeRow(
                         sideLabel: trade.isBuy ? 'Buy' : 'Sell',
-                        sideColor: trade.isBuy ? _blue : _red,
+                        sideColor: trade.isBuy ? _green : _red,
                         title: '${trade.symbol} • ${trade.lots} lot',
                         value: '${isProfitable ? '+' : ''}${MoneyMath.formatDec(trade.unrealizedPnl, 2)} USD',
                         valueColor: isProfitable ? const Color(0xFF00C27A) : _red,
@@ -295,7 +295,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                         child: _PriceButton(
                           label: 'Buy',
                           price: MoneyMath.formatDec(live.ask, live.displayDecimals),
-                          color: _blue,
+                          color: _green,
                           onTap: () => OrderPlacementModal.show(context, instrument: live, side: OrderSide.buy),
                         ),
                       ),

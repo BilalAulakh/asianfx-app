@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// FXAsianApp — Complete Color Palette
 /// Exness-inspired: near-black surfaces, brand yellow accent,
-/// blue for Buy / up candles and red for Sell / down candles.
+/// green for Buy / up candles and red for Sell / down candles.
 abstract class AppColors {
   // ── Brand ───────────────────────────────────────────────────────────────────
   static const Color brandPrimary = Color(0xFFFFDE02);   // Brand yellow
@@ -49,16 +49,16 @@ abstract class AppColors {
   static const Color pending = Color(0xFFFF8C00);       // Orange
   static const Color neutral = Color(0xFF8A919A);       // Gray
 
-  // ── Market Colors (Exness: blue up / Buy, red down / Sell) ─────────────────
-  static const Color bullCandle = Color(0xFF2390F3);
+  // ── Market Colors (green up / Buy, red down / Sell) ────────────────────────
+  static const Color bullCandle = Color(0xFF089981);
   static const Color bearCandle = Color(0xFFDB363D);
-  static const Color buyButton = Color(0xFF2390F3);
+  static const Color buyButton = Color(0xFF089981);
   static const Color sellButton = Color(0xFFDB363D);
 
   // ── Chart Colors ────────────────────────────────────────────────────────────
   static const Color chartGrid = Color(0xFF232B33);
-  static const Color chartLine = Color(0xFF2390F3);
-  static const Color chartArea = Color(0x222390F3);
+  static const Color chartLine = Color(0xFF089981);
+  static const Color chartArea = Color(0x22089981);
   static const Color crosshair = Color(0xFF8A919A);
 
   // ── Special Glows ───────────────────────────────────────────────────────────

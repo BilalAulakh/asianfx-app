@@ -266,7 +266,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: pos.isBuy
-                          ? const Color(0xFF2390F3).withValues(alpha: 0.15)
+                          ? const Color(0xFF089981).withValues(alpha: 0.15)
                           : const Color(0xFFE5484D).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
@@ -276,7 +276,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                         fontFamily: 'Inter',
                         fontSize: 11,
                         fontWeight: FontWeight.w900,
-                        color: pos.isBuy ? const Color(0xFF2390F3) : const Color(0xFFE5484D),
+                        color: pos.isBuy ? const Color(0xFF089981) : const Color(0xFFE5484D),
                       ),
                     ),
                   ),
@@ -471,7 +471,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
                   color: t.isBuy
-                      ? const Color(0xFF2390F3).withValues(alpha: 0.15)
+                      ? const Color(0xFF089981).withValues(alpha: 0.15)
                       : const Color(0xFFE5484D).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
@@ -481,7 +481,7 @@ class _PositionsScreenState extends State<PositionsScreen>
                     fontFamily: 'Inter',
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: t.isBuy ? const Color(0xFF2390F3) : const Color(0xFFE5484D),
+                    color: t.isBuy ? const Color(0xFF089981) : const Color(0xFFE5484D),
                   ),
                 ),
               ),

@@ -13,7 +13,7 @@ import '../../domain/entities/chart_entities.dart';
 class ExnessChartColors {
   ExnessChartColors._();
 
-  static const bull = Color(0xFF2390F3); // blue: up candle, Buy / Ask
+  static const bull = Color(0xFF089981); // green: up candle, Buy / Ask
   static const bear = Color(0xFFDB363D); // red: down candle, Sell / Bid
   static const darkBg = Color(0xFF141B21);
   static const darkGrid = Color(0xFF232B33);
@@ -108,8 +108,8 @@ class ChartViewport {
   return (lo - pad, hi + pad);
 }
 
-/// Exness-style candlestick chart: blue/red joined candles, round price levels,
-/// Bid (red) and Ask (blue) tags on the price axis. Pinch zooms around the
+/// Exness-style candlestick chart: green/red joined candles, round price levels,
+/// Bid (red) and Ask (green) tags on the price axis. Pinch zooms around the
 /// fingers, drag pans with fling, dragging the price axis stretches the chart
 /// vertically, and the price range glides to fit what is on screen. Scrolling
 /// back near the oldest candle asks for older history ([onNeedOlderHistory]).
@@ -598,7 +598,7 @@ class _ExnessChartPainter extends CustomPainter {
     }
     canvas.restore();
 
-    // 3. Ask (blue) above Bid (red): dotted lines and axis tags, Exness-style.
+    // 3. Ask (green) above Bid (red): dotted lines and axis tags, Exness-style.
     final tags = <(double, Color)>[];
     if (ask != null && ask! > 0) tags.add((ask!, _bull));
     if (bid != null && bid! > 0) tags.add((bid!, _bear));
