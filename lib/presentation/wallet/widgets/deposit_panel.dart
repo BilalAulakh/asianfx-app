@@ -71,10 +71,18 @@ class _DepositPanelState extends State<DepositPanel> {
 
   bool _needsProof(DepositRequest r) => r.awaitingProof && !_submitted.contains(r.id);
 
-  /// The request the user is working on: created, screenshot not attached yet.
+  /// The request the user is working on: created, screenshot not attached yet,
+  /// on the company's current deposit address. An older open request on an
+  /// address that is no longer used (e.g. the retired Address B) is never shown
+  /// as the address to pay; "Get address" creates a new one.
   DepositRequest? get _active {
+    final current = _config?.depositAddress?.trim();
     for (final r in _requests) {
-      if (_needsProof(r)) return r;
+      if (!_needsProof(r)) continue;
+      if (current != null && current.isNotEmpty && r.payToAddress != null && r.payToAddress!.trim() != current) {
+        continue;
+      }
+      return r;
     }
     return null;
   }

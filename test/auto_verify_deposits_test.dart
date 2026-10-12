@@ -222,9 +222,9 @@ void main() {
       }
     }
 
+    // One company address only (the A,A,A,B rotation was retired).
     for (final (name, address, verification) in [
-      ('manual address', _a, 'NOT_REQUIRED'),
-      ('automatic address', _b, 'WAITING'),
+      ('company address', _a, 'NOT_REQUIRED'),
     ]) {
       testWidgets('get address -> $name asks for the screenshot like any deposit', (tester) async {
         final backend = FakeDepositBackend()..ownRows = [];
@@ -245,6 +245,17 @@ void main() {
         await tester.pumpWidget(const SizedBox());
       });
     }
+
+    testWidgets('an old open request on retired Address B is never shown as the address to pay', (tester) async {
+      final backend = FakeDepositBackend()..ownRows = [_deposit(address: _b, verification: 'WAITING')];
+      await _pumpThemed(tester, DepositPanel(service: DepositService(backend: backend)));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_b), findsNothing, reason: 'B is not offered for payment');
+      expect(find.text('GET DEPOSIT ADDRESS'), findsOneWidget, reason: 'a new request goes to the company address');
+      expect(find.text('AWAITING PAYMENT'), findsOneWidget, reason: 'still listed, so the user can delete it');
+      await tester.pumpWidget(const SizedBox());
+    });
 
     testWidgets('open request: one amount field, no separate update button', (tester) async {
       final backend = FakeDepositBackend()..ownRows = [_deposit(address: _a, verification: 'NOT_REQUIRED')];
@@ -297,8 +308,8 @@ void main() {
     });
   });
 
-  group('Address A card (admin wallet = Address A)', () {
-    testWidgets('shows A and B; blocks a bad checksum; saves a valid address as Address A', (tester) async {
+  group('Company deposit address card (the one address)', () {
+    testWidgets('shows the active address; blocks a bad checksum; saves a valid address', (tester) async {
       const newA = 'TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE';
       final backend = FakeDepositBackend();
       backend.onRpc = (fn, p) {
@@ -320,11 +331,6 @@ void main() {
       await tester.tap(find.text('Save / Update Address'));
       await tester.pumpAndSettle();
       expect(find.text('Change Address A?'), findsNothing);
-
-      // B cannot become A.
-      await tester.enterText(find.byType(TextField), _b);
-      await tester.pump();
-      expect(find.textContaining('already in use for automatic deposits'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), newA);
       await tester.pump();

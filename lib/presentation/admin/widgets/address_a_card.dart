@@ -5,12 +5,11 @@ import '../../../blocs/blocs.dart';
 import '../../../core/utils/tron_address.dart';
 import '../../../data/datasources/supabase_deposit_service.dart';
 
-/// The admin's company deposit wallet = ADDRESS A of the rotation.
+/// The admin's company deposit wallet: the ONE address every deposit uses.
 ///
-/// Saving makes the address the manual Address A (requests 1, 2, 3 of every 4);
-/// the automatic Address B keeps every 4th request. The server
-/// (`rpc_admin_set_deposit_address`) re-checks admin rights, updates the rotation
-/// under its lock, deactivates the previous Address A and audits the change.
+/// Saving makes it the only active address. The server
+/// (`rpc_admin_set_deposit_address`) re-checks admin rights, deactivates every
+/// other address (the old Address B rotation is retired) and audits the change.
 ///
 /// Every button sets its own minimumSize: the app theme gives Filled/Outlined
 /// buttons an infinite minimum width, which breaks layout inside a Row.
@@ -32,7 +31,6 @@ class _AddressACardState extends State<AddressACard> {
 
   final _controller = TextEditingController();
   String? _addressA;
-  CompanyDepositAddress? _addressB;
   bool _loading = true;
   bool _saving = false;
   bool _touched = false;
@@ -60,21 +58,16 @@ class _AddressACardState extends State<AddressACard> {
 
   Future<void> _load() async {
     String? a;
-    CompanyDepositAddress? b;
     try {
       final rows = await widget.service.adminListAddresses();
-      final active = rows.where((r) => r.isActive && r.weight > 0).toList()
-        ..sort((x, y) => x.sortOrder.compareTo(y.sortOrder));
-      a = active.where((r) => !r.autoVerify).map((r) => r.address).firstOrNull;
-      b = active.where((r) => r.autoVerify).firstOrNull;
+      a = rows.where((r) => r.isActive && !r.autoVerify).map((r) => r.address).firstOrNull;
     } on DepositServiceException {
-      // Rotation not deployed yet: fall back to the single configured address.
+      // Address table not deployed: fall back to the configured address.
     }
     a ??= (await widget.service.loadConfig()).depositAddress;
     if (!mounted) return;
     setState(() {
       _addressA = a;
-      _addressB = b;
       _loading = false;
     });
   }
@@ -91,7 +84,6 @@ class _AddressACardState extends State<AddressACard> {
       return 'Checksum failed - this is not a real TRON address. Copy it again from your wallet.';
     }
     if (v == _addressA) return 'This is already the current address.';
-    if (v == _addressB?.address) return 'This address is already in use for automatic deposits. Use a different one.';
     return null;
   }
 
@@ -119,7 +111,8 @@ class _AddressACardState extends State<AddressACard> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('New deposits will be told to send USDT to the new address immediately.',
+            Text('All new deposits will be told to send USDT to the new address immediately. '
+                'It becomes the only deposit address.',
                 style: TextStyle(color: _textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             Text('From', style: TextStyle(color: _textSecondary, fontSize: 11)),
