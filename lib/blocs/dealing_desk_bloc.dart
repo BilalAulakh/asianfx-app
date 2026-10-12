@@ -72,6 +72,12 @@ class DealingDeskCubit extends Cubit<DealerRiskSummary> {
     calculateExposure();
   }
 
+  /// Drop an unsaved slider preview (the admin cancelled the change).
+  void cancelSpreadMarkupPreview(String symbol) {
+    _pendingMarkup.remove(symbol);
+    calculateExposure();
+  }
+
   /// Persist the markup server-side. Returns an error message, or null on success.
   Future<String?> commitSpreadMarkup(String symbol, int points) async {
     _pendingMarkup[symbol] = points;

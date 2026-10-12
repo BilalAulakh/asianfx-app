@@ -28,6 +28,8 @@ class AdminPortalScreen extends StatefulWidget {
 class _AdminPortalScreenState extends State<AdminPortalScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  // Markup before the slider moved, so a cancelled change can be reverted.
+  final Map<String, int> _markupBefore = {};
   String _userSearchQuery = '';
   KycVerificationStatus? _selectedKycStatusFilter;
   String _adminKycSearchQuery = '';
@@ -50,6 +52,38 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
 
   /// Position of "KYC & AML" in the portal's TabBar.
   static const int _kycTabIndex = 3;
+
+  Future<bool> _confirmMarkupChange(String symbol, int before, int after) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Change $symbol markup?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$before pts  →  $after pts', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Text(after == 0
+                ? 'Zero markup means no spread: Buy and Sell show the same price and the broker earns no spread on this instrument.'
+                : 'The new spread applies to every client price for $symbol right away.'),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: after == 0 ? const Color(0xFFE5484D) : null,
+              minimumSize: const Size(110, 44),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(after == 0 ? 'Set to 0' : 'Save'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
 
   @override
   void initState() {
@@ -619,14 +653,27 @@ class _AdminPortalScreenState extends State<AdminPortalScreen>
                       min: 0.0,
                       max: 500.0,
                       divisions: 500,
+                      onChangeStart: (_) => _markupBefore[exp.symbol] = exp.spreadMarkupPips,
                       onChanged: (val) {
                         context.read<DealingDeskCubit>().previewSpreadMarkup(exp.symbol, val.round());
                       },
                       onChangeEnd: (val) async {
+                        final desk = context.read<DealingDeskCubit>();
                         final messenger = ScaffoldMessenger.of(context);
-                        final error = await context
-                            .read<DealingDeskCubit>()
-                            .commitSpreadMarkup(exp.symbol, val.round());
+                        final before = _markupBefore.remove(exp.symbol) ?? exp.spreadMarkupPips;
+                        final after = val.round();
+                        if (after == before) {
+                          desk.cancelSpreadMarkupPreview(exp.symbol);
+                          return;
+                        }
+                        // A slip of the finger used to save at once (e.g. 0 pts =
+                        // no spread: Buy and Sell at the same price). Confirm first.
+                        final ok = await _confirmMarkupChange(exp.symbol, before, after);
+                        if (!ok) {
+                          desk.cancelSpreadMarkupPreview(exp.symbol);
+                          return;
+                        }
+                        final error = await desk.commitSpreadMarkup(exp.symbol, after);
                         messenger.showSnackBar(SnackBar(
                           duration: const Duration(seconds: 2),
                           backgroundColor: error == null ? const Color(0xFF16C784) : const Color(0xFFE5484D),
